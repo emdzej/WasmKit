@@ -6,7 +6,8 @@
     import WasmTools
 
     /// Imports must have the function and value types their declarations give, as wasm-tools'
-    /// validator requires of instantiation arguments.
+    /// validator requires of instantiation arguments, apart from parameter names unless checking
+    /// is strict.
     @Suite(.enabled(if: FileManager.default.fileExists(atPath: defaultWasmToolsPath)))
     struct ComponentImportTypeTests {
         /// Host functions and instances belong to the store they are instantiated in.
@@ -15,12 +16,13 @@
         /// Instantiates `wat` with `imports`, expecting it to fail with an error containing
         /// `message`, or to succeed if `message` is `nil`.
         func instantiate(
-            _ wat: String, imports: ComponentImports = ComponentImports(), failsWith message: String?,
+            _ wat: String, imports: ComponentImports = ComponentImports(),
+            checking: ComponentLoader.ImportTypeChecking = .lenient, failsWith message: String?,
             sourceLocation: SourceLocation = #_sourceLocation
         ) throws {
             let component = try parseComponent(bytes: try wat2wasm(watContent: Array(wat.utf8)))
             do {
-                _ = try ComponentLoader(store: store).instantiate(component: component, imports: imports)
+                _ = try ComponentLoader(store: store, importTypeChecking: checking).instantiate(component: component, imports: imports)
                 #expect(message == nil, "instantiated, expected \(message ?? "")", sourceLocation: sourceLocation)
             } catch {
                 guard let message else {
@@ -48,14 +50,9 @@
         @Test
         func hostFunctionSignatures() throws {
             let wat = #"(component (import "f" (func (param "x" u32) (result u32))))"#
-            // A parameter's name may differ, as wasmtime allows.
             let cases: [(ComponentFuncType, String?)] = [
                 (ComponentFuncType(params: [.init(name: "x", type: .primitive(.u32))], result: .primitive(.u32)), nil),
                 (ComponentFuncType(params: [], result: .primitive(.u32)), "expected 1 parameters, found 0"),
-                (
-                    ComponentFuncType(params: [.init(name: "y", type: .primitive(.u32))], result: .primitive(.u32)),
-                    nil
-                ),
                 (
                     ComponentFuncType(params: [.init(name: "x", type: .primitive(.s32))], result: .primitive(.u32)),
                     "type mismatch in function parameter `x`: expected u32, found s32"
@@ -67,8 +64,35 @@
                 ),
             ]
             for (type, message) in cases {
-                try instantiate(wat, imports: imports(["f": hostFunction(type)]), failsWith: message)
+                for checking in [ComponentLoader.ImportTypeChecking.lenient, .strict] {
+                    try instantiate(wat, imports: imports(["f": hostFunction(type)]), checking: checking, failsWith: message)
+                }
             }
+        }
+
+        /// Only strict checking compares parameter names, as wasmtime's linker does not.
+        @Test
+        func parameterNames() throws {
+            let wat = #"(component (import "f" (func (param "x" u32))))"#
+            let renamed = hostFunction(ComponentFuncType(params: [.init(name: "y", type: .primitive(.u32))], result: nil))
+            try instantiate(wat, imports: imports(["f": renamed]), checking: .lenient, failsWith: nil)
+            try instantiate(
+                wat, imports: imports(["f": renamed]), checking: .strict,
+                failsWith: "type mismatch for import `f`: expected parameter named `x`, found `y`")
+
+            // The mode applies to one component instantiating another too.
+            let nested = #"""
+                (component
+                  (import "f" (func $f (param "x" u32)))
+                  (component $c (import "x" (func (param "y" u32))))
+                  (instance (instantiate $c (with "x" (func $f))))
+                )
+                """#
+            let original = hostFunction(ComponentFuncType(params: [.init(name: "x", type: .primitive(.u32))], result: nil))
+            try instantiate(nested, imports: imports(["f": original]), checking: .lenient, failsWith: nil)
+            try instantiate(
+                nested, imports: imports(["f": original]), checking: .strict,
+                failsWith: "expected parameter named `y`, found `x`")
         }
 
         @Test

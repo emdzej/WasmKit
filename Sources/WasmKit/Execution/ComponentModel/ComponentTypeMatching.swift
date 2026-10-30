@@ -2,8 +2,8 @@
 //
 // This follows wasm-tools' validator (`SubtypeCx` in `component_types.rs`) rather than the
 // explainer's subtyping: function and value types must be structurally equal, and resource
-// types identical. The mismatch messages are wasm-tools' too. Unlike it, but like wasmtime's
-// linker, function parameter names are not compared.
+// types identical. The mismatch messages are wasm-tools' too. Function parameter names are only
+// compared in strict mode: wasmtime's linker ignores them.
 
 #if ComponentModel
     import ComponentModel
@@ -30,6 +30,8 @@
 
         let expected: Resolve
         let provided: Resolve
+        /// Whether function parameters must have the same names, not just the same types.
+        let comparesParameterNames: Bool
 
         /// Types do not refer to themselves, but a malformed binary's indices could.
         private static let maxDepth = 100
@@ -46,9 +48,10 @@
             guard expected.params.count == provided.params.count else {
                 throw ComponentTypeMismatch("expected \(expected.params.count) parameters, found \(provided.params.count)")
             }
-            // Parameter names are not compared: wasmtime's linker does not compare them either,
-            // and the test suite links one host function to imports that name them differently.
             for (expected, provided) in zip(expected.params, provided.params) {
+                guard !comparesParameterNames || expected.name == provided.name else {
+                    throw ComponentTypeMismatch("expected parameter named `\(expected.name)`, found `\(provided.name)`")
+                }
                 try nested("type mismatch in function parameter `\(expected.name)`") {
                     try match(expected.type, provided.type, depth: depth + 1)
                 }

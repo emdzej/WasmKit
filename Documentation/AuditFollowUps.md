@@ -62,8 +62,8 @@ wabt 1.0.42.
   destructor never runs. The spec's reentrance checks (`may_enter`/`may_leave`) are not
   implemented, for resource destructors or otherwise.
 - **Import type checks:** function and value types are checked, by structural equality as
-  wasm-tools does (`ComponentTypeMatching.swift`), except that parameter names may differ, as
-  wasmtime's linker allows. Not checked: the types of imported values,
+  wasm-tools does (`ComponentTypeMatching.swift`). Parameter names may differ unless the loader
+  is created with `importTypeChecking: .strict`, as wasmtime's linker allows. Not checked: the types of imported values,
   components and core modules, and instance or component exports nested inside an instance
   import's type.
 - **Possible dead code:** `WasmFunctionEntity.ensureCompiled` in `Function.swift` may duplicate

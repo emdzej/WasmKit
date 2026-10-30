@@ -61,11 +61,27 @@
     /// 3. Creating lifted component functions via canonical definitions
     /// 4. Building the exports map
     public struct ComponentLoader {
+        /// How strictly imports' types must match the types a component declares for them.
+        public enum ImportTypeChecking: Sendable {
+            /// Function parameter names may differ, as wasmtime's linker allows.
+            case lenient
+            /// Function parameter names must match too, as wasm-tools' validator requires of
+            /// one component instantiating another.
+            case strict
+        }
+
         let store: Store
+        let importTypeChecking: ImportTypeChecking
 
         /// Creates a new component linker for the given store.
-        public init(store: Store) {
+        ///
+        /// - Parameters:
+        ///   - store: The store components are instantiated in.
+        ///   - importTypeChecking: How strictly imports' types are checked. Either way, their
+        ///     parameter, result and value types must match the declared ones.
+        public init(store: Store, importTypeChecking: ImportTypeChecking = .lenient) {
             self.store = store
+            self.importTypeChecking = importTypeChecking
         }
 
         /// Instantiate a component with the given imports.
@@ -780,7 +796,10 @@
                 if case .value(let expectedType) = expected, case .type(let type) = value, case .value(let providedType) = type.entry {
                     do {
                         try withoutActuallyEscaping(scope) { scope in
-                            try ComponentTypeMatcher(expected: scope, provided: type.space.entry).match(expectedType, providedType)
+                            try ComponentTypeMatcher(
+                                expected: scope, provided: type.space.entry,
+                                comparesParameterNames: importTypeChecking == .strict
+                            ).match(expectedType, providedType)
                         }
                     } catch let mismatch as ComponentTypeMismatch {
                         throw ComponentLoaderError.mismatchedImportType(name: name, reason: mismatch.description)
@@ -794,7 +813,9 @@
         private func checkFunction(
             _ function: InternalComponentFunction, against type: ComponentFuncType, in space: ComponentTypeSpace, name: String
         ) throws {
-            let matcher = ComponentTypeMatcher(expected: space.entry, provided: function.types.entry)
+            let matcher = ComponentTypeMatcher(
+                expected: space.entry, provided: function.types.entry,
+                comparesParameterNames: importTypeChecking == .strict)
             do {
                 try matcher.match(type, function.type)
             } catch let mismatch as ComponentTypeMismatch {
