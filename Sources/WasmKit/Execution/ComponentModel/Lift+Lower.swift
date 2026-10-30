@@ -3,8 +3,8 @@
 // https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md
 //
 // The functions here mirror the spec's `alignment`, `elem_size`, `flatten_type`, `load`, `store`,
-// `lift_flat` and `lower_flat`, so that each can be checked against its counterpart. Resources,
-// futures and streams are not supported yet and are rejected.
+// `lift_flat` and `lower_flat`, so that each can be checked against its counterpart. Futures and
+// streams are not supported yet and are rejected; resource handles go through `Resources.swift`.
 
 #if ComponentModel
     import ComponentModel
@@ -16,7 +16,15 @@
 
     /// The type information the canonical ABI needs: resolving type indices of one component.
     struct CanonicalABITypes {
-        let resolveType: (ComponentTypeIndex) throws -> ComponentDefValType
+        let space: ComponentTypeSpace
+
+        func resolveType(_ index: ComponentTypeIndex) throws -> ComponentDefValType {
+            try space.valueType(index)
+        }
+
+        func resourceType(_ index: ComponentTypeIndex) throws -> ComponentResourceType {
+            try space.resourceType(index)
+        }
 
         /// `t` with any top-level type index replaced by the type it names.
         ///
@@ -73,7 +81,7 @@
                 case .s32, .u32, .float32, .char, .string, .errorContext: return 4
                 case .s64, .u64, .float64: return 8
                 }
-            case .list: return 4
+            case .list, .own, .borrow: return 4
             case .record(let fields): return try fields.reduce(1) { max($0, try alignment(resolve($1.type))) }
             case .tuple(let elements): return try elements.reduce(1) { max($0, try alignment(resolve($1))) }
             case .flags(let labels): return min(Self.flagsSize(labels.count), 4)
@@ -97,6 +105,7 @@
                 case .s64, .u64, .float64, .string: return 8
                 }
             case .list: return 8
+            case .own, .borrow: return 4
             case .record(let fields): return try fieldsSize(fields.map { try resolve($0.type) })
             case .tuple(let elements): return try fieldsSize(elements.map(resolve))
             case .flags(let labels): return Self.flagsSize(labels.count)
@@ -138,6 +147,7 @@
                 case .string: return [.i32, .i32]
                 }
             case .list: return [.i32, .i32]
+            case .own, .borrow: return [.i32]
             case .record(let fields): return try fields.flatMap { try flatten(resolve($0.type)) }
             case .tuple(let elements): return try elements.flatMap { try flatten(resolve($0)) }
             case .flags(let labels): return Array(repeating: .i32, count: max(1, (labels.count + 31) / 32))
@@ -193,20 +203,80 @@
         }
     }
 
-    /// What one lift or lower runs against: the component's types, the canonical options, and
-    /// the store.
+    /// What one lift or lower runs against: the component's types, the canonical options, the
+    /// store, and the instance whose handle table resources move through.
     struct CanonicalABIContext: ~Copyable {
         let types: CanonicalABITypes
         let options: CanonOptions
         let store: Store
+        /// The spec's `cx.inst`: the instance of the `canon` definition doing the lift or lower.
+        let instance: ComponentInstanceState?
+        /// The call borrows are lowered into, when lowering a lifted function's arguments.
+        let scope: CallScope?
+        /// Handles lent to the call by lifting borrows of them, to return when it ends.
+        var lenders: [ResourceHandle] = []
         /// Reused across `realloc` calls; a fresh stack costs an allocation per string or list.
         private var stack: ExecutionStack?
 
-        init(types: CanonicalABITypes, options: CanonOptions, store: Store) {
+        init(
+            types: CanonicalABITypes, options: CanonOptions, store: Store,
+            instance: ComponentInstanceState? = nil, scope: CallScope? = nil
+        ) {
             self.types = types
             self.options = options
             self.store = store
+            self.instance = instance
+            self.scope = scope
             self.stack = nil
+        }
+
+        /// Ends the loans of every handle a borrow was lifted from.
+        mutating func releaseLenders() {
+            for lender in lenders {
+                lender.lendCount -= 1
+            }
+            lenders = []
+        }
+
+        // MARK: Handles
+
+        var handleTable: ComponentInstanceState {
+            get throws {
+                guard let instance else {
+                    throw CanonicalABIError(description: "resource handles need a component instance here")
+                }
+                return instance
+            }
+        }
+
+        mutating func liftHandle(_ type: ComponentDefValType, _ index: UInt32) throws -> ComponentValue {
+            switch type {
+            case .own(let typeIndex):
+                let resourceType = try types.resourceType(typeIndex)
+                return .own(ComponentResource(type: resourceType, rep: try handleTable.liftOwn(index, of: resourceType)))
+            case .borrow(let typeIndex):
+                let resourceType = try types.resourceType(typeIndex)
+                let rep = try handleTable.liftBorrow(index, of: resourceType, lenders: &lenders)
+                return .borrow(ComponentResource(type: resourceType, rep: rep))
+            default:
+                preconditionFailure("\(type) is not a handle type")
+            }
+        }
+
+        func lowerHandle(_ value: ComponentValue, as type: ComponentDefValType) throws -> UInt32 {
+            switch (type, value) {
+            case (.own(let typeIndex), .own(let resource)):
+                let resourceType = try types.resourceType(typeIndex)
+                guard resource.type === resourceType else { throw Self.mismatch(value, type) }
+                return try handleTable.lowerOwn(resource.rep, of: resourceType)
+            case (.borrow(let typeIndex), .borrow(let resource)), (.borrow(let typeIndex), .own(let resource)):
+                // A host may lend a resource it owns without first wrapping it as a borrow.
+                let resourceType = try types.resourceType(typeIndex)
+                guard resource.type === resourceType else { throw Self.mismatch(value, type) }
+                return try handleTable.lowerBorrow(resource.rep, of: resourceType, scope: scope)
+            default:
+                throw Self.mismatch(value, type)
+            }
         }
 
         var memory: Memory {
@@ -316,6 +386,8 @@
                 let begin = try loadInt(pointer, as: UInt32.self)
                 let length = try loadInt(pointer + 4, as: UInt32.self)
                 return .list(try loadList(begin: Int(begin), length: Int(length), element: types.resolve(element)))
+            case .own, .borrow:
+                return try liftHandle(t, try loadInt(pointer, as: UInt32.self))
             case .record(let fields):
                 let values = try loadFields(fields.map { try types.resolve($0.type) }, at: pointer)
                 return .record(zip(fields, values).map { ($0.name, $1) })
@@ -439,6 +511,8 @@
                 let (begin, length) = try storeList(elements, element: types.resolve(element))
                 try storeInt(UInt32(begin), at: pointer)
                 try storeInt(UInt32(length), at: pointer + 4)
+            case (.own, _), (.borrow, _):
+                try storeInt(try lowerHandle(value, as: t), at: pointer)
             case (.record(let fields), .record(let values)):
                 try storeFields(
                     Self.recordFields(fields, values), types: fields.map { try types.resolve($0.type) }, at: pointer)
@@ -599,6 +673,8 @@
                 let begin = try i32()
                 let length = try i32()
                 return .list(try loadList(begin: Int(begin), length: Int(length), element: types.resolve(element)))
+            case .own, .borrow:
+                return try liftHandle(t, try i32())
             case .record(let fields):
                 return .record(try fields.map { ($0.name, try liftFlat(types.resolve($0.type), from: &values)) })
             case .tuple(let elements):
@@ -646,6 +722,8 @@
             case (.list(let element), .list(let elements)):
                 let (begin, length) = try storeList(elements, element: types.resolve(element))
                 return [.i32(UInt32(begin)), .i32(UInt32(length))]
+            case (.own, _), (.borrow, _):
+                return [.i32(try lowerHandle(value, as: t))]
             case (.record(let fields), .record(let values)):
                 var flat: [Value] = []
                 for (field, value) in zip(fields, try Self.recordFields(fields, values)) {

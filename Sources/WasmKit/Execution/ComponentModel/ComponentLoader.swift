@@ -9,7 +9,7 @@
     /// A `ComponentImports` instance is used to define values that are imported by a
     /// WebAssembly component. The values can be functions, values, types, instances, or modules.
     public struct ComponentImports {
-        private var definitions: [String: InternalComponentExternalValue] = [:]
+        fileprivate var definitions: [String: InternalComponentExternalValue] = [:]
 
         /// Initializes a new empty instance of `ComponentImports`.
         public init() {}
@@ -37,6 +37,11 @@
         /// Define a core module definition to be imported by the given name.
         public mutating func define(name: String, coreModule: Module) {
             definitions[name] = .coreModule(coreModule)
+        }
+
+        /// Define a component definition to be imported by the given name.
+        public mutating func define(name: String, component: ParsedComponent) {
+            definitions[name] = .component(ComponentDefinition(component: component, outer: []))
         }
 
         /// Lookup a value to be imported by the given name.
@@ -74,38 +79,48 @@
             component: ParsedComponent,
             imports: ComponentImports = ComponentImports()
         ) throws -> ComponentInstance {
+            try instantiate(ComponentDefinition(component: component, outer: []), imports: imports)
+        }
+
+        /// Instantiates a component definition, whose outer aliases resolve against the
+        /// components it was defined in.
+        func instantiate(
+            _ definition: ComponentDefinition,
+            imports: ComponentImports
+        ) throws -> ComponentInstance {
+            let component = definition.component
             // Step 0: Validate imports
             try validateImports(component.imports, against: imports)
 
             var context = InstantiationContext(
                 store: store,
                 imports: imports,
-                resolveType: component.resolveType
+                outer: definition.outer
             )
-
-            // Step 0.5: Track module definitions in modules index space
-            for coreModule in component.coreModules {
-                context.coreModules.append(coreModule.module)
-            }
-
-            // Step 0.6: Process imports to populate index spaces
-            // Imported instances populate the component instances index space
-            // Imported functions populate the component functions index space
-            for importDef in component.imports {
-                try processImport(importDef, context: &context)
-            }
 
             // Step 1: Process definitions in the order they appear in the binary. Each kind of
             // definition appends to its index space, and those spaces interleave: a core
             // function alias before a `canon lower` takes the lower index, so processing kinds in
             // fixed phases would bind references to the wrong definitions.
-            //
-            // Nested component definitions are pure definitions, so they are all known up front.
-            for nestedComponent in component.nestedComponents {
-                context.nestedComponentDefs.append(nestedComponent)
-            }
             for definition in Self.definitionOrder(of: component) {
                 switch definition {
+                case .component(let index):
+                    guard component.nestedComponents.indices.contains(index) else {
+                        throw ComponentLoaderError.invalidComponentIndex(index)
+                    }
+                    context.components.append(
+                        ComponentDefinition(component: component.nestedComponents[index], outer: context.scopeForNested))
+                case .coreModule(let index):
+                    guard component.coreModules.indices.contains(index) else {
+                        throw ComponentLoaderError.invalidCoreModuleIndex(index)
+                    }
+                    context.coreModules.append(component.coreModules[index].module)
+                case .type(let index):
+                    try processTypeDef(component.componentTypes[index], context: &context)
+                case .import(let index):
+                    try processImport(component.imports[index], context: &context)
+                case .export(let index):
+                    try processExport(component.exports[index], context: &context)
                 case .coreInstance(let index):
                     try processCoreInstanceDef(component.coreInstanceDefs[index], context: &context)
                 case .componentInstance(let index):
@@ -115,33 +130,24 @@
                 case .canon(let index):
                     let canonDef = component.canonicalDefinitions[index]
                     switch canonDef.kind {
-                    case .lift:
+                    case .lift, .liftCoreFunction:
                         context.componentFunctions.append(try processCanonLift(canonDef, context: &context))
                     case .lower:
                         context.coreFunctions.append(try processCanonLower(canonDef, context: &context))
                     }
-                case .unsupportedCoreFunction:
-                    // Keeps the index space aligned; calling it reports what is missing.
-                    let placeholder = Function(store: store, type: FunctionType(parameters: [.i32], results: [])) { _, _ in
-                        throw ComponentLoaderError.instantiationFailed("resource intrinsics are not supported yet")
-                    }
-                    context.coreFunctions.append(placeholder.handle)
+                case .resourceIntrinsic(let intrinsic):
+                    context.coreFunctions.append(try processResourceIntrinsic(intrinsic, context: &context))
                 }
             }
 
-            // Step 2: Build exports map
-            let exports = try buildExports(
-                from: component.exports,
-                context: &context
-            )
-
-            // Step 3: Allocate the component instance
-            let entity = ComponentInstanceEntity(
+            // Step 2: Allocate the component instance
+            var entity = ComponentInstanceEntity(
                 coreInstances: context.coreInstances,
-                exports: exports,
+                exports: context.exports,
                 functions: context.componentFunctions,
                 nestedComponents: context.nestedComponents
             )
+            entity.state = context.state
 
             let handle = store.allocator.allocate(componentInstance: entity)
             return ComponentInstance(handle: handle, store: store)
@@ -157,6 +163,10 @@
                 return component.orderedDefinitions
             }
             var order: [ParsedOrderedDefinition] = []
+            order += component.nestedComponents.indices.map { .component(index: $0) }
+            order += component.coreModules.indices.map { .coreModule(index: $0) }
+            order += component.componentTypes.indices.map { .type(index: $0) }
+            order += component.imports.indices.map { .import(index: $0) }
             order += component.componentInstances.indices.map { .componentInstance(index: $0) }
             func isFunctionAlias(_ index: Int) -> Bool {
                 if case .func = component.aliases[index].sort { return true } else { return false }
@@ -168,8 +178,9 @@
             order += component.coreInstanceDefs.indices.map { .coreInstance(index: $0) }
             order += component.aliases.indices.filter { !isFunctionAlias($0) }.map { .alias(index: $0) }
             order += component.canonicalDefinitions.indices.filter {
-                if case .lift = component.canonicalDefinitions[$0].kind { return true } else { return false }
+                if case .lower = component.canonicalDefinitions[$0].kind { return false } else { return true }
             }.map { .canon(index: $0) }
+            order += component.exports.indices.map { .export(index: $0) }
             return order
         }
     }
@@ -181,6 +192,15 @@
         let store: Store
         let imports: ComponentImports
 
+        /// The instance's handle table, which every `canon` definition in it uses
+        let state = ComponentInstanceState()
+
+        /// The type index space
+        let types = ComponentTypeSpace()
+
+        /// The enclosing components, innermost first
+        let outer: [OuterScope]
+
         /// Core module definitions (from modules index space)
         var coreModules: [Module] = []
 
@@ -190,9 +210,6 @@
         /// Core functions created from canonical lower definitions (from core functions index space)
         var coreFunctions: [InternalFunction] = []
 
-        /// Imported component instances (from component instances index space, populated by imports)
-        var importedInstances: [InternalComponentInstance] = []
-
         /// The component instance index space: imported and nested instances, in the order they
         /// were defined. Every instance index resolves against this.
         var componentInstances: [InternalComponentInstance] = []
@@ -200,14 +217,57 @@
         /// Component functions from imports, aliases, and canonical lift definitions
         var componentFunctions: [InternalComponentFunction] = []
 
-        /// Nested component definitions (from components index space)
-        var nestedComponentDefs: [ParsedComponent] = []
-
-        /// Type resolver for canonical ABI operations
-        let resolveType: (ComponentTypeIndex) throws -> ComponentDefValType
+        /// The component index space: nested and imported component definitions
+        var components: [ComponentDefinition] = []
 
         /// Nested component instances (from component instances index space)
         var nestedComponents: [InternalComponentInstance] = []
+
+        /// The component's exports so far
+        var exports: [String: InternalComponentExternalValue] = [:]
+
+        init(store: Store, imports: ComponentImports, outer: [OuterScope]) {
+            self.store = store
+            self.imports = imports
+            self.outer = outer
+        }
+
+        /// What a component defined here sees of this one and those enclosing it: the
+        /// definitions so far, as an outer alias can only refer to those before it.
+        var scopeForNested: [OuterScope] {
+            [OuterScope(types: types, components: components)] + outer
+        }
+
+        /// The component `count` out from this one: 0 for this one.
+        func outerScope(count: Int) throws -> OuterScope {
+            if count == 0 { return OuterScope(types: types, components: components) }
+            guard outer.indices.contains(count - 1) else {
+                throw ComponentLoaderError.instantiationFailed("outer alias count \(count) leaves the outermost component")
+            }
+            return outer[count - 1]
+        }
+
+        /// The type space `count` components out from this one: 0 for this one.
+        func typeSpace(outerCount count: Int) throws -> ComponentTypeSpace {
+            try outerScope(count: count).types
+        }
+
+        /// The type at `index`, as an export or import argument carries it.
+        func runtimeType(_ index: ComponentTypeIndex) throws -> ComponentRuntimeType {
+            ComponentRuntimeType(entry: try types.entry(index), space: types, index: index)
+        }
+    }
+
+    /// What an outer alias can refer to in an enclosing component.
+    struct OuterScope {
+        let types: ComponentTypeSpace
+        let components: [ComponentDefinition]
+    }
+
+    /// A component definition, with the enclosing components its outer aliases refer to.
+    struct ComponentDefinition {
+        let component: ParsedComponent
+        let outer: [OuterScope]
     }
 
     // MARK: - Parsed Component Representation
@@ -244,13 +304,16 @@
         /// Component imports
         public var imports: [ParsedComponentImport] = []
 
-        /// Component type definitions for type resolution during lowering/lifting
+        /// The type section entries, in order
         public var componentTypes: [ComponentTypeDef] = []
 
         public init() {}
 
-        /// Resolve a ComponentTypeIndex to its ComponentDefValType definition.
-        /// This is used during canonical ABI lowering/lifting to resolve nested types.
+        /// Resolve an index into `componentTypes` to the value type defined there.
+        ///
+        /// The index is a position in the type sections, which is a type index only while no
+        /// import, alias or export has added one: the loader resolves the type index space of
+        /// each instance as it instantiates it.
         public func resolveType(_ index: ComponentTypeIndex) throws -> ComponentDefValType {
             let idx = Int(index.rawValue)
             guard idx < componentTypes.count else {
@@ -267,6 +330,16 @@
     /// A definition that must be processed in binary order.
     /// Used to preserve semantic ordering for definitions with dependencies.
     public enum ParsedOrderedDefinition {
+        /// A nested component, by its index in `nestedComponents`
+        case component(index: Int)
+        /// A core module, by its index in `coreModules`
+        case coreModule(index: Int)
+        /// A type definition, by its index in `componentTypes`
+        case type(index: Int)
+        /// An import, by its index in `imports`
+        case `import`(index: Int)
+        /// An export, by its index in `exports`
+        case export(index: Int)
         /// A core instance definition
         case coreInstance(index: Int)
         /// A component instance definition
@@ -275,9 +348,15 @@
         case alias(index: Int)
         /// A canonical definition (lift or lower)
         case canon(index: Int)
-        /// A core function this loader cannot provide, such as a resource intrinsic. It still
-        /// takes its place in the core function index space.
-        case unsupportedCoreFunction
+        /// A `resource.new`, `resource.drop` or `resource.rep`, which defines a core function
+        case resourceIntrinsic(ParsedResourceIntrinsic)
+    }
+
+    /// A canonical built-in on resources of the type at an index.
+    public enum ParsedResourceIntrinsic {
+        case new(typeIndex: ComponentTypeIndex)
+        case drop(typeIndex: ComponentTypeIndex)
+        case rep(typeIndex: ComponentTypeIndex)
     }
 
     /// A core instance definition.
@@ -416,6 +495,10 @@
         /// Lift a core function to a component function
         case lift(coreInstanceIndex: Int, functionName: String, type: ComponentFuncType)
 
+        /// Lift the core function at an index in the core function index space, such as a
+        /// `resource.new`, to a component function
+        case liftCoreFunction(coreFunctionIndex: Int, type: ComponentFuncType)
+
         /// Lower a component function to a core function
         case lower(componentFunctionIndex: Int)
     }
@@ -492,6 +575,9 @@
 
         /// Export a core module instance (from core instances index space)
         case coreInstance(instanceIndex: Int)
+
+        /// Export a component definition (from components index space)
+        case component(index: Int)
     }
 
     /// A component import definition.
@@ -502,9 +588,14 @@
         /// The expected type of the import
         public let kind: ParsedComponentImportKind
 
-        public init(name: String, kind: ParsedComponentImportKind) {
+        /// The index of the instance type an instance import declares, which the provided
+        /// instance is checked against
+        public let declaredType: ComponentTypeIndex?
+
+        public init(name: String, kind: ParsedComponentImportKind, declaredType: ComponentTypeIndex? = nil) {
             self.name = name
             self.kind = kind
+            self.declaredType = declaredType
         }
     }
 
@@ -521,6 +612,12 @@
 
         /// Import a module
         case module
+
+        /// Import a type, such as a resource type
+        case type(ComponentTypeBound)
+
+        /// Import a component definition
+        case component
     }
 
     /// An alias definition that populates an index space.
@@ -581,8 +678,39 @@
         /// Canon lift requires a memory but none was provided
         case missingCanonMemory
 
+        /// An instance import lacks an export its type declares
+        case instanceExportNotFound(importName: String, exportName: String)
+
+        /// A resource type import, or an instance's resource type export, is not the resource
+        /// type an equality bound requires
+        case mismatchedResourceTypes(name: String)
+
         /// General instantiation failure
         case instantiationFailed(String)
+    }
+
+    extension ComponentLoaderError: CustomStringConvertible {
+        public var description: String {
+            switch self {
+            case .missingImport(let name): return "import \"\(name)\" was not found"
+            case .incompatibleImport(let name, let expected, let got):
+                return "import \"\(name)\": expected \(expected) found \(got)"
+            case .invalidCoreModuleIndex(let index): return "core module index \(index) out of bounds"
+            case .invalidCoreInstanceIndex(let index): return "core instance index \(index) out of bounds"
+            case .invalidCoreFunctionIndex(let index): return "core function index \(index) out of bounds"
+            case .invalidComponentIndex(let index): return "component index \(index) out of bounds"
+            case .invalidComponentFunctionIndex(let index): return "component function index \(index) out of bounds"
+            case .coreExportNotFound(let instanceIndex, let name):
+                return "core instance \(instanceIndex) has no function export \"\(name)\""
+            case .coreMemoryNotFound(let instanceIndex, let name):
+                return "core instance \(instanceIndex) has no memory export \"\(name)\""
+            case .missingCanonMemory: return "canon lift requires a memory but none was provided"
+            case .instanceExportNotFound(let importName, let exportName):
+                return "import \"\(importName)\": instance export \"\(exportName)\" was not found"
+            case .mismatchedResourceTypes(let name): return "\"\(name)\": mismatched resource types"
+            case .instantiationFailed(let message): return message
+            }
+        }
     }
 
     // MARK: - Private Implementation
@@ -599,16 +727,230 @@
 
             switch (importDef.kind, value) {
             case (.instance, .instance(let instance)):
-                // Instance imports add to imported instances index space
-                context.importedInstances.append(instance)
+                if let typeIndex = importDef.declaredType, case .instance(let declaration) = try context.types.entry(typeIndex) {
+                    try checkInstance(instance, against: declaration, name: importDef.name, context: context)
+                }
                 context.componentInstances.append(instance)
             case (.function, .function(let function)):
                 // Function imports add to component functions index space
                 context.componentFunctions.append(function)
+            case (.module, .coreModule(let module)):
+                context.coreModules.append(module)
+            case (.component, .component(let definition)):
+                context.components.append(definition)
+            case (.type(let bound), let value):
+                context.types.append(try importedType(value, bound: bound, name: importDef.name, scope: context.types.entry))
             default:
                 // Other imports validated in validateImports, nothing to track here
                 break
             }
+        }
+
+        /// The type entry a type import, or an instance's type export, of `value` gives, where
+        /// the bound's type indices resolve in `scope`.
+        private func importedType(
+            _ value: InternalComponentExternalValue?, bound: ComponentTypeBound, name: String,
+            scope: (ComponentTypeIndex) throws -> ComponentTypeSpace.Entry
+        ) throws -> ComponentTypeSpace.Entry {
+            switch bound {
+            case .subResource:
+                guard let value else {
+                    throw ComponentLoaderError.missingImport(name: name)
+                }
+                guard case .type(let type) = value, let resource = type.resource else {
+                    throw ComponentLoaderError.incompatibleImport(name: name, expected: "resource", got: value.sortDescription)
+                }
+                return .resource(resource)
+            case .eq(let typeIndex):
+                // The bound decides the type: one need not be provided, but one that is must match.
+                let expected = try scope(ComponentTypeIndex(rawValue: Int(typeIndex)))
+                if case .resource(let expectedResource) = expected, let value {
+                    guard case .type(let type) = value, let resource = type.resource else {
+                        throw ComponentLoaderError.incompatibleImport(name: name, expected: "resource", got: value.sortDescription)
+                    }
+                    guard resource === expectedResource else {
+                        throw ComponentLoaderError.mismatchedResourceTypes(name: name)
+                    }
+                }
+                return expected
+            }
+        }
+
+        /// Checks that `instance` has the exports `declaration` lists, of the right sorts, and
+        /// the resource types its bounds require. Function signatures are not compared yet.
+        private func checkInstance(
+            _ instance: InternalComponentInstance, against declaration: InstanceTypeDecl, name: String,
+            context: InstantiationContext
+        ) throws {
+            let exports = instance.exports
+            // The instance type's own type index space.
+            var local: [ComponentTypeSpace.Entry] = []
+            func localEntry(_ index: ComponentTypeIndex) throws -> ComponentTypeSpace.Entry {
+                guard local.indices.contains(Int(index.rawValue)) else {
+                    throw ComponentLoaderError.instantiationFailed("type index \(index.rawValue) out of bounds in the type of import \"\(name)\"")
+                }
+                return local[Int(index.rawValue)]
+            }
+            for decl in declaration.declarations {
+                switch decl {
+                case .coreType:
+                    break
+                case .type:
+                    // Only resource types matter to the bounds checked here, and an instance
+                    // type cannot define one.
+                    local.append(.opaque)
+                case .alias(let alias):
+                    if case .type = alias.sort, case .outer(let count, let index) = alias.target {
+                        // Outer count 1 is the component the instance type is declared in.
+                        let space = try context.typeSpace(outerCount: Int(count) - 1)
+                        local.append(try space.entry(ComponentTypeIndex(rawValue: Int(index))))
+                    } else if case .type = alias.sort {
+                        local.append(.opaque)
+                    }
+                case .exportDecl(let export):
+                    let provided = exports[export.name]
+                    switch export.externDesc {
+                    case .type(let bound):
+                        local.append(
+                            try importedType(provided, bound: bound, name: "\(name).\(export.name)", scope: localEntry))
+                        continue
+                    default:
+                        break
+                    }
+                    guard let provided else {
+                        throw ComponentLoaderError.instanceExportNotFound(importName: name, exportName: export.name)
+                    }
+                    let expected: String
+                    switch export.externDesc {
+                    case .function: expected = "func"
+                    case .instance: expected = "instance"
+                    case .coreModule: expected = "module"
+                    case .value: expected = "value"
+                    case .component: expected = "component"
+                    case .type: expected = "type"
+                    }
+                    guard provided.sortDescription == expected else {
+                        throw ComponentLoaderError.incompatibleImport(
+                            name: "\(name).\(export.name)", expected: expected, got: provided.sortDescription)
+                    }
+                }
+            }
+        }
+
+        /// Process a type definition, creating a new resource type for a resource definition.
+        private func processTypeDef(_ typeDef: ComponentTypeDef, context: inout InstantiationContext) throws {
+            switch typeDef {
+            case .definedValue(let type): context.types.append(.value(type))
+            case .function(let type): context.types.append(.function(type))
+            case .instance(let type): context.types.append(.instance(type))
+            case .component(let type): context.types.append(.component(type))
+            case .resource(let destructorIndex):
+                var destructor: ((UInt32) throws -> Void)?
+                if let destructorIndex {
+                    let index = Int(destructorIndex)
+                    guard context.coreFunctions.indices.contains(index) else {
+                        throw ComponentLoaderError.invalidCoreFunctionIndex(index)
+                    }
+                    let function = Function(handle: context.coreFunctions[index], store: store)
+                    guard function.type == FunctionType(parameters: [.i32], results: []) else {
+                        throw ComponentLoaderError.instantiationFailed("a resource destructor must take one i32, not \(function.type)")
+                    }
+                    destructor = { rep in _ = try function.invoke([.i32(rep)]) }
+                }
+                context.types.append(.resource(ComponentResourceType(implementation: context.state, destructor: destructor)))
+            }
+        }
+
+        /// Process an export: it joins the exports, and is a new index for what it exports.
+        private func processExport(_ export: ParsedComponentExport, context: inout InstantiationContext) throws {
+            let value: InternalComponentExternalValue
+            switch export.kind {
+            case .function(let index):
+                guard index < context.componentFunctions.count else {
+                    throw ComponentLoaderError.invalidComponentFunctionIndex(index)
+                }
+                value = .function(context.componentFunctions[index])
+                context.componentFunctions.append(context.componentFunctions[index])
+
+            case .value(let runtimeValue):
+                value = .value(runtimeValue)
+
+            case .type(let typeIndex):
+                let type = try context.runtimeType(typeIndex)
+                value = .type(type)
+                context.types.append(type.entry)
+
+            case .instance(let index):
+                guard index < context.componentInstances.count else {
+                    throw ComponentLoaderError.instantiationFailed(
+                        "Invalid nested component index: \(index)"
+                    )
+                }
+                value = .instance(context.componentInstances[index])
+                context.componentInstances.append(context.componentInstances[index])
+
+            case .coreModule(let moduleIndex):
+                guard moduleIndex < context.coreModules.count else {
+                    throw ComponentLoaderError.invalidCoreModuleIndex(moduleIndex)
+                }
+                value = .coreModule(context.coreModules[moduleIndex])
+                context.coreModules.append(context.coreModules[moduleIndex])
+
+            case .coreInstance(let instanceIndex):
+                guard instanceIndex < context.coreInstances.count else {
+                    throw ComponentLoaderError.invalidCoreInstanceIndex(instanceIndex)
+                }
+                value = .coreInstance(context.coreInstances[instanceIndex])
+
+            case .component(let index):
+                guard context.components.indices.contains(index) else {
+                    throw ComponentLoaderError.invalidComponentIndex(index)
+                }
+                value = .component(context.components[index])
+                context.components.append(context.components[index])
+            }
+            context.exports[export.name] = value
+        }
+
+        /// Process a `resource.new`, `resource.drop` or `resource.rep`: a core function acting
+        /// on this instance's handle table.
+        private func processResourceIntrinsic(
+            _ intrinsic: ParsedResourceIntrinsic, context: inout InstantiationContext
+        ) throws -> InternalFunction {
+            let state = context.state
+            func resourceType(_ index: ComponentTypeIndex, definedHere: Bool) throws -> ComponentResourceType {
+                let type = try context.types.resourceType(index)
+                // Only the implementation sees a resource's representation.
+                if definedHere, type.implementation !== state {
+                    throw ComponentLoaderError.instantiationFailed(
+                        "resource.new and resource.rep need a resource type this component defines")
+                }
+                return type
+            }
+            func handleIndex(_ arguments: [Value]) -> UInt32 {
+                guard case .i32(let index) = arguments.first else { preconditionFailure("typed as taking an i32") }
+                return index
+            }
+            let function: Function
+            switch intrinsic {
+            case .new(let typeIndex):
+                let type = try resourceType(typeIndex, definedHere: true)
+                function = Function(store: store, parameters: [.i32], results: [.i32]) { _, arguments in
+                    [.i32(try state.resourceNew(type, rep: handleIndex(arguments)))]
+                }
+            case .drop(let typeIndex):
+                let type = try resourceType(typeIndex, definedHere: false)
+                function = Function(store: store, parameters: [.i32], results: []) { _, arguments in
+                    try state.resourceDrop(type, index: handleIndex(arguments))
+                    return []
+                }
+            case .rep(let typeIndex):
+                let type = try resourceType(typeIndex, definedHere: true)
+                function = Function(store: store, parameters: [.i32], results: [.i32]) { _, arguments in
+                    [.i32(try state.resourceRep(type, index: handleIndex(arguments)))]
+                }
+            }
+            return function.handle
         }
 
         /// Process an alias to populate the appropriate index space.
@@ -622,8 +964,26 @@
                 let componentFunc = try resolveComponentFunctionAlias(alias, context: &context)
                 context.componentFunctions.append(componentFunc)
             case .instance:
-                // Instance alias - not yet implemented
-                break
+                guard case .componentInstanceExport(let instanceIndex, let name) = alias.source else {
+                    throw ComponentLoaderError.instantiationFailed("Outer alias for component instance not yet supported")
+                }
+                guard case .instance(let instance) = try componentInstanceExport(instanceIndex, name, context: context) else {
+                    throw ComponentLoaderError.instantiationFailed("Export '\(name)' of instance \(instanceIndex) is not an instance")
+                }
+                context.componentInstances.append(instance)
+            case .type:
+                switch alias.source {
+                case .componentInstanceExport(let instanceIndex, let name):
+                    guard case .type(let type) = try componentInstanceExport(instanceIndex, name, context: context) else {
+                        throw ComponentLoaderError.instantiationFailed("Export '\(name)' of instance \(instanceIndex) is not a type")
+                    }
+                    try context.types.append(type.entry, from: type.space)
+                case .outer(let count, let index):
+                    let space = try context.typeSpace(outerCount: count)
+                    try context.types.append(try space.entry(ComponentTypeIndex(rawValue: index)), from: space)
+                case .coreInstanceExport:
+                    throw ComponentLoaderError.instantiationFailed("A core instance export cannot be a component type")
+                }
             case .core(let coreSort):
                 // Core aliases from core instance exports
                 switch coreSort {
@@ -637,10 +997,41 @@
                 default:
                     break
                 }
-            case .type, .component, .value:
-                // Type/component/value aliases don't add to runtime context
+            case .component:
+                switch alias.source {
+                case .componentInstanceExport(let instanceIndex, let name):
+                    guard case .component(let definition) = try componentInstanceExport(instanceIndex, name, context: context) else {
+                        throw ComponentLoaderError.instantiationFailed("Export '\(name)' of instance \(instanceIndex) is not a component")
+                    }
+                    context.components.append(definition)
+                case .outer(let count, let index):
+                    let scope = try context.outerScope(count: count)
+                    guard scope.components.indices.contains(index) else {
+                        throw ComponentLoaderError.invalidComponentIndex(index)
+                    }
+                    context.components.append(scope.components[index])
+                case .coreInstanceExport:
+                    throw ComponentLoaderError.instantiationFailed("A core instance export cannot be a component")
+                }
+            case .value:
+                // Value aliases don't add to runtime context
                 break
             }
+        }
+
+        /// The export `name` of the component instance at `instanceIndex`.
+        private func componentInstanceExport(
+            _ instanceIndex: Int, _ name: String, context: InstantiationContext
+        ) throws -> InternalComponentExternalValue {
+            guard instanceIndex < context.componentInstances.count else {
+                throw ComponentLoaderError.instantiationFailed(
+                    "Component instance index \(instanceIndex) out of bounds for alias (\(context.componentInstances.count) instances)"
+                )
+            }
+            guard let value = context.componentInstances[instanceIndex].exports[name] else {
+                throw ComponentLoaderError.instantiationFailed("Export '\(name)' not found in instance \(instanceIndex)")
+            }
+            return value
         }
 
         /// Resolve a core function alias from a core instance export.
@@ -856,21 +1247,20 @@
         ) throws {
             switch instanceDef {
             case .instantiate(let componentIndex, let args):
-                guard componentIndex < context.nestedComponentDefs.count else {
+                guard componentIndex < context.components.count else {
                     throw ComponentLoaderError.invalidComponentIndex(componentIndex)
                 }
 
-                let nestedComponent = context.nestedComponentDefs[componentIndex]
+                let nestedComponent = context.components[componentIndex]
 
                 // Build imports for the nested component from the args
                 var nestedImports = ComponentImports()
                 for arg in args {
-                    let value = try resolveComponentInstantiateArg(arg, context: &context)
-                    nestedImports.define(name: arg.name, value)
+                    nestedImports.definitions[arg.name] = try resolveComponentInstantiateArg(arg, context: &context)
                 }
 
                 // Recursively instantiate the nested component
-                let nestedInstance = try instantiate(component: nestedComponent, imports: nestedImports)
+                let nestedInstance = try instantiate(nestedComponent, imports: nestedImports)
                 context.nestedComponents.append(nestedInstance.handle)
                 context.componentInstances.append(nestedInstance.handle)
 
@@ -898,7 +1288,7 @@
         private func resolveComponentInstantiateArg(
             _ arg: ParsedComponentInstantiateArg,
             context: inout InstantiationContext
-        ) throws -> ComponentExternalValue {
+        ) throws -> InternalComponentExternalValue {
             switch arg.sort {
             case .core(let coreSort):
                 switch coreSort {
@@ -906,7 +1296,7 @@
                     guard arg.index < context.coreInstances.count else {
                         throw ComponentLoaderError.invalidCoreInstanceIndex(arg.index)
                     }
-                    return .coreInstance(Instance(handle: context.coreInstances[arg.index], store: store))
+                    return .coreInstance(context.coreInstances[arg.index])
 
                 case .module:
                     guard arg.index < context.coreModules.count else {
@@ -924,7 +1314,7 @@
                 guard arg.index < context.componentFunctions.count else {
                     throw ComponentLoaderError.invalidComponentFunctionIndex(arg.index)
                 }
-                return .function(ComponentFunction(handle: context.componentFunctions[arg.index], store: store))
+                return .function(context.componentFunctions[arg.index])
 
             case .instance:
                 guard arg.index < context.componentInstances.count else {
@@ -932,9 +1322,18 @@
                         "Invalid component instance index: \(arg.index)"
                     )
                 }
-                return .instance(ComponentInstance(handle: context.componentInstances[arg.index], store: store))
+                return .instance(context.componentInstances[arg.index])
 
-            case .value, .type, .component:
+            case .type:
+                return .type(try context.runtimeType(ComponentTypeIndex(rawValue: arg.index)))
+
+            case .component:
+                guard context.components.indices.contains(arg.index) else {
+                    throw ComponentLoaderError.invalidComponentIndex(arg.index)
+                }
+                return .component(context.components[arg.index])
+
+            case .value:
                 throw ComponentLoaderError.instantiationFailed(
                     "Unsupported sort in component instantiate arg: \(arg.sort)"
                 )
@@ -994,7 +1393,10 @@
                 }
                 return .instance(context.componentInstances[export.index])
 
-            case .value, .type, .component:
+            case .type:
+                return .type(try context.runtimeType(ComponentTypeIndex(rawValue: export.index)))
+
+            case .value, .component:
                 throw ComponentLoaderError.instantiationFailed(
                     "Unsupported sort in inline export: \(export.sort)"
                 )
@@ -1006,20 +1408,30 @@
             _ canonDef: ParsedCanonicalDefinition,
             context: inout InstantiationContext
         ) throws -> InternalComponentFunction {
-            guard case .lift(let coreInstanceIndex, let functionName, let type) = canonDef.kind else {
+            let coreFunction: Function
+            let type: ComponentFuncType
+            let name: String
+            switch canonDef.kind {
+            case .lift(let coreInstanceIndex, let functionName, let liftType):
+                guard coreInstanceIndex < context.coreInstances.count else {
+                    throw ComponentLoaderError.invalidCoreInstanceIndex(coreInstanceIndex)
+                }
+                let coreInstance = Instance(handle: context.coreInstances[coreInstanceIndex], store: store)
+                guard let function = coreInstance.exports[function: functionName] else {
+                    throw ComponentLoaderError.coreExportNotFound(
+                        instanceIndex: coreInstanceIndex,
+                        name: functionName
+                    )
+                }
+                (coreFunction, type, name) = (function, liftType, "\"\(functionName)\"")
+            case .liftCoreFunction(let coreFunctionIndex, let liftType):
+                guard context.coreFunctions.indices.contains(coreFunctionIndex) else {
+                    throw ComponentLoaderError.invalidCoreFunctionIndex(coreFunctionIndex)
+                }
+                let function = Function(handle: context.coreFunctions[coreFunctionIndex], store: store)
+                (coreFunction, type, name) = (function, liftType, "core function \(coreFunctionIndex)")
+            case .lower:
                 throw ComponentLoaderError.instantiationFailed("Expected canon.lift definition")
-            }
-
-            guard coreInstanceIndex < context.coreInstances.count else {
-                throw ComponentLoaderError.invalidCoreInstanceIndex(coreInstanceIndex)
-            }
-
-            let coreInstance = Instance(handle: context.coreInstances[coreInstanceIndex], store: store)
-            guard let coreFunction = coreInstance.exports[function: functionName] else {
-                throw ComponentLoaderError.coreExportNotFound(
-                    instanceIndex: coreInstanceIndex,
-                    name: functionName
-                )
             }
 
             // Resolve canon options
@@ -1027,24 +1439,16 @@
 
             // The core function must have the type the component function flattens to; otherwise
             // lifting would read its results as the wrong values.
-            let expectedCoreType = try CanonicalABITypes(resolveType: context.resolveType)
-                .flattenFunctionType(type, lifting: true)
+            let expectedCoreType = try CanonicalABITypes(space: context.types).flattenFunctionType(type, lifting: true)
             guard coreFunction.type == expectedCoreType else {
                 throw ComponentLoaderError.instantiationFailed(
-                    "canon lift of \"\(functionName)\": core type \(coreFunction.type) does not match \(expectedCoreType)")
+                    "canon lift of \(name): core type \(coreFunction.type) does not match \(expectedCoreType)")
             }
-
-            // Create a placeholder component instance handle for now
-            // This will be updated when we have the actual component instance
-            let placeholderEntity = ComponentInstanceEntity.empty
-            let placeholderHandle = store.allocator.allocate(componentInstance: placeholderEntity)
 
             let entity = ComponentFunctionEntity(
                 type: type,
-                coreFunction: coreFunction.handle,
-                canonOptions: canonOptions,
-                instance: placeholderHandle,
-                resolveType: context.resolveType
+                types: context.types,
+                implementation: .lifted(coreFunction: coreFunction.handle, canonOptions: canonOptions, instance: context.state)
             )
 
             return store.allocator.allocate(componentFunction: entity)
@@ -1072,14 +1476,20 @@
             // The lowering side's own options: the arguments and results live in the memory of the
             // core instance calling the function, not in that of the component implementing it.
             let options = try resolveCanonOptions(canonDef.options, context: &context)
-            let types = CanonicalABITypes(resolveType: componentFunction.handle.resolveType)
+            // The callee's type, whose indices resolve in its own space; its resource types are
+            // the caller's too, as linking passed them along.
+            let types = CanonicalABITypes(space: componentFunction.handle.types)
             let coreFuncType = try types.flattenFunctionType(funcType, lifting: false)
 
             // A host function that lifts the core arguments, calls the component function, and
-            // lowers its results back for the core caller.
+            // lowers its results back for the core caller. Handles move through the caller's table.
             let store = self.store
+            let instance = context.state
             let wrappedFunction = Function(store: store, type: coreFuncType) { [componentFunction] _, coreArgs in
-                var abi = CanonicalABIContext(types: types, options: options, store: store)
+                var abi = CanonicalABIContext(types: types, options: options, store: store, instance: instance)
+                // The borrows lent to the call end with it, however it ends: a trap leaves the
+                // instance usable, and its handles must not stay lent.
+                defer { abi.releaseLenders() }
                 let componentArgs = try abi.liftArguments(coreArgs, of: funcType)
                 let results = try componentFunction.invoke(componentArgs)
                 return try abi.lowerResults(results, of: funcType, arguments: coreArgs)
@@ -1147,55 +1557,6 @@
             )
         }
 
-        /// Build the exports map from parsed export definitions.
-        private func buildExports(
-            from exports: [ParsedComponentExport],
-            context: inout InstantiationContext
-        ) throws -> [String: InternalComponentExternalValue] {
-            var result: [String: InternalComponentExternalValue] = [:]
-
-            for export in exports {
-                let value: InternalComponentExternalValue
-                switch export.kind {
-                case .function(let index):
-                    guard index < context.componentFunctions.count else {
-                        throw ComponentLoaderError.invalidComponentFunctionIndex(index)
-                    }
-                    value = .function(context.componentFunctions[index])
-
-                case .value(let runtimeValue):
-                    value = .value(runtimeValue)
-
-                case .type(let typeIndex):
-                    value = .type(typeIndex)
-
-                case .instance(let index):
-                    guard index < context.componentInstances.count else {
-                        throw ComponentLoaderError.instantiationFailed(
-                            "Invalid nested component index: \(index)"
-                        )
-                    }
-                    value = .instance(context.componentInstances[index])
-
-                case .coreModule(let moduleIndex):
-                    guard moduleIndex < context.coreModules.count else {
-                        throw ComponentLoaderError.invalidCoreModuleIndex(moduleIndex)
-                    }
-                    value = .coreModule(context.coreModules[moduleIndex])
-
-                case .coreInstance(let instanceIndex):
-                    guard instanceIndex < context.coreInstances.count else {
-                        throw ComponentLoaderError.invalidCoreInstanceIndex(instanceIndex)
-                    }
-                    value = .coreInstance(context.coreInstances[instanceIndex])
-                }
-
-                result[export.name] = value
-            }
-
-            return result
-        }
-
         /// Validate that the provided imports satisfy the component's import requirements.
         private func validateImports(
             _ requiredImports: [ParsedComponentImport],
@@ -1223,6 +1584,21 @@
                 case (.module, .coreModule):
                     // Module imports don't have detailed type checking yet
                     break
+
+                case (.type, _):
+                    // Checked against its bound when it is processed
+                    break
+
+                case (.component, .component):
+                    // Component imports don't have detailed type checking yet
+                    break
+
+                case (.component, _):
+                    throw ComponentLoaderError.incompatibleImport(
+                        name: required.name,
+                        expected: "component",
+                        got: provided.tagDescription
+                    )
 
                 case (.function, _):
                     throw ComponentLoaderError.incompatibleImport(
@@ -1267,13 +1643,18 @@
             case .value(let value):
                 return .value(value)
             case .type(let typeIndex):
-                return .type(typeIndex)
+                // Only its index is known: it is not a resource type, and nothing can be read of it.
+                return .type(ComponentRuntimeType(entry: .opaque, space: ComponentTypeSpace(), index: typeIndex))
+            case .resourceType(let type):
+                return .type(ComponentRuntimeType(entry: .resource(type), space: ComponentTypeSpace(), index: ComponentTypeIndex(rawValue: 0)))
             case .instance(let instance):
                 return .instance(instance.handle)
             case .coreModule(let module):
                 return .coreModule(module)
             case .coreInstance(let moduleInstance):
                 return .coreInstance(moduleInstance.handle)
+            case .component(let component):
+                return .component(ComponentDefinition(component: component, outer: []))
             }
         }
     }

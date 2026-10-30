@@ -138,6 +138,8 @@
                 if kind != .type { try flushPendingComponentTypes() }
             }
 
+            var deferredExports: [(ComponentWatParser.ExportDef, Location)] = []
+
             // Encode fields in order, producing interleaved sections.
             // Consecutive same-section-kind fields are batched into a single section.
             // NormalizedDefinition.sectionKind drives which pending buffers to flush.
@@ -202,15 +204,10 @@
                     try encodeSingleImport(importDef, typeIndexMapping: typeIndexMapping, location: field.location)
 
                 case .componentExport(let exportDef):
-                    try encodeSingleExport(
-                        exportDef,
-                        typeIndexMapping: typeIndexMapping,
-                        coreFuncAliases: coreFuncAliases,
-                        componentFuncAliases: componentFuncAliases,
-                        exportFuncAliases: exportFuncAliases,
-                        location: field.location,
-                        emittedExportFuncAliases: &emittedExportFuncAliases
-                    )
+                    // An export is a new index in its sort's index space, which the indices
+                    // given to later definitions here do not count. Emitted last, as wasm-tools
+                    // does for inline exports, exports shift no other definition's index.
+                    deferredExports.append((exportDef, field.location))
 
                 case .component(let nestedDef):
                     try encodeSingleComponent(nestedDef, options: options)
@@ -233,6 +230,18 @@
                 exportedTypeIndices: exportedTypeIndices,
                 emittedTypes: &emittedTypes
             )
+
+            for (exportDef, location) in deferredExports {
+                try encodeSingleExport(
+                    exportDef,
+                    typeIndexMapping: typeIndexMapping,
+                    coreFuncAliases: coreFuncAliases,
+                    componentFuncAliases: componentFuncAliases,
+                    exportFuncAliases: exportFuncAliases,
+                    location: location,
+                    emittedExportFuncAliases: &emittedExportFuncAliases
+                )
+            }
 
             if options.nameSection {
                 try encodeComponentNameSection(component: component)
@@ -379,7 +388,7 @@
                 return cases.compactMap { $0.type.flatMap(indexOf) }
             case .inlined(.primitive), .flags, .enum:
                 return []
-            case .future, .stream, .resource:
+            case .future, .stream, .resource, .own, .borrow:
                 return []
             }
         }
@@ -486,27 +495,42 @@
 
             case .instance(let instanceType):
                 encoder.output.append(0x42)  // instance type opcode
-                let declCount = instanceType.typeDecls.count + instanceType.exports.count
-                encoder.writeUnsignedLEB128(UInt32(declCount))
-
-                for typeDecl in instanceType.typeDecls {
-                    encoder.output.append(0x01)  // type declaration tag
-                    try Self.encodeComponentDefValType(
-                        typeDecl.valueType,
-                        types: types,
-                        indexMapping: typeIndexMapping,
-                        encoder: &encoder
-                    )
+                // Exports of sorts other than type are not parsed yet, so they are left out:
+                // the type then requires less of an instance, where a made-up descriptor would
+                // require something false of it. They take no type index, so leaving them out
+                // shifts none.
+                // TODO: Parse and encode instance type exports of every sort.
+                let declarations = instanceType.declarations.filter {
+                    if case .export(let export) = $0 { return export.typeBound != nil }
+                    return true
                 }
+                encoder.writeUnsignedLEB128(UInt32(declarations.count))
 
-                // TODO: Instance types not fully supported in component binary encoder
-                for export in instanceType.exports {
-                    encoder.output.append(0x04)  // export declaration tag
-                    encoder.output.append(0x00)  // outer count (simplified)
-                    encoder.encode(export.name)
-                    encoder.output.append(0x03)  // type export kind
-                    encoder.output.append(0x00)  // index 0 (simplified)
-                    encoder.output.append(0x00)  // no type bounds (simplified)
+                for declaration in declarations {
+                    switch declaration {
+                    case .type(let typeDecl):
+                        encoder.output.append(0x01)  // type declaration tag
+                        try Self.encodeComponentDefValType(
+                            typeDecl.valueType,
+                            types: types,
+                            indexMapping: typeIndexMapping,
+                            encoder: &encoder
+                        )
+                    case .export(let export):
+                        encoder.output.append(0x04)  // export declaration tag
+                        encoder.output.append(0x00)  // plain name
+                        encoder.encode(export.name)
+                        encoder.output.append(0x03)  // type extern descriptor
+                        switch export.typeBound {
+                        case .eq(let typeIndex):
+                            encoder.output.append(0x00)
+                            encoder.writeUnsignedLEB128(typeIndex)
+                        case .subResource:
+                            encoder.output.append(0x01)
+                        case nil:
+                            preconditionFailure("filtered out above")
+                        }
+                    }
                 }
 
             case .component(let componentType):
@@ -1518,7 +1542,7 @@
                     encoder.encode(caseName)
                 }
 
-            case .future, .stream, .resource:
+            case .future, .stream, .resource, .own, .borrow:
                 throw WatParserError("Component value type not yet supported: \(valueType)", location: nil)
 
             case .inlined(.index(let typeIndex)):

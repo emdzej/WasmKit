@@ -137,7 +137,7 @@ public enum ComponentValueBound {
 }
 
 /// A bound on a type.
-public enum ComponentTypeBound {
+public enum ComponentTypeBound: Hashable {
     case eq(typeIndex: UInt32)
     case subResource
 }

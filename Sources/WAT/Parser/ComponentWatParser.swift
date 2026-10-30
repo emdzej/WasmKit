@@ -875,8 +875,14 @@
 
         /// Parse instance type declarations (type decls and exports)
         private mutating func parseInstanceTypeDeclarations(_ parser: inout Parser) throws(WatParserError) -> InstanceTypeDef {
-            var typeDecls: [InstanceTypeDef.TypeDecl] = []
-            var exports: [InstanceTypeDef.ExportDecl] = []
+            var declarations: [InstanceTypeDef.Declaration] = []
+            // The instance type's own type index space: type declarations and type exports.
+            var typeIDs: [String: Int] = [:]
+            var typeCount = 0
+            func bindType(_ id: Name?) {
+                if let id { typeIDs[id.value] = typeCount }
+                typeCount += 1
+            }
 
             while try parser.take(.leftParen) {
                 let declKeyword = try parser.expectKeyword()
@@ -884,10 +890,40 @@
                 case "type":
                     let typeId = try parser.takeId()
                     let valueType = try parseComponentDefValType(&parser)
-                    typeDecls.append(InstanceTypeDef.TypeDecl(id: typeId, valueType: valueType))
+                    declarations.append(.type(InstanceTypeDef.TypeDecl(id: typeId, valueType: valueType)))
+                    bindType(typeId)
                 case "export":
                     let exportName = try parser.expectString()
-                    // TODO: Skipping the type constraint as unimplemented
+                    if try parser.takeParenBlockStart("type") {
+                        // `(type $id? (eq <typeidx>))` or `(type $id? (sub resource))`
+                        let typeId = try parser.takeId()
+                        try parser.expect(.leftParen)
+                        let bound: ComponentTypeBound
+                        switch try parser.expectKeyword() {
+                        case "eq":
+                            let location = parser.lexer.location()
+                            switch try parser.expectIndexOrId() {
+                            case .index(let index, _):
+                                bound = .eq(typeIndex: index)
+                            case .id(let id, _):
+                                guard let index = typeIDs[id.value] else {
+                                    throw WatParserError("Unknown type \(id.value) in instance type", location: location)
+                                }
+                                bound = .eq(typeIndex: UInt32(index))
+                            }
+                        case "sub":
+                            try parser.expectKeyword("resource")
+                            bound = .subResource
+                        case let keyword:
+                            throw WatParserError("Unknown type bound '\(keyword)'", location: parser.lexer.location())
+                        }
+                        try parser.expect(.rightParen)
+                        try parser.expect(.rightParen)
+                        declarations.append(.export(InstanceTypeDef.ExportDecl(name: exportName, typeBound: bound)))
+                        bindType(typeId)
+                        break
+                    }
+                    // TODO: Exports of other sorts are skipped as unimplemented
                     var depth = 1
                     while depth > 0 {
                         if try parser.take(.leftParen) {
@@ -898,7 +934,7 @@
                             try parser.consume()
                         }
                     }
-                    exports.append(InstanceTypeDef.ExportDecl(name: exportName))
+                    declarations.append(.export(InstanceTypeDef.ExportDecl(name: exportName, typeBound: nil)))
                     continue  // Skip the outer expect(.rightParen) since we already consumed it
                 default:
                     throw WatParserError("Unknown instance type declaration '\(declKeyword)'", location: parser.lexer.location())
@@ -906,7 +942,7 @@
                 try parser.expect(.rightParen)
             }
 
-            return InstanceTypeDef(typeDecls: typeDecls, exports: exports)
+            return InstanceTypeDef(declarations: declarations)
         }
 
         /// Parse component type declarations (type decls, imports, and exports)

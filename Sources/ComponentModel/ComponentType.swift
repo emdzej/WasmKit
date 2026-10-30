@@ -122,6 +122,13 @@ public enum ComponentDefValType: Hashable {
     case variant([ComponentCaseField])
     case resource(destructor: ComponentFuncIndex)
 
+    // Handle types
+
+    /// An owning handle to a resource of the resource type at the index.
+    case own(ComponentTypeIndex)
+    /// A handle borrowing a resource of the resource type at the index for the duration of a call.
+    case borrow(ComponentTypeIndex)
+
     /// Construct an inline-primitive value type.
     public static func primitive(_ type: ComponentPrimValType) -> Self { .inlined(.primitive(type)) }
 
@@ -210,7 +217,54 @@ public indirect enum ComponentValue {
     case option(ComponentValue?)
     case result(ok: ComponentValue?, error: ComponentValue?)
 
-    // Resource handles (future extension)
-    // case own(ResourceHandle)
-    // case borrow(ResourceHandle)
+    // Resource handles
+    case own(ComponentResource)
+    case borrow(ComponentResource)
+}
+
+/// A resource type.
+///
+/// Resource types are generative: each instantiation of a component that defines one creates a
+/// new type, distinct from every other, so they compare by identity. A host defines its own with
+/// ``init(destructor:)``.
+public final class ComponentResourceType {
+    /// Runs when the last owning handle to a resource of this type is dropped, given its
+    /// representation.
+    package let destructor: ((UInt32) throws -> Void)?
+
+    /// The component instance that defined this type, or `nil` for a host-defined one.
+    ///
+    /// Weak, as the instance's handle tables refer to the types of the handles in them.
+    package private(set) weak var implementation: AnyObject?
+
+    /// Whether a host, rather than a component, defined this type.
+    public let isHostDefined: Bool
+
+    /// Creates a host-defined resource type.
+    ///
+    /// - Parameter destructor: Called with a resource's representation when a component drops
+    ///   the last owning handle to it.
+    public init(destructor: ((UInt32) throws -> Void)? = nil) {
+        self.destructor = destructor
+        self.implementation = nil
+        self.isHostDefined = true
+    }
+
+    /// Creates a resource type defined by the component instance `implementation`.
+    package init(implementation: AnyObject, destructor: ((UInt32) throws -> Void)?) {
+        self.destructor = destructor
+        self.implementation = implementation
+        self.isHostDefined = false
+    }
+}
+
+/// A resource passed by a handle: its type, and the representation its implementation chose.
+public struct ComponentResource {
+    public let type: ComponentResourceType
+    public let rep: UInt32
+
+    public init(type: ComponentResourceType, rep: UInt32) {
+        self.type = type
+        self.rep = rep
+    }
 }

@@ -379,9 +379,21 @@
                 let elemIdx = try parseOptionalValType()
                 return .future(elemIdx)
 
-            case .own, .borrow, .listFixed:
+            case .own:
+                return .own(try parseResourceTypeIndex())
+
+            case .borrow:
+                return .borrow(try parseResourceTypeIndex())
+
+            case .listFixed:
                 throw makeError(.malformedValueType(opcode))
             }
+        }
+
+        /// Parse the type index of an `own` or `borrow`: a plain `u32`, unlike a `valtype`'s s33.
+        mutating func parseResourceTypeIndex() throws(WasmParserError) -> ComponentTypeIndex {
+            let index: UInt32 = try parseUnsigned()
+            return ComponentTypeIndex(rawValue: Int(index))
         }
 
         /// Parse a primitive value type from an already-consumed opcode.
@@ -608,8 +620,9 @@
         mutating func parseTypeDef() throws(WasmParserError) -> ComponentTypeDef {
             let byte = try stream.peek() ?? 0
 
-            // Check if it's a defined value type (primitive or composite)
-            if byte >= 0x64 || byte < 0x40 {
+            // Check if it's a defined value type (primitive or composite). A resource type's
+            // `0x3f` is below the other type opcodes, so it is told apart first.
+            if byte != 0x3f && (byte >= 0x64 || byte < 0x40) {
                 let valType = try parseDefValType()
                 return .definedValue(valType)
             }
@@ -643,10 +656,17 @@
                 let decls = try parseVector { p throws(WasmParserError) -> InstanceDecl in try p.parseInstanceDeclOnly() }
                 return .instance(InstanceTypeDecl(declarations: decls))
 
-            case 0x3f:  // resourcetype
-                _ = try stream.consumeAny()  // 0x7f rep type marker
-                let hasDtor = try stream.consumeAny()
-                let dtor: UInt32? = hasDtor == 0x01 ? try parseUnsigned() : nil
+            case 0x3f:  // resourcetype: `0x3f 0x7f f?:<core:funcidx>?`, the 0x7f being `rep i32`
+                let rep = try stream.consumeAny()
+                guard rep == 0x7f else {
+                    throw makeError(.malformedValueType(rep))
+                }
+                let dtor: UInt32?
+                switch try stream.consumeAny() {
+                case 0x00: dtor = nil
+                case 0x01: dtor = try parseUnsigned()
+                case let marker: throw makeError(.malformedValueType(marker))
+                }
                 return .resource(destructor: dtor)
 
             default:

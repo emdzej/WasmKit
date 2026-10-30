@@ -65,6 +65,12 @@
 
             case .result(let ok, let error):
                 return formatResult(ok: ok, error: error)
+
+            // WAVE has no syntax for handles; these show the representation, for diagnostics.
+            case .own(let resource):
+                return "own(\(resource.rep))"
+            case .borrow(let resource):
+                return "borrow(\(resource.rep))"
             }
         }
     }

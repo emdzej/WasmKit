@@ -257,10 +257,16 @@
             }
             struct ExportDecl: Hashable {
                 let name: String
-                // Simplified - full implementation would handle type equality constraints
+                /// The bound of a type export, by the instance type's own type indices, or `nil`
+                /// for an export of another sort, which is not parsed yet.
+                let typeBound: ComponentTypeBound?
             }
-            let typeDecls: [TypeDecl]
-            let exports: [ExportDecl]
+            enum Declaration: Hashable {
+                case type(TypeDecl)
+                case export(ExportDecl)
+            }
+            /// In order, as each type declaration and type export takes the next type index.
+            let declarations: [Declaration]
         }
 
         struct ComponentInnerTypeDef: Hashable {

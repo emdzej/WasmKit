@@ -292,6 +292,13 @@ package struct WAST2JSONCommand: Codable {
     package let name: String?
     package let text: String?
     package let moduleType: String?
+    /// The invocation of an `assert_return`, `assert_trap` or `invoke`
+    package let action: WAST2JSONAction?
+    /// The results an `assert_return` expects
+    package let expected: [WAST2JSONValue]?
+    /// The instance a `module_instance` creates, and the definition it instantiates
+    package let instance: String?
+    package let module: String?
 
     enum CodingKeys: String, CodingKey {
         case type
@@ -300,7 +307,24 @@ package struct WAST2JSONCommand: Codable {
         case name
         case text
         case moduleType = "module_type"
+        case action
+        case expected
+        case instance
+        case module
     }
+}
+
+/// An action in the wast2json output.
+package struct WAST2JSONAction: Codable {
+    package let type: String
+    package let field: String?
+    package let module: String?
+    package let args: [WAST2JSONValue]?
+}
+
+/// A value in the wast2json output, of which only the type is decoded.
+package struct WAST2JSONValue: Codable {
+    package let type: String
 }
 
 package func wast2json(

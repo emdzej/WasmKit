@@ -10,9 +10,7 @@
     /// `flatten_type`, and lifting and lowering through components that exercise them.
     @Suite
     struct CanonicalABITests {
-        private let types = CanonicalABITypes(resolveType: { index in
-            throw CanonicalABIError(description: "no type \(index)")
-        })
+        private let types = CanonicalABITypes(space: ComponentTypeSpace())
 
         private func record(_ fields: ComponentPrimValType...) -> ComponentDefValType {
             .record(fields.enumerated().map { ComponentRecordField(name: "f\($0)", type: .primitive($1)) })

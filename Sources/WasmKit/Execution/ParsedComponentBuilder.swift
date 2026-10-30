@@ -99,12 +99,17 @@
 
         /// Tracks the order of definitions for interleaved processing
         private enum OrderedDefKind {
+            case component
+            case coreModule
             case coreInstance
             case componentInstance
             case alias
             case canonLift
             case canonLower
-            case canonResource
+            case resourceIntrinsic(ParsedResourceIntrinsic)
+            case type
+            case `import`
+            case export
         }
         private var orderedDefs: [OrderedDefKind] = []
 
@@ -119,10 +124,20 @@
             case lowered
             /// An alias of a core instance export.
             case alias(instanceIndex: Int, name: String)
-            /// A resource intrinsic, which this loader does not support.
+            /// A resource intrinsic.
             case resourceIntrinsic
+            /// A function this loader cannot resolve, such as an outer alias.
+            case unresolvable
         }
         private var coreFunctionSpace: [CoreFunctionEntry] = []
+
+        /// The type index space, in binary order: which indices name a type section entry, so
+        /// that function types can be read here. The others are only known at instantiation.
+        private enum TypeEntry {
+            case section(Int)
+            case other
+        }
+        private var typeSpace: [TypeEntry] = []
 
         init(features: WasmFeatureSet = .default, depth: Int = 0) {
             self.features = features
@@ -143,6 +158,7 @@
             case .coreModule(let moduleBytes):
                 let module = try parseWasm(bytes: moduleBytes, features: features)
                 coreModules.append(module)
+                orderedDefs.append(.coreModule)
 
             case .coreInstanceSection(let instances):
                 for instance in instances {
@@ -154,6 +170,7 @@
 
             case .component(let componentBytes):
                 components.append(componentBytes)
+                orderedDefs.append(.component)
 
             case .instanceSection(let instances):
                 for instance in instances {
@@ -166,7 +183,11 @@
                 }
 
             case .typeSection(let types):
-                componentTypes.append(contentsOf: types)
+                for type in types {
+                    typeSpace.append(.section(componentTypes.count))
+                    componentTypes.append(type)
+                    orderedDefs.append(.type)
+                }
 
             case .canonSection(let canonDefs):
                 for canonDef in canonDefs {
@@ -178,10 +199,24 @@
                 break
 
             case .importSection(let importDefs):
-                imports.append(contentsOf: importDefs)
+                for importDef in importDefs {
+                    imports.append(importDef)
+                    orderedDefs.append(.import)
+                    if case .type = importDef.externDesc {
+                        typeSpace.append(.other)
+                    }
+                }
 
             case .exportSection(let exportDefs):
-                exports.append(contentsOf: exportDefs)
+                for exportDef in exportDefs {
+                    exports.append(exportDef)
+                    orderedDefs.append(.export)
+                    // An export is a new index for what it exports.
+                    if case .type = exportDef.sort {
+                        let index = Int(exportDef.index)
+                        typeSpace.append(typeSpace.indices.contains(index) ? typeSpace[index] : .other)
+                    }
+                }
 
             case .valueSection(let valueDefs):
                 values.append(contentsOf: valueDefs)
@@ -240,21 +275,41 @@
             }
 
             // Build ordered definitions (preserving binary interleaved order)
+            var componentIndex = 0
+            var coreModuleIndex = 0
             var coreInstanceIndex = 0
             var componentInstanceIndex = 0
             var aliasIndex = 0
             var canonLiftIndex = 0
             var canonLowerIndex = 0
+            var typeIndex = 0
+            var importIndex = 0
+            var exportIndex = 0
             for orderedDef in orderedDefs {
                 switch orderedDef {
+                case .component:
+                    result.orderedDefinitions.append(.component(index: componentIndex))
+                    componentIndex += 1
+                case .coreModule:
+                    result.orderedDefinitions.append(.coreModule(index: coreModuleIndex))
+                    coreModuleIndex += 1
+                case .type:
+                    result.orderedDefinitions.append(.type(index: typeIndex))
+                    typeIndex += 1
+                case .import:
+                    result.orderedDefinitions.append(.import(index: importIndex))
+                    importIndex += 1
+                case .export:
+                    result.orderedDefinitions.append(.export(index: exportIndex))
+                    exportIndex += 1
                 case .coreInstance:
                     result.orderedDefinitions.append(.coreInstance(index: coreInstanceIndex))
                     coreInstanceIndex += 1
                 case .componentInstance:
                     result.orderedDefinitions.append(.componentInstance(index: componentInstanceIndex))
                     componentInstanceIndex += 1
-                case .canonResource:
-                    result.orderedDefinitions.append(.unsupportedCoreFunction)
+                case .resourceIntrinsic(let intrinsic):
+                    result.orderedDefinitions.append(.resourceIntrinsic(intrinsic))
                 case .alias:
                     result.orderedDefinitions.append(.alias(index: aliasIndex))
                     aliasIndex += 1
@@ -272,7 +327,11 @@
             // Build imports
             for importDef in imports {
                 let kind = try convertImportKind(importDef.externDesc)
-                result.imports.append(ParsedComponentImport(name: importDef.name, kind: kind))
+                var declaredType: ComponentTypeIndex?
+                if case .instance(let typeIndex) = importDef.externDesc {
+                    declaredType = ComponentTypeIndex(rawValue: Int(typeIndex))
+                }
+                result.imports.append(ParsedComponentImport(name: importDef.name, kind: kind, declaredType: declaredType))
             }
 
             // Build exports
@@ -370,8 +429,11 @@
                 case .coreInstanceExport(let instanceIndex, let name):
                     coreFunctionSpace.append(.alias(instanceIndex: instanceIndex, name: name))
                 default:
-                    coreFunctionSpace.append(.resourceIntrinsic)
+                    coreFunctionSpace.append(.unresolvable)
                 }
+            }
+            if case .type = resolved.sort {
+                typeSpace.append(.other)
             }
         }
 
@@ -397,9 +459,14 @@
                 orderedDefs.append(.canonLower)
                 coreFunctionSpace.append(.lowered)
 
-            case .resourceNew, .resourceDrop, .resourceRep:
-                // Unsupported, but each still defines a core function, so later indices count it.
-                orderedDefs.append(.canonResource)
+            case .resourceNew(let typeIndex):
+                orderedDefs.append(.resourceIntrinsic(.new(typeIndex: ComponentTypeIndex(rawValue: Int(typeIndex)))))
+                coreFunctionSpace.append(.resourceIntrinsic)
+            case .resourceDrop(let typeIndex):
+                orderedDefs.append(.resourceIntrinsic(.drop(typeIndex: ComponentTypeIndex(rawValue: Int(typeIndex)))))
+                coreFunctionSpace.append(.resourceIntrinsic)
+            case .resourceRep(let typeIndex):
+                orderedDefs.append(.resourceIntrinsic(.rep(typeIndex: ComponentTypeIndex(rawValue: Int(typeIndex)))))
                 coreFunctionSpace.append(.resourceIntrinsic)
             }
         }
@@ -432,23 +499,24 @@
         ) throws -> ParsedCanonicalDefinition {
             switch funcInfo.kind {
             case .lift(let coreFuncIndex, let typeIndex):
-                // Resolve the core function through alias if needed
-                let (coreInstanceIndex, functionName) = try resolveCoreFunctionIndex(Int(coreFuncIndex))
-
-                // Resolve the function type
                 let funcType = try resolveComponentFuncType(typeIndex)
 
                 var parsedOptions = ParsedCanonOptions()
                 try parseCanonicalOptions(funcInfo.options, into: &parsedOptions)
 
-                return ParsedCanonicalDefinition(
-                    kind: .lift(
-                        coreInstanceIndex: coreInstanceIndex,
-                        functionName: functionName,
-                        type: funcType
-                    ),
-                    options: parsedOptions
-                )
+                // A core instance export is named as one; any other core function, such as
+                // `resource.new`, by its index.
+                let kind: ParsedCanonicalKind
+                let index = Int(coreFuncIndex)
+                if coreFunctionSpace.indices.contains(index), case .alias(let instanceIndex, let name) = coreFunctionSpace[index] {
+                    kind = .lift(coreInstanceIndex: instanceIndex, functionName: name, type: funcType)
+                } else {
+                    guard coreFunctionSpace.indices.contains(index) else {
+                        throw ComponentParseError.invalidIndex("Core function index \(index) out of bounds")
+                    }
+                    kind = .liftCoreFunction(coreFunctionIndex: index, type: funcType)
+                }
+                return ParsedCanonicalDefinition(kind: kind, options: parsedOptions)
             }
         }
 
@@ -465,15 +533,17 @@
                 throw ComponentParseError.unsupported("Core function \(index) is a `canon lower`, not a core export")
             case .resourceIntrinsic:
                 throw ComponentParseError.unsupported("Core function \(index) is a resource intrinsic")
+            case .unresolvable:
+                throw ComponentParseError.unsupported("Core function \(index) is not a core instance export")
             }
         }
 
         private func resolveComponentFuncType(_ typeIndex: UInt32) throws -> ComponentFuncType {
-            guard Int(typeIndex) < componentTypes.count else {
+            guard typeSpace.indices.contains(Int(typeIndex)), case .section(let sectionIndex) = typeSpace[Int(typeIndex)] else {
                 throw ComponentParseError.unresolvedType(typeIndex)
             }
 
-            let typeDef = componentTypes[Int(typeIndex)]
+            let typeDef = componentTypes[sectionIndex]
             guard case .function(let funcType) = typeDef else {
                 throw ComponentParseError.unresolvedType(typeIndex)
             }
@@ -555,8 +625,10 @@
                 return .instance
             case .coreModule:
                 return .module
-            case .component, .type:
-                throw ComponentParseError.unsupported("Component/type imports not yet supported")
+            case .type(let bound):
+                return .type(bound)
+            case .component:
+                return .component
             }
         }
 
@@ -576,7 +648,7 @@
             case .instance:
                 return .instance(index: Int(exportDef.index))
             case .component:
-                throw ComponentParseError.unsupported("Component exports not yet supported")
+                return .component(index: Int(exportDef.index))
             case .core(let coreSort):
                 switch coreSort {
                 case .module:
