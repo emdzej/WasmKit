@@ -146,7 +146,7 @@ extension Execution {
             v128Binary { lhs, rhs in
                 let lhsBytes = V128Lanes.extract(lhs, widthBits: 8, laneCount: 16)
                 let rhsBytes = V128Lanes.extract(rhs, widthBits: 8, laneCount: 16)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(16)
                 for i in 0..<16 {
                     let idx = Int(rhsBytes[i])
@@ -158,15 +158,15 @@ extension Execution {
 
         case .i8x16Splat:
             let scalar = UInt8(truncatingIfNeeded: sp[immediate.input0].i32)
-            sp.storeV128(V128Lanes.pack([UInt64](repeating: UInt64(scalar), count: 16), widthBits: 8, laneCount: 16), at: immediate.result)
+            sp.storeV128(V128Lanes.pack(LaneBuffer(repeating: UInt64(scalar), count: 16), widthBits: 8, laneCount: 16), at: immediate.result)
             return true
         case .i16x8Splat:
             let scalar = UInt16(truncatingIfNeeded: sp[immediate.input0].i32)
-            sp.storeV128(V128Lanes.pack([UInt64](repeating: UInt64(scalar), count: 8), widthBits: 16, laneCount: 8), at: immediate.result)
+            sp.storeV128(V128Lanes.pack(LaneBuffer(repeating: UInt64(scalar), count: 8), widthBits: 16, laneCount: 8), at: immediate.result)
             return true
         case .i32x4Splat:
             let scalar = sp[immediate.input0].i32
-            sp.storeV128(V128Lanes.pack([UInt64](repeating: UInt64(scalar), count: 4), widthBits: 32, laneCount: 4), at: immediate.result)
+            sp.storeV128(V128Lanes.pack(LaneBuffer(repeating: UInt64(scalar), count: 4), widthBits: 32, laneCount: 4), at: immediate.result)
             return true
         case .i64x2Splat:
             let scalar = sp[immediate.input0].i64
@@ -174,7 +174,7 @@ extension Execution {
             return true
         case .f32x4Splat:
             let scalar = sp[immediate.input0].rawF32
-            sp.storeV128(V128Lanes.pack([UInt64](repeating: UInt64(scalar), count: 4), widthBits: 32, laneCount: 4), at: immediate.result)
+            sp.storeV128(V128Lanes.pack(LaneBuffer(repeating: UInt64(scalar), count: 4), widthBits: 32, laneCount: 4), at: immediate.result)
             return true
         case .f64x2Splat:
             let scalar = sp[immediate.input0].rawF64
@@ -185,7 +185,7 @@ extension Execution {
             v128Binary { lhs, rhs in
                 let a = V128Lanes.extract(lhs, widthBits: 8, laneCount: 16)
                 let b = V128Lanes.extract(rhs, widthBits: 8, laneCount: 16)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(16)
                 for i in 0..<16 {
                     let aU = UInt8(truncatingIfNeeded: a[i])
@@ -216,7 +216,7 @@ extension Execution {
             v128Binary { lhs, rhs in
                 let a = V128Lanes.extract(lhs, widthBits: 16, laneCount: 8)
                 let b = V128Lanes.extract(rhs, widthBits: 16, laneCount: 8)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(8)
                 for i in 0..<8 {
                     let aU = UInt16(truncatingIfNeeded: a[i])
@@ -247,7 +247,7 @@ extension Execution {
             v128Binary { lhs, rhs in
                 let a = V128Lanes.extract(lhs, widthBits: 32, laneCount: 4)
                 let b = V128Lanes.extract(rhs, widthBits: 32, laneCount: 4)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(4)
                 for i in 0..<4 {
                     let aU = UInt32(truncatingIfNeeded: a[i])
@@ -278,7 +278,7 @@ extension Execution {
             v128Binary { lhs, rhs in
                 let a = V128Lanes.extract(lhs, widthBits: 64, laneCount: 2)
                 let b = V128Lanes.extract(rhs, widthBits: 64, laneCount: 2)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(2)
                 for i in 0..<2 {
                     let aU = a[i]
@@ -305,7 +305,7 @@ extension Execution {
             v128Binary { lhs, rhs in
                 let a = V128Lanes.extract(lhs, widthBits: 32, laneCount: 4)
                 let b = V128Lanes.extract(rhs, widthBits: 32, laneCount: 4)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(4)
                 for i in 0..<4 {
                     let fa = Float32(bitPattern: UInt32(truncatingIfNeeded: a[i]))
@@ -330,7 +330,7 @@ extension Execution {
             v128Binary { lhs, rhs in
                 let a = V128Lanes.extract(lhs, widthBits: 64, laneCount: 2)
                 let b = V128Lanes.extract(rhs, widthBits: 64, laneCount: 2)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(2)
                 for i in 0..<2 {
                     let fa = Float64(bitPattern: a[i])
@@ -354,7 +354,7 @@ extension Execution {
         case .i8x16Abs:
             v128Unary { input in
                 let a = V128Lanes.extract(input, widthBits: 8, laneCount: 16)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(16)
                 for x in a {
                     let v = Int8(bitPattern: UInt8(truncatingIfNeeded: x))
@@ -375,7 +375,7 @@ extension Execution {
         case .i16x8Abs:
             v128Unary { input in
                 let a = V128Lanes.extract(input, widthBits: 16, laneCount: 8)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(8)
                 for x in a {
                     let v = Int16(bitPattern: UInt16(truncatingIfNeeded: x))
@@ -396,7 +396,7 @@ extension Execution {
         case .i32x4Abs:
             v128Unary { input in
                 let a = V128Lanes.extract(input, widthBits: 32, laneCount: 4)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(4)
                 for x in a {
                     let v = Int32(bitPattern: UInt32(truncatingIfNeeded: x))
@@ -417,7 +417,7 @@ extension Execution {
         case .i64x2Abs:
             v128Unary { input in
                 let a = V128Lanes.extract(input, widthBits: 64, laneCount: 2)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(2)
                 for x in a {
                     let v = Int64(bitPattern: x)
@@ -440,7 +440,7 @@ extension Execution {
             v128Binary { lhs, rhs in
                 let a = V128Lanes.extract(lhs, widthBits: 8, laneCount: 16)
                 let b = V128Lanes.extract(rhs, widthBits: 8, laneCount: 16)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(16)
                 for i in 0..<16 {
                     let aU = UInt8(truncatingIfNeeded: a[i])
@@ -481,7 +481,7 @@ extension Execution {
             v128Binary { lhs, rhs in
                 let a = V128Lanes.extract(lhs, widthBits: 16, laneCount: 8)
                 let b = V128Lanes.extract(rhs, widthBits: 16, laneCount: 8)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(8)
                 for i in 0..<8 {
                     let aU = UInt16(truncatingIfNeeded: a[i])
@@ -522,7 +522,7 @@ extension Execution {
             v128Binary { lhs, rhs in
                 let a = V128Lanes.extract(lhs, widthBits: 32, laneCount: 4)
                 let b = V128Lanes.extract(rhs, widthBits: 32, laneCount: 4)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(4)
                 for i in 0..<4 {
                     let aU = UInt32(truncatingIfNeeded: a[i])
@@ -548,7 +548,7 @@ extension Execution {
             v128Binary { lhs, rhs in
                 let a = V128Lanes.extract(lhs, widthBits: 64, laneCount: 2)
                 let b = V128Lanes.extract(rhs, widthBits: 64, laneCount: 2)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(2)
                 for i in 0..<2 {
                     let value: UInt64
@@ -579,7 +579,7 @@ extension Execution {
             let shift = Int(shift32 & shiftMask)
             v128Unary { input in
                 let lanes = V128Lanes.extract(input, widthBits: widthBits, laneCount: laneCount)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(laneCount)
                 let mask = V128Lanes.laneMask(widthBits: widthBits)
                 for x in lanes {
@@ -612,7 +612,7 @@ extension Execution {
             v128Binary { lhs, rhs in
                 let a = V128Lanes.extract(lhs, widthBits: 16, laneCount: 8)
                 let b = V128Lanes.extract(rhs, widthBits: 16, laneCount: 8)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(16)
                 for i in 0..<8 {
                     let aW = UInt16(truncatingIfNeeded: a[i])
@@ -628,8 +628,11 @@ extension Execution {
                     }
                 }
                 // out is interleaved; need low-half then high-half
-                let low = out.enumerated().compactMap { $0.offset % 2 == 0 ? $0.element : nil }
-                let high = out.enumerated().compactMap { $0.offset % 2 == 1 ? $0.element : nil }
+                var low = LaneBuffer()
+                var high = LaneBuffer()
+                for (i, lane) in out.enumerated() {
+                    if i % 2 == 0 { low.append(lane) } else { high.append(lane) }
+                }
                 return V128Lanes.pack(low + high, widthBits: 8, laneCount: 16)
             }
             return true
@@ -638,8 +641,8 @@ extension Execution {
             v128Binary { lhs, rhs in
                 let a = V128Lanes.extract(lhs, widthBits: 32, laneCount: 4)
                 let b = V128Lanes.extract(rhs, widthBits: 32, laneCount: 4)
-                var outLow: [UInt64] = []
-                var outHigh: [UInt64] = []
+                var outLow = LaneBuffer()
+                var outHigh = LaneBuffer()
                 outLow.reserveCapacity(4)
                 outHigh.reserveCapacity(4)
                 for i in 0..<4 {
@@ -661,7 +664,7 @@ extension Execution {
             v128Unary { input in
                 let bytes = V128Lanes.extract(input, widthBits: 8, laneCount: 16)
                 let base = (opcode == .i16x8ExtendHighI8X16S || opcode == .i16x8ExtendHighI8X16U) ? 8 : 0
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(8)
                 for i in 0..<8 {
                     let b = UInt8(truncatingIfNeeded: bytes[base + i])
@@ -679,7 +682,7 @@ extension Execution {
             v128Unary { input in
                 let w = V128Lanes.extract(input, widthBits: 16, laneCount: 8)
                 let base = (opcode == .i32x4ExtendHighI16X8S || opcode == .i32x4ExtendHighI16X8U) ? 4 : 0
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(4)
                 for i in 0..<4 {
                     let lane = UInt16(truncatingIfNeeded: w[base + i])
@@ -697,7 +700,7 @@ extension Execution {
             v128Unary { input in
                 let d = V128Lanes.extract(input, widthBits: 32, laneCount: 4)
                 let base = (opcode == .i64x2ExtendHighI32X4S || opcode == .i64x2ExtendHighI32X4U) ? 2 : 0
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(2)
                 for i in 0..<2 {
                     let lane = UInt32(truncatingIfNeeded: d[base + i])
@@ -715,7 +718,7 @@ extension Execution {
             v128Binary { lhs, rhs in
                 let a = V128Lanes.extract(lhs, widthBits: 16, laneCount: 8)
                 let b = V128Lanes.extract(rhs, widthBits: 16, laneCount: 8)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(4)
                 for i in 0..<4 {
                     let a0 = Int32(Int16(bitPattern: UInt16(truncatingIfNeeded: a[i * 2])))
@@ -732,7 +735,7 @@ extension Execution {
             v128Binary { lhs, rhs in
                 let a = V128Lanes.extract(lhs, widthBits: 16, laneCount: 8)
                 let b = V128Lanes.extract(rhs, widthBits: 16, laneCount: 8)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(8)
                 for i in 0..<8 {
                     let x = Int32(Int16(bitPattern: UInt16(truncatingIfNeeded: a[i])))
@@ -756,7 +759,7 @@ extension Execution {
         case .i16x8ExtaddPairwiseI8X16S, .i16x8ExtaddPairwiseI8X16U:
             v128Unary { input in
                 let b = V128Lanes.extract(input, widthBits: 8, laneCount: 16)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(8)
                 for i in 0..<8 {
                     let b0 = UInt8(truncatingIfNeeded: b[i * 2])
@@ -774,7 +777,7 @@ extension Execution {
         case .i32x4ExtaddPairwiseI16X8S, .i32x4ExtaddPairwiseI16X8U:
             v128Unary { input in
                 let w = V128Lanes.extract(input, widthBits: 16, laneCount: 8)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(4)
                 for i in 0..<4 {
                     let w0 = UInt16(truncatingIfNeeded: w[i * 2])
@@ -794,7 +797,7 @@ extension Execution {
                 let a = V128Lanes.extract(lhs, widthBits: 8, laneCount: 16)
                 let b = V128Lanes.extract(rhs, widthBits: 8, laneCount: 16)
                 let base = (opcode == .i16x8ExtmulHighI8X16S || opcode == .i16x8ExtmulHighI8X16U) ? 8 : 0
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(8)
                 for i in 0..<8 {
                     let x = UInt8(truncatingIfNeeded: a[base + i])
@@ -814,7 +817,7 @@ extension Execution {
                 let a = V128Lanes.extract(lhs, widthBits: 16, laneCount: 8)
                 let b = V128Lanes.extract(rhs, widthBits: 16, laneCount: 8)
                 let base = (opcode == .i32x4ExtmulHighI16X8S || opcode == .i32x4ExtmulHighI16X8U) ? 4 : 0
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(4)
                 for i in 0..<4 {
                     let x = UInt16(truncatingIfNeeded: a[base + i])
@@ -834,7 +837,7 @@ extension Execution {
                 let a = V128Lanes.extract(lhs, widthBits: 32, laneCount: 4)
                 let b = V128Lanes.extract(rhs, widthBits: 32, laneCount: 4)
                 let base = (opcode == .i64x2ExtmulHighI32X4S || opcode == .i64x2ExtmulHighI32X4U) ? 2 : 0
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(2)
                 for i in 0..<2 {
                     let x = UInt32(truncatingIfNeeded: a[base + i])
@@ -895,7 +898,7 @@ extension Execution {
             v128Binary { lhs, rhs in
                 let a = V128Lanes.extract(lhs, widthBits: 32, laneCount: 4)
                 let b = V128Lanes.extract(rhs, widthBits: 32, laneCount: 4)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(4)
                 for i in 0..<4 {
                     let x = Float32(bitPattern: UInt32(truncatingIfNeeded: a[i]))
@@ -921,7 +924,7 @@ extension Execution {
             v128Binary { lhs, rhs in
                 let a = V128Lanes.extract(lhs, widthBits: 64, laneCount: 2)
                 let b = V128Lanes.extract(rhs, widthBits: 64, laneCount: 2)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(2)
                 for i in 0..<2 {
                     let x = Float64(bitPattern: a[i])
@@ -970,7 +973,7 @@ extension Execution {
         case .f64x2ConvertLowI32X4S, .f64x2ConvertLowI32X4U:
             v128Unary { input in
                 let a = V128Lanes.extract(input, widthBits: 32, laneCount: 4)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(2)
                 for i in 0..<2 {
                     let x = UInt32(truncatingIfNeeded: a[i])
@@ -984,7 +987,7 @@ extension Execution {
         case .i32x4TruncSatF64X2SZero, .i32x4TruncSatF64X2UZero:
             v128Unary { input in
                 let a = V128Lanes.extract(input, widthBits: 64, laneCount: 2)
-                var out: [UInt64] = [0, 0, 0, 0]
+                var out: LaneBuffer = [0, 0, 0, 0]
                 for i in 0..<2 {
                     let x = Float64(bitPattern: a[i])
                     let y: UInt32 = opcode == .i32x4TruncSatF64X2SZero ? (x.truncSatToI32S) : (x.truncSatToI32U)
@@ -997,7 +1000,7 @@ extension Execution {
         case .f32x4DemoteF64X2Zero:
             v128Unary { input in
                 let a = V128Lanes.extract(input, widthBits: 64, laneCount: 2)
-                let out: [UInt64] = [
+                let out: LaneBuffer = [
                     UInt64(Float32(Float64(bitPattern: a[0])).bitPattern),
                     UInt64(Float32(Float64(bitPattern: a[1])).bitPattern),
                     0,
@@ -1010,7 +1013,7 @@ extension Execution {
         case .f64x2PromoteLowF32X4:
             v128Unary { input in
                 let a = V128Lanes.extract(input, widthBits: 32, laneCount: 4)
-                let out: [UInt64] = [
+                let out: LaneBuffer = [
                     Float64(Float32(bitPattern: UInt32(truncatingIfNeeded: a[0]))).bitPattern,
                     Float64(Float32(bitPattern: UInt32(truncatingIfNeeded: a[1]))).bitPattern,
                 ]
@@ -1022,7 +1025,7 @@ extension Execution {
             v128Binary { lhs, rhs in
                 let a = V128Lanes.extract(lhs, widthBits: 8, laneCount: 16)
                 let s = V128Lanes.extract(rhs, widthBits: 8, laneCount: 16)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(16)
                 for i in 0..<16 {
                     let idx = Int(s[i])
@@ -1046,7 +1049,7 @@ extension Execution {
                 let la = V128Lanes.extract(a, widthBits: 32, laneCount: 4)
                 let lb = V128Lanes.extract(b, widthBits: 32, laneCount: 4)
                 let lc = V128Lanes.extract(c, widthBits: 32, laneCount: 4)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(4)
                 for i in 0..<4 {
                     let x = Float32(bitPattern: UInt32(truncatingIfNeeded: la[i]))
@@ -1063,7 +1066,7 @@ extension Execution {
                 let la = V128Lanes.extract(a, widthBits: 64, laneCount: 2)
                 let lb = V128Lanes.extract(b, widthBits: 64, laneCount: 2)
                 let lc = V128Lanes.extract(c, widthBits: 64, laneCount: 2)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(2)
                 for i in 0..<2 {
                     let x = Float64(bitPattern: la[i])
@@ -1081,7 +1084,7 @@ extension Execution {
             v128Binary { lhs, rhs in
                 let a = V128Lanes.extract(lhs, widthBits: 32, laneCount: 4)
                 let b = V128Lanes.extract(rhs, widthBits: 32, laneCount: 4)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(4)
                 for i in 0..<4 {
                     let x = Float32(bitPattern: UInt32(truncatingIfNeeded: a[i]))
@@ -1096,7 +1099,7 @@ extension Execution {
             v128Binary { lhs, rhs in
                 let a = V128Lanes.extract(lhs, widthBits: 64, laneCount: 2)
                 let b = V128Lanes.extract(rhs, widthBits: 64, laneCount: 2)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(2)
                 for i in 0..<2 {
                     let x = Float64(bitPattern: a[i])
@@ -1113,7 +1116,7 @@ extension Execution {
             v128Binary { lhs, rhs in
                 let a = V128Lanes.extract(lhs, widthBits: 16, laneCount: 8)
                 let b = V128Lanes.extract(rhs, widthBits: 16, laneCount: 8)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(8)
                 for i in 0..<8 {
                     let x = Int32(Int16(bitPattern: UInt16(truncatingIfNeeded: a[i])))
@@ -1141,7 +1144,7 @@ extension Execution {
         case .i32x4RelaxedTruncF64X2SZero, .i32x4RelaxedTruncF64X2UZero:
             v128Unary { input in
                 let a = V128Lanes.extract(input, widthBits: 64, laneCount: 2)
-                var out: [UInt64] = [0, 0, 0, 0]
+                var out: LaneBuffer = [0, 0, 0, 0]
                 for i in 0..<2 {
                     let x = Float64(bitPattern: a[i])
                     let y: UInt32 = opcode == .i32x4RelaxedTruncF64X2SZero ? (x.truncSatToI32S) : (x.truncSatToI32U)
@@ -1156,7 +1159,7 @@ extension Execution {
             v128Binary { lhs, rhs in
                 let a = V128Lanes.extract(lhs, widthBits: 8, laneCount: 16)
                 let b = V128Lanes.extract(rhs, widthBits: 8, laneCount: 16)
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(8)
                 for j in 0..<8 {
                     let a0 = Int32(Int8(bitPattern: UInt8(truncatingIfNeeded: a[2 * j])))
@@ -1184,7 +1187,7 @@ extension Execution {
                     let b1 = Int32(Int8(bitPattern: UInt8(truncatingIfNeeded: b[2 * j + 1])))
                     dot.append(Int32(Int16(clamping: a0 &* b0 &+ a1 &* b1)))
                 }
-                var out: [UInt64] = []
+                var out = LaneBuffer()
                 out.reserveCapacity(4)
                 for k in 0..<4 {
                     let acc = dot[2 * k] &+ dot[2 * k + 1] &+ Int32(bitPattern: UInt32(truncatingIfNeeded: c[k]))

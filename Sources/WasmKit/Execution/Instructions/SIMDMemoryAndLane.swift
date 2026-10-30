@@ -73,7 +73,7 @@ extension Execution {
         case .v128Load8X8S, .v128Load8X8U:
             let addr = try effectiveAddress(sp[immediate.input0].asAddressOffset(), offset: immediate.offset)
             try boundsCheck(addr, length: 8, ms: ms)
-            var lanes: [UInt64] = []
+            var lanes = LaneBuffer()
             lanes.reserveCapacity(8)
             for i in 0..<8 {
                 let b = loadU8(md: md, address: addr &+ UInt64(i))
@@ -90,7 +90,7 @@ extension Execution {
         case .v128Load16X4S, .v128Load16X4U:
             let addr = try effectiveAddress(sp[immediate.input0].asAddressOffset(), offset: immediate.offset)
             try boundsCheck(addr, length: 8, ms: ms)
-            var lanes: [UInt64] = []
+            var lanes = LaneBuffer()
             lanes.reserveCapacity(4)
             for i in 0..<4 {
                 let w = loadU16(md: md, address: addr &+ UInt64(i * 2))
@@ -107,7 +107,7 @@ extension Execution {
         case .v128Load32X2S, .v128Load32X2U:
             let addr = try effectiveAddress(sp[immediate.input0].asAddressOffset(), offset: immediate.offset)
             try boundsCheck(addr, length: 8, ms: ms)
-            var lanes: [UInt64] = []
+            var lanes = LaneBuffer()
             lanes.reserveCapacity(2)
             for i in 0..<2 {
                 let d = loadU32(md: md, address: addr &+ UInt64(i * 4))
@@ -125,7 +125,7 @@ extension Execution {
             let addr = try effectiveAddress(sp[immediate.input0].asAddressOffset(), offset: immediate.offset)
             try boundsCheck(addr, length: 1, ms: ms)
             let b = loadU8(md: md, address: addr)
-            let v = V128Lanes.pack([UInt64](repeating: UInt64(b), count: 16), widthBits: 8, laneCount: 16)
+            let v = V128Lanes.pack(LaneBuffer(repeating: UInt64(b), count: 16), widthBits: 8, laneCount: 16)
             sp.storeV128(v, at: immediate.result)
             return true
 
@@ -133,7 +133,7 @@ extension Execution {
             let addr = try effectiveAddress(sp[immediate.input0].asAddressOffset(), offset: immediate.offset)
             try boundsCheck(addr, length: 2, ms: ms)
             let w = loadU16(md: md, address: addr)
-            let v = V128Lanes.pack([UInt64](repeating: UInt64(w), count: 8), widthBits: 16, laneCount: 8)
+            let v = V128Lanes.pack(LaneBuffer(repeating: UInt64(w), count: 8), widthBits: 16, laneCount: 8)
             sp.storeV128(v, at: immediate.result)
             return true
 
@@ -141,7 +141,7 @@ extension Execution {
             let addr = try effectiveAddress(sp[immediate.input0].asAddressOffset(), offset: immediate.offset)
             try boundsCheck(addr, length: 4, ms: ms)
             let d = loadU32(md: md, address: addr)
-            let v = V128Lanes.pack([UInt64](repeating: UInt64(d), count: 4), widthBits: 32, laneCount: 4)
+            let v = V128Lanes.pack(LaneBuffer(repeating: UInt64(d), count: 4), widthBits: 32, laneCount: 4)
             sp.storeV128(v, at: immediate.result)
             return true
 
@@ -156,7 +156,7 @@ extension Execution {
             let addr = try effectiveAddress(sp[immediate.input0].asAddressOffset(), offset: immediate.offset)
             try boundsCheck(addr, length: 4, ms: ms)
             let d = loadU32(md: md, address: addr)
-            var lanes = [UInt64](repeating: 0, count: 4)
+            var lanes = LaneBuffer(repeating: 0, count: 4)
             lanes[0] = UInt64(d)
             sp.storeV128(V128Lanes.pack(lanes, widthBits: 32, laneCount: 4), at: immediate.result)
             return true

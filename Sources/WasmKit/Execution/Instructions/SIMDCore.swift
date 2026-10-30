@@ -10,14 +10,14 @@ extension Execution {
     mutating func i8x16Shuffle(sp: Sp, immediate: Instruction.I8x16ShuffleOperand) {
         let lhs = sp.loadV128(at: immediate.lhs)
         let rhs = sp.loadV128(at: immediate.rhs)
-        let lanes: [UInt8] = [
-            immediate.lane0, immediate.lane1, immediate.lane2, immediate.lane3,
-            immediate.lane4, immediate.lane5, immediate.lane6, immediate.lane7,
-            immediate.lane8, immediate.lane9, immediate.lane10, immediate.lane11,
-            immediate.lane12, immediate.lane13, immediate.lane14, immediate.lane15,
+        let lanes: LaneBuffer = [
+            UInt64(immediate.lane0), UInt64(immediate.lane1), UInt64(immediate.lane2), UInt64(immediate.lane3),
+            UInt64(immediate.lane4), UInt64(immediate.lane5), UInt64(immediate.lane6), UInt64(immediate.lane7),
+            UInt64(immediate.lane8), UInt64(immediate.lane9), UInt64(immediate.lane10), UInt64(immediate.lane11),
+            UInt64(immediate.lane12), UInt64(immediate.lane13), UInt64(immediate.lane14), UInt64(immediate.lane15),
         ]
 
-        var out: [UInt64] = []
+        var out = LaneBuffer()
         out.reserveCapacity(16)
         let lhsBytes = V128Lanes.extract(lhs, widthBits: 8, laneCount: 16)
         let rhsBytes = V128Lanes.extract(rhs, widthBits: 8, laneCount: 16)

@@ -28,34 +28,57 @@ struct DebuggerInstructionMapping {
         private var headSlots = [(slots: [UInt], end: UInt)]()
 
         mutating func add(canonical: Int, emitting: Int, iseq: Pc) {
-            // Don't override the existing mapping, only store a new pair if there's no mapping for a given key.
-            if self.iseqToWasm[iseq] == nil {
-                self.iseqToWasm[iseq] = emitting
-            }
-            if self.iseqToCanonicalWasm[iseq] == nil {
-                self.iseqToCanonicalWasm[iseq] = canonical
-            }
-            if self.wasmToIseq[emitting] == nil {
-                self.wasmToIseq[emitting] = iseq
-            }
-            // Insert in sorted order to maintain the binary search invariant.
-            // With lazy compilation, functions may be compiled out of address order,
-            // so simple append would break the sorted invariant.
-            if let last = self.wasmMappings.last, emitting > last {
-                // Fast path: appending in order (common within a single function)
-                self.wasmMappings.append(emitting)
-            } else if self.wasmMappings.last == emitting {
-                // Duplicate of last entry, skip
-            } else if self.wasmMappings.isEmpty {
-                self.wasmMappings.append(emitting)
-            } else {
-                // Out-of-order insertion: find the sorted position
-                let insertionIndex = self.wasmMappings.firstIndex(where: { $0 >= emitting }) ?? self.wasmMappings.endIndex
-                if insertionIndex < self.wasmMappings.endIndex, self.wasmMappings[insertionIndex] == emitting {
-                    // Already present, skip
-                } else {
-                    self.wasmMappings.insert(emitting, at: insertionIndex)
+            add([(canonical, emitting, iseq)])
+        }
+
+        /// Records one function's mappings at once.
+        ///
+        /// Functions compile lazily, in any order, so a function's addresses may belong anywhere
+        /// in `wasmMappings`. Merging them in one pass keeps the array sorted without inserting
+        /// each address into the middle of it, which was quadratic.
+        mutating func add(_ mappings: [(canonical: Int, emitting: Int, iseq: Pc)]) {
+            var emitted: [Int] = []
+            emitted.reserveCapacity(mappings.count)
+            for (canonical, emitting, iseq) in mappings {
+                // Don't override the existing mapping, only store a new pair if there's no mapping for a given key.
+                if self.iseqToWasm[iseq] == nil {
+                    self.iseqToWasm[iseq] = emitting
                 }
+                if self.iseqToCanonicalWasm[iseq] == nil {
+                    self.iseqToCanonicalWasm[iseq] = canonical
+                }
+                if self.wasmToIseq[emitting] == nil {
+                    self.wasmToIseq[emitting] = iseq
+                }
+                emitted.append(emitting)
+            }
+            emitted.sort()
+            if let last = wasmMappings.last, let first = emitted.first, first > last {
+                // The common case: functions compiled in address order.
+                Self.appendUnique(emitted, to: &wasmMappings)
+                return
+            }
+            var merged: [Int] = []
+            merged.reserveCapacity(wasmMappings.count + emitted.count)
+            var i = wasmMappings.startIndex
+            var j = emitted.startIndex
+            while i < wasmMappings.endIndex || j < emitted.endIndex {
+                let next: Int
+                if j == emitted.endIndex || (i < wasmMappings.endIndex && wasmMappings[i] <= emitted[j]) {
+                    next = wasmMappings[i]
+                    i += 1
+                } else {
+                    next = emitted[j]
+                    j += 1
+                }
+                if merged.last != next { merged.append(next) }
+            }
+            wasmMappings = merged
+        }
+
+        private static func appendUnique(_ sorted: [Int], to array: inout [Int]) {
+            for value in sorted where array.last != value {
+                array.append(value)
             }
         }
 

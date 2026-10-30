@@ -28,6 +28,64 @@ extension Sp {
     }
 }
 
+/// Up to 16 lanes of a `v128`, stored inline.
+///
+/// The SIMD handlers build several of these per instruction; as `Array`s each was a heap
+/// allocation, which dominated the cost of most SIMD instructions.
+struct LaneBuffer: RandomAccessCollection, MutableCollection, ExpressibleByArrayLiteral {
+    private var storage: (
+        UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64,
+        UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64, UInt64
+    ) = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    private(set) var count: Int = 0
+
+    @inline(__always) init() {}
+
+    @inline(__always) init(repeating value: UInt64, count: Int) {
+        for _ in 0..<count { append(value) }
+    }
+
+    @inline(__always) init(arrayLiteral elements: UInt64...) {
+        for element in elements { append(element) }
+    }
+
+    @inline(__always) var startIndex: Int { 0 }
+    @inline(__always) var endIndex: Int { count }
+
+    @inline(__always) subscript(index: Int) -> UInt64 {
+        get {
+            precondition(index >= 0 && index < count, "lane index out of range")
+            return withUnsafeBytes(of: storage) { $0.load(fromByteOffset: index * 8, as: UInt64.self) }
+        }
+        set {
+            precondition(index >= 0 && index < count, "lane index out of range")
+            withUnsafeMutableBytes(of: &storage) { $0.storeBytes(of: newValue, toByteOffset: index * 8, as: UInt64.self) }
+        }
+    }
+
+    @inline(__always) mutating func append(_ value: UInt64) {
+        precondition(count < 16, "a v128 has at most 16 lanes")
+        count += 1
+        self[count - 1] = value
+    }
+
+    /// Kept for the call sites written against `Array`; the storage is always 16 lanes.
+    @inline(__always) mutating func reserveCapacity(_ capacity: Int) {}
+
+    /// The lanes transformed by `transform`, without the `Array` that `Sequence.map` returns.
+    @inline(__always) func map(_ transform: (UInt64) throws -> UInt64) rethrows -> LaneBuffer {
+        var result = LaneBuffer()
+        for lane in self { result.append(try transform(lane)) }
+        return result
+    }
+
+    @inline(__always) static func + (lhs: LaneBuffer, rhs: LaneBuffer) -> LaneBuffer {
+        var result = lhs
+        for lane in rhs { result.append(lane) }
+        return result
+    }
+}
+
 struct V128Lanes {
     @inline(__always)
     static func laneMask(widthBits: Int) -> UInt64 {
@@ -42,9 +100,9 @@ struct V128Lanes {
     }
 
     @inline(__always)
-    static func extract(_ v: V128Storage, widthBits: Int, laneCount: Int) -> [UInt64] {
+    static func extract(_ v: V128Storage, widthBits: Int, laneCount: Int) -> LaneBuffer {
         let mask = laneMask(widthBits: widthBits)
-        var lanes: [UInt64] = []
+        var lanes = LaneBuffer()
         lanes.reserveCapacity(laneCount)
         for i in 0..<laneCount {
             let bitOffset = i * widthBits
@@ -60,7 +118,7 @@ struct V128Lanes {
     }
 
     @inline(__always)
-    static func pack(_ lanes: [UInt64], widthBits: Int, laneCount: Int) -> V128Storage {
+    static func pack(_ lanes: LaneBuffer, widthBits: Int, laneCount: Int) -> V128Storage {
         precondition(lanes.count == laneCount)
         let mask = laneMask(widthBits: widthBits)
         var lo: UInt64 = 0
@@ -99,7 +157,7 @@ struct V128Lanes {
     ) rethrows -> V128Storage {
         let la = extract(a, widthBits: widthBits, laneCount: laneCount)
         let lb = extract(b, widthBits: widthBits, laneCount: laneCount)
-        var out: [UInt64] = []
+        var out = LaneBuffer()
         out.reserveCapacity(laneCount)
         for i in 0..<laneCount {
             out.append(try f(la[i], lb[i]))
@@ -119,7 +177,7 @@ struct V128Lanes {
         let la = extract(a, widthBits: widthBits, laneCount: laneCount)
         let lb = extract(b, widthBits: widthBits, laneCount: laneCount)
         let lc = extract(c, widthBits: widthBits, laneCount: laneCount)
-        var out: [UInt64] = []
+        var out = LaneBuffer()
         out.reserveCapacity(laneCount)
         for i in 0..<laneCount {
             out.append(try f(la[i], lb[i], lc[i]))

@@ -508,7 +508,7 @@ enum VMGen {
             /// Emits the immediate operand of this instruction, if any.
             /// Dispatches without existentials so that Embedded Swift, which cannot
             /// call default protocol methods on existentials, can use it.
-            func emitImmediate(to emit: @escaping (CodeSlot) -> Void) {
+            func emitImmediate(to emit: (CodeSlot) -> Void) {
                 switch self {
 
         """

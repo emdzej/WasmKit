@@ -172,14 +172,14 @@ protocol InstructionImmediate {
     ///
     /// - Note: This method is intended to work at meta-level to allow
     ///         knowing the size of slots without actual immediate values.
-    static func emit(to emitSlot: @escaping ((Self) -> CodeSlot) -> Void)
+    static func emit(to emitSlot: ((Self) -> CodeSlot) -> Void)
 }
 
 extension InstructionImmediate {
     /// Emits the immediate value
     ///
     /// - Parameter emitSlot: The closure to emit a slot.
-    func emit(to emitSlot: @escaping (CodeSlot) -> Void) {
+    func emit(to emitSlot: (CodeSlot) -> Void) {
         Self.emit { buildCodeSlot in
             emitSlot(buildCodeSlot(self))
         }
@@ -190,7 +190,7 @@ extension UInt32: InstructionImmediate {
     static func load(from pc: inout Pc) -> Self {
         UInt32(pc.read(UInt64.self))
     }
-    static func emit(to emitSlot: @escaping ((Self) -> CodeSlot) -> Void) {
+    static func emit(to emitSlot: ((Self) -> CodeSlot) -> Void) {
         emitSlot { CodeSlot($0) }
     }
 }
@@ -199,7 +199,7 @@ extension Int32: InstructionImmediate {
     static func load(from pc: inout Pc) -> Self {
         Int32(bitPattern: UInt32(pc.read(UInt64.self)))
     }
-    static func emit(to emitSlot: @escaping ((Self) -> CodeSlot) -> Void) {
+    static func emit(to emitSlot: ((Self) -> CodeSlot) -> Void) {
         emitSlot { CodeSlot(UInt32(bitPattern: $0)) }
     }
 }

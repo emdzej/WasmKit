@@ -86,11 +86,15 @@ struct Lexer {
 
         func peek(at offset: Int = 0) -> Unicode.Scalar? {
             precondition(offset >= 0)
-            guard self.input.index(self.nextIndex, offsetBy: offset) < endIndex else {
+            // The next scalar is what lexing asks for almost every time; offsetting an index,
+            // twice, validated it each time.
+            if offset == 0 {
+                return nextIndex < endIndex ? input[nextIndex] : nil
+            }
+            guard let index = input.index(nextIndex, offsetBy: offset, limitedBy: endIndex), index < endIndex else {
                 return nil
             }
-            let index = self.input.index(self.nextIndex, offsetBy: offset)
-            return self.input[index]
+            return input[index]
         }
 
         mutating func next() -> Unicode.Scalar? {
@@ -165,8 +169,19 @@ struct Lexer {
 
     fileprivate var cursor: Cursor
 
+    /// Identifies the input text, which sub-lexers over a range of it share.
+    final class Source {}
+    let source: Source
+
     init(input: String) {
         self.cursor = Cursor(input: input)
+        self.source = Source()
+    }
+
+    /// Whether lexing from `other` gives the same tokens: the same input, position and end.
+    func isInSameState(as other: Lexer) -> Bool {
+        source === other.source && cursor.nextIndex == other.cursor.nextIndex
+            && cursor.endIndex == other.cursor.endIndex
     }
 
     /// Construct a sub-lexer that shares another lexer's input but is bounded
@@ -174,6 +189,7 @@ struct Lexer {
     /// so error locations from the sub-lexer map back to the original source.
     init(parent: Lexer, range: Range<Index>) {
         self.cursor = Cursor(input: parent.cursor.input, range: range)
+        self.source = parent.source
     }
 
     /// Seek to the given offset
@@ -320,6 +336,40 @@ struct Lexer {
 
     /// Skip a line comment body. The leading `;;` has already been consumed.
     /// Consumes through the end of line (or EOF).
+    /// Skips past the `)` that closes a block whose `(` was already consumed.
+    ///
+    /// The first pass over a module skips every function body this way, so it only tracks what
+    /// can hide a parenthesis (strings and comments) instead of lexing and classifying each
+    /// token. Anything malformed inside is reported when the block is parsed for real.
+    mutating func skipBalancedParens() throws(WatParserError) {
+        var depth = 1
+        while depth > 0 {
+            guard let char = cursor.next() else { throw cursor.unexpectedEof() }
+            switch char {
+            case "(":
+                if cursor.eat(";") {
+                    _ = try lexBlockComment()
+                } else {
+                    depth += 1
+                }
+            case ")":
+                depth -= 1
+            case ";":
+                if cursor.eat(";") {
+                    skipLineComment()
+                }
+            case "\"":
+                while true {
+                    guard let next = cursor.next() else { throw cursor.unexpectedEof() }
+                    if next == "\"" { break }
+                    if next == "\\" { _ = cursor.next() }
+                }
+            default:
+                break
+            }
+        }
+    }
+
     private mutating func skipLineComment() {
         while let char = cursor.next() {
             switch char {
@@ -525,7 +575,8 @@ struct Lexer {
     private mutating func readString() throws(WatParserError) -> [UInt8] {
         var copyingBuffer: [UInt8] = []
         func append(_ char: Unicode.Scalar) {
-            copyingBuffer.append(contentsOf: String(char).utf8)
+            // Encoded in place, rather than through a `String` allocated for each scalar.
+            UTF8.encode(char) { copyingBuffer.append($0) }
         }
 
         while let char = cursor.next() {

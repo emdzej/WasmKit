@@ -4,12 +4,37 @@ import WasmTypes
 internal struct Parser {
     var lexer: Lexer
 
+    /// The token after `before`, and the lexer past it.
+    ///
+    /// Parsing peeks at the next token, often several times, before consuming it, and each
+    /// peek lexed it afresh. The cache is shared by copies of the parser, which is safe because
+    /// it is keyed by the lexer state it was lexed from.
+    private final class PeekCache {
+        var before: Lexer?
+        var token: Token?
+        var after: Lexer?
+    }
+    private let peekCache = PeekCache()
+
     init(_ input: String) {
         self.lexer = Lexer(input: input)
     }
 
     init(_ lexer: Lexer) {
         self.lexer = lexer
+    }
+
+    /// The next token and the lexer past it, from the cache when it holds this position.
+    private func nextTokenCached() throws(WatParserError) -> (token: Token?, after: Lexer) {
+        if let before = peekCache.before, let after = peekCache.after, before.isInSameState(as: lexer) {
+            return (peekCache.token, after)
+        }
+        var after = lexer
+        let token = try Self.nextToken(from: &after)
+        peekCache.before = lexer
+        peekCache.token = token
+        peekCache.after = after
+        return (token, after)
     }
 
     /// Annotation IDs the parser knows how to handle. Tokens with any other
@@ -34,8 +59,7 @@ internal struct Parser {
     }
 
     func peek(_ kind: TokenKind? = nil) throws(WatParserError) -> Token? {
-        var lexer = lexer
-        guard let token = try Self.nextToken(from: &lexer) else { return nil }
+        guard let token = try nextTokenCached().token else { return nil }
         if let kind {
             guard token.kind == kind else { return nil }
         }
@@ -369,9 +393,11 @@ internal struct Parser {
 
     @discardableResult
     mutating func consume() throws(WatParserError) -> Token {
-        guard let token = try Self.nextToken(from: &lexer) else {
+        let (token, after) = try nextTokenCached()
+        guard let token else {
             throw WatParserError("unexpected EOF", location: lexer.location())
         }
+        lexer = after
         return token
     }
 
@@ -491,18 +517,7 @@ internal struct Parser {
     }
 
     mutating func skipParenBlock() throws(WatParserError) {
-        var depth = 1
-        while depth > 0 {
-            let token = try consume()
-            switch token.kind {
-            case .leftParen:
-                depth += 1
-            case .rightParen:
-                depth -= 1
-            default:
-                break
-            }
-        }
+        try lexer.skipBalancedParens()
     }
 
     /// Raw source representation for binary or quote forms in WAST.

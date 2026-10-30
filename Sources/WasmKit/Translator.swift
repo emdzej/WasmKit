@@ -2015,6 +2015,20 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
         }
 
         private var labels: [LabelEntry] = []
+
+        /// Appends a user to an unpinned label.
+        ///
+        /// The users are taken out of `labels` first: appending to an array the entry still
+        /// references would copy it, and a `br_table` with N entries to one forward label would
+        /// make translation quadratic.
+        private mutating func addUser(_ user: LabelUser, to ref: LabelRef) {
+            guard case .unpinned(var users) = labels[ref] else {
+                preconditionFailure("label is already pinned")
+            }
+            labels[ref] = .unpinned(users: [])
+            users.append(user)
+            labels[ref] = .unpinned(users: users)
+        }
         private var unpinnedLabels: Set<LabelRef> = []
         private var instructions: [UInt64] = []
         private var lastEmission: LastEmission?
@@ -2085,13 +2099,14 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
             let headSlot = headSlot(of: instruction)
             trace("        [\(index)] = 0x\(String(headSlot, radix: 16))")
             self.instructions[index] = headSlot
-            var slots: [CodeSlot] = []
-            instruction.emitImmediate(to: { slots.append($0) })
-            for (i, slot) in slots.enumerated() {
-                let slotIndex = index + 1 + i
+            // Written in place: collecting the slots in an array first allocated for every
+            // instruction.
+            var slotIndex = index + 1
+            instruction.emitImmediate(to: { slot in
                 trace("        [\(slotIndex)] = 0x\(String(slot, radix: 16))")
                 self.instructions[slotIndex] = slot
-            }
+                slotIndex += 1
+            })
         }
 
         /// Overwrites the instruction previously emitted at `position`.
@@ -2325,9 +2340,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
             let position = insertingPC
             trace("emitInstruction: \(instruction)")
             emitSlot(headSlot(of: instruction))
-            var slots: [CodeSlot] = []
-            instruction.emitImmediate(to: { slots.append($0) })
-            for slot in slots { emitSlot(slot) }
+            instruction.emitImmediate(to: { emitSlot($0) })
             self.lastEmission = LastEmission(
                 position: position, end: insertingPC,
                 resultRelink: resultRelink,
@@ -2459,9 +2472,8 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
             switch self.labels[ref] {
             case .pinned(let pc):
                 assign(at: insertAt.offsetFromHead, make(self, insertingPC, pc))
-            case .unpinned(var users):
-                users.append(LabelUser(action: .emitInstruction(insertAt: insertAt, source: insertingPC, make), sourceLine: line))
-                self.labels[ref] = .unpinned(users: users)
+            case .unpinned:
+                addUser(LabelUser(action: .emitInstruction(insertAt: insertAt, source: insertingPC, make), sourceLine: line), to: ref)
             }
         }
 
@@ -2480,9 +2492,8 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
             switch self.labels[ref] {
             case .pinned(let pc):
                 table[index] = make(self, pc)
-            case .unpinned(var users):
-                users.append(LabelUser(action: .fillBrTableEntry(buildingTable: table, index: index, make: make), sourceLine: line))
-                self.labels[ref] = .unpinned(users: users)
+            case .unpinned:
+                addUser(LabelUser(action: .fillBrTableEntry(buildingTable: table, index: index, make: make), sourceLine: line), to: ref)
             }
         }
 
@@ -2497,13 +2508,12 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
             switch self.labels[ref] {
             case .pinned(let pc):
                 table[index].pcOffset = Int32(pc.offsetFromHead - catchHandlersPC.offsetFromHead)
-            case .unpinned(var users):
-                users.append(
+            case .unpinned:
+                addUser(
                     LabelUser(
                         action: .fillCatchTableEntry(buildingTable: table, index: index, catchHandlersPC: catchHandlersPC),
                         sourceLine: line
-                    ))
-                self.labels[ref] = .unpinned(users: users)
+                    ), to: ref)
             }
         }
     }
@@ -3165,12 +3175,15 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
                 iseqToWasmMapping.append((0, first.canonical, first.emitting))
             }
             var headSlots: [Pc] = []
+            var mappings: [(canonical: Int, emitting: Int, iseq: Pc)] = []
+            mappings.reserveCapacity(iseqToWasmMapping.count)
             for (iseq, canonical, emitting) in iseqToWasmMapping {
                 let absoluteIseq = iseq + buffer.baseAddress.unsafelyUnwrapped
                 headSlots.append(absoluteIseq)
-                self.module.withValue {
-                    $0.instructionMapping.add(canonical: canonical, emitting: emitting, iseq: absoluteIseq)
-                }
+                mappings.append((canonical, emitting, absoluteIseq))
+            }
+            self.module.withValue {
+                $0.instructionMapping.add(mappings)
             }
             if self.module.isDebuggable {
                 let instructionAddresses = self.instructionAddresses

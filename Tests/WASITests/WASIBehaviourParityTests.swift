@@ -27,6 +27,35 @@ import WasmTypes
         try bridge.runAndClose { try body($0.underlying) }
     }
 
+    /// Writes mutate the file's bytes in place; a write that fails part-way keeps them.
+    @Test func memoryFileWritesKeepTheirBytes() throws {
+        let fs = try MemoryFileSystem()
+        try fs.ensureDirectory(at: "/dir")
+        try fs.addFile(at: "/dir/f", content: "")
+        let bridge = try WASIBridgeToHost(
+            fileSystem: .memory(fs).withPreopens([.init(guestPath: "/dir", hostPath: "/dir")]))
+        try bridge.runAndClose { bridge in
+            let wasi = bridge.underlying
+            let fd = try wasi.path_open(
+                dirFd: 3, dirFlags: [], path: "f", oflags: [],
+                fsRightsBase: [.FD_WRITE], fsRightsInheriting: [], fdflags: [])
+            let memory = TestSupport.TestGuestMemory()
+            let chunk = try memory.writeIOVecs([Array("abcd".utf8)])
+            for _ in 0..<2_000 {
+                _ = try wasi.fd_write(fileDescriptor: fd, ioVectors: chunk, memory: memory)
+            }
+            #expect(throws: WASIAbi.Errno.EFBIG) {
+                _ = try wasi.fd_pwrite(fd: fd, iovs: chunk, offset: WASIAbi.FileSize(Int64.max - 1), memory: memory)
+            }
+        }
+        guard case .bytes(let bytes) = try fs.getFile(at: "/dir/f") else {
+            Issue.record("expected an in-memory file")
+            return
+        }
+        #expect(bytes.count == 8_000)
+        #expect(bytes.prefix(8) == Array("abcdabcd".utf8)[...])
+    }
+
     @Test func renamingADirectoryIntoItselfIsRefused() throws {
         try withMemoryFileSystem { wasi in
             try wasi.path_create_directory(dirFd: 3, path: "a")

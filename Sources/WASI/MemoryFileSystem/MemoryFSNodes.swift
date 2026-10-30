@@ -216,12 +216,16 @@ final class MemoryFileNode: MemFSNode {
         let handle: FileDescriptor? = state.withLock { s in
             switch s.content {
             case .bytes(var bytes):
+                // Drop the state's reference first, so the mutation below does not copy the
+                // whole file: otherwise sequential writes are quadratic in the file size. The
+                // bytes go back however this case exits, including by a throw.
+                s.content = .bytes([])
+                defer { s.content = .bytes(bytes) }
                 if newSize < bytes.count {
                     bytes = Array(bytes.prefix(newSize))
                 } else if newSize > bytes.count {
                     bytes.append(contentsOf: Array(repeating: 0, count: newSize - bytes.count))
                 }
-                s.content = .bytes(bytes)
                 let now = WASIAbi.Timestamp.currentWallClock()
                 s.mtim = now
                 s.ctim = now
@@ -318,6 +322,11 @@ final class MemoryFileNode: MemFSNode {
         let (count, newPosition, handle): (WASIAbi.Size, Int, FileDescriptor?) = try state.withLock { s in
             switch s.content {
             case .bytes(var bytes):
+                // Drop the state's reference first, so the mutation below does not copy the
+                // whole file: otherwise sequential writes are quadratic in the file size. The
+                // bytes go back however this case exits, including by a throw.
+                s.content = .bytes([])
+                defer { s.content = .bytes(bytes) }
                 var cur = position
                 let total = try buffers.transfer { bufferPtr in
                     let bytesToWrite = bufferPtr.count
@@ -334,7 +343,6 @@ final class MemoryFileNode: MemFSNode {
                     cur += bytesToWrite
                     return bytesToWrite
                 }
-                s.content = .bytes(bytes)
                 let now = WASIAbi.Timestamp.currentWallClock()
                 s.mtim = now
                 s.ctim = now
@@ -359,6 +367,11 @@ final class MemoryFileNode: MemFSNode {
         let (count, handle): (WASIAbi.Size, FileDescriptor?) = try state.withLock { s in
             switch s.content {
             case .bytes(var bytes):
+                // Drop the state's reference first, so the mutation below does not copy the
+                // whole file: otherwise sequential writes are quadratic in the file size. The
+                // bytes go back however this case exits, including by a throw.
+                s.content = .bytes([])
+                defer { s.content = .bytes(bytes) }
                 var cur = offset
                 let total = try buffers.transfer { bufferPtr in
                     let bytesToWrite = bufferPtr.count
@@ -375,7 +388,6 @@ final class MemoryFileNode: MemFSNode {
                     cur += bytesToWrite
                     return bytesToWrite
                 }
-                s.content = .bytes(bytes)
                 let now = WASIAbi.Timestamp.currentWallClock()
                 s.mtim = now
                 s.ctim = now
