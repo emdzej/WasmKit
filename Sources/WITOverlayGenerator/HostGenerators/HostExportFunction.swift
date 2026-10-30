@@ -262,7 +262,7 @@ struct HostExportFunction {
         printer.write(line: signature.description + " {")
         try printer.indent {
             let optionsVar = builder.variable("options")
-            printer.write(line: "let \(optionsVar) = WasmKit.CanonicalOptions._derive(from: instance, exportName: \"\(name.abiName)\")")
+            printer.write(line: "let \(optionsVar) = try WasmKit.CanonicalOptions._derive(from: instance, exportName: \"\(name.abiName)\")")
             printer.write(line: "let \(context.contextVar) = WasmKit.CanonicalCallContext(options: \(optionsVar), instance: instance)")
             // Suppress unused variable warning for "context"
             printer.write(line: "_ = \(context.contextVar)")

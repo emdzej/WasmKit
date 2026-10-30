@@ -95,65 +95,37 @@
                 try processImport(importDef, context: &context)
             }
 
-            // Step 1: Process definitions in semantic order
-            // Binary sections can appear in section-ID order, but semantic dependencies
-            // require processing in this order:
-            // 1. Nested component definitions (just track them)
-            // 2. Component instances (instantiate nested components)
-            // 3. Component function aliases (from component instances, including imported)
-            // 4. Canon.lower (creates coreFunctions from componentFunctions)
-            // 5. Core instances (instantiate core modules, may reference coreFunctions from canon.lower)
-            // 6. Core function aliases (from core instances)
-            // 7. Canon.lift (creates componentFunctions from core instance exports)
-
-            // Step 1.0: Track nested component definitions (not instantiated yet)
+            // Step 1: Process definitions in the order they appear in the binary. Each kind of
+            // definition appends to its index space, and those spaces interleave: a core
+            // function alias before a `canon lower` takes the lower index, so processing kinds in
+            // fixed phases would bind references to the wrong definitions.
+            //
+            // Nested component definitions are pure definitions, so they are all known up front.
             for nestedComponent in component.nestedComponents {
                 context.nestedComponentDefs.append(nestedComponent)
             }
-
-            // Step 1.1: Process component instance definitions (instantiate nested components)
-            for instanceDef in component.componentInstances {
-                try processComponentInstanceDef(instanceDef, context: &context)
-            }
-
-            // Step 1.2: Process component function aliases (from component instances, including imported)
-            for alias in component.aliases {
-                if case .func = alias.sort {
-                    try processAlias(alias, context: &context)
-                }
-            }
-
-            // Step 1.3: Process canon.lower definitions (creates core functions from component functions)
-            for canonDef in component.canonicalDefinitions {
-                if case .lower = canonDef.kind {
-                    let coreFunction = try processCanonLower(
-                        canonDef,
-                        context: &context
-                    )
-                    context.coreFunctions.append(coreFunction)
-                }
-            }
-
-            // Step 1.4: Process all core instance definitions
-            for instanceDef in component.coreInstanceDefs {
-                try processCoreInstanceDef(instanceDef, context: &context)
-            }
-
-            // Step 1.5: Process core function aliases (from core instances)
-            for alias in component.aliases {
-                if case .core(let coreSort) = alias.sort, coreSort == .func {
-                    try processAlias(alias, context: &context)
-                }
-            }
-
-            // Step 1.6: Process canon.lift definitions (creates component functions from core instance exports)
-            for canonDef in component.canonicalDefinitions {
-                if case .lift = canonDef.kind {
-                    let componentFunction = try processCanonLift(
-                        canonDef,
-                        context: &context
-                    )
-                    context.componentFunctions.append(componentFunction)
+            for definition in Self.definitionOrder(of: component) {
+                switch definition {
+                case .coreInstance(let index):
+                    try processCoreInstanceDef(component.coreInstanceDefs[index], context: &context)
+                case .componentInstance(let index):
+                    try processComponentInstanceDef(component.componentInstances[index], context: &context)
+                case .alias(let index):
+                    try processAlias(component.aliases[index], context: &context)
+                case .canon(let index):
+                    let canonDef = component.canonicalDefinitions[index]
+                    switch canonDef.kind {
+                    case .lift:
+                        context.componentFunctions.append(try processCanonLift(canonDef, context: &context))
+                    case .lower:
+                        context.coreFunctions.append(try processCanonLower(canonDef, context: &context))
+                    }
+                case .unsupportedCoreFunction:
+                    // Keeps the index space aligned; calling it reports what is missing.
+                    let placeholder = Function(store: store, type: FunctionType(parameters: [.i32], results: [])) { _, _ in
+                        throw ComponentLoaderError.instantiationFailed("resource intrinsics are not supported yet")
+                    }
+                    context.coreFunctions.append(placeholder.handle)
                 }
             }
 
@@ -176,6 +148,32 @@
         }
     }
 
+    extension ComponentLoader {
+        /// The order to process `component`'s definitions in: the binary's, as the parser
+        /// records it. A component built by hand without one gets the phases this loader used
+        /// before it followed the binary, which suits definitions listed by kind.
+        static func definitionOrder(of component: ParsedComponent) -> [ParsedOrderedDefinition] {
+            if !component.orderedDefinitions.isEmpty {
+                return component.orderedDefinitions
+            }
+            var order: [ParsedOrderedDefinition] = []
+            order += component.componentInstances.indices.map { .componentInstance(index: $0) }
+            func isFunctionAlias(_ index: Int) -> Bool {
+                if case .func = component.aliases[index].sort { return true } else { return false }
+            }
+            order += component.aliases.indices.filter(isFunctionAlias).map { .alias(index: $0) }
+            order += component.canonicalDefinitions.indices.filter {
+                if case .lower = component.canonicalDefinitions[$0].kind { return true } else { return false }
+            }.map { .canon(index: $0) }
+            order += component.coreInstanceDefs.indices.map { .coreInstance(index: $0) }
+            order += component.aliases.indices.filter { !isFunctionAlias($0) }.map { .alias(index: $0) }
+            order += component.canonicalDefinitions.indices.filter {
+                if case .lift = component.canonicalDefinitions[$0].kind { return true } else { return false }
+            }.map { .canon(index: $0) }
+            return order
+        }
+    }
+
     // MARK: - Instantiation Context
 
     /// Internal context used during component instantiation.
@@ -194,6 +192,10 @@
 
         /// Imported component instances (from component instances index space, populated by imports)
         var importedInstances: [InternalComponentInstance] = []
+
+        /// The component instance index space: imported and nested instances, in the order they
+        /// were defined. Every instance index resolves against this.
+        var componentInstances: [InternalComponentInstance] = []
 
         /// Component functions from imports, aliases, and canonical lift definitions
         var componentFunctions: [InternalComponentFunction] = []
@@ -267,10 +269,15 @@
     public enum ParsedOrderedDefinition {
         /// A core instance definition
         case coreInstance(index: Int)
+        /// A component instance definition
+        case componentInstance(index: Int)
         /// An alias definition
         case alias(index: Int)
         /// A canonical definition (lift or lower)
         case canon(index: Int)
+        /// A core function this loader cannot provide, such as a resource intrinsic. It still
+        /// takes its place in the core function index space.
+        case unsupportedCoreFunction
     }
 
     /// A core instance definition.
@@ -594,6 +601,7 @@
             case (.instance, .instance(let instance)):
                 // Instance imports add to imported instances index space
                 context.importedInstances.append(instance)
+                context.componentInstances.append(instance)
             case (.function, .function(let function)):
                 // Function imports add to component functions index space
                 context.componentFunctions.append(function)
@@ -674,21 +682,12 @@
             switch alias.source {
             case .componentInstanceExport(let instanceIndex, let name):
                 // Get the instance from the component instance index space
-                // Component instance index space includes:
-                // 1. Imported instances (indices 0..importedInstances.count-1)
-                // 2. Nested component instances (indices importedInstances.count..)
-                let instanceHandle: InternalComponentInstance
-                if instanceIndex < context.importedInstances.count {
-                    instanceHandle = context.importedInstances[instanceIndex]
-                } else {
-                    let nestedIndex = instanceIndex - context.importedInstances.count
-                    guard nestedIndex < context.nestedComponents.count else {
-                        throw ComponentLoaderError.instantiationFailed(
-                            "Component instance index \(instanceIndex) out of bounds for alias (imports: \(context.importedInstances.count), nested: \(context.nestedComponents.count))"
-                        )
-                    }
-                    instanceHandle = context.nestedComponents[nestedIndex]
+                guard instanceIndex < context.componentInstances.count else {
+                    throw ComponentLoaderError.instantiationFailed(
+                        "Component instance index \(instanceIndex) out of bounds for alias (\(context.componentInstances.count) instances)"
+                    )
                 }
+                let instanceHandle = context.componentInstances[instanceIndex]
                 let instance = ComponentInstance(handle: instanceHandle, store: store)
 
                 // Get the function export from the instance
@@ -873,6 +872,7 @@
                 // Recursively instantiate the nested component
                 let nestedInstance = try instantiate(component: nestedComponent, imports: nestedImports)
                 context.nestedComponents.append(nestedInstance.handle)
+                context.componentInstances.append(nestedInstance.handle)
 
             case .exports(let exports):
                 // Create an instance from inline exports
@@ -890,6 +890,7 @@
                 )
                 let handle = store.allocator.allocate(componentInstance: entity)
                 context.nestedComponents.append(handle)
+                context.componentInstances.append(handle)
             }
         }
 
@@ -926,12 +927,12 @@
                 return .function(ComponentFunction(handle: context.componentFunctions[arg.index], store: store))
 
             case .instance:
-                guard arg.index < context.nestedComponents.count else {
+                guard arg.index < context.componentInstances.count else {
                     throw ComponentLoaderError.instantiationFailed(
                         "Invalid component instance index: \(arg.index)"
                     )
                 }
-                return .instance(ComponentInstance(handle: context.nestedComponents[arg.index], store: store))
+                return .instance(ComponentInstance(handle: context.componentInstances[arg.index], store: store))
 
             case .value, .type, .component:
                 throw ComponentLoaderError.instantiationFailed(
@@ -986,12 +987,12 @@
                 return .function(context.componentFunctions[export.index])
 
             case .instance:
-                guard export.index < context.nestedComponents.count else {
+                guard export.index < context.componentInstances.count else {
                     throw ComponentLoaderError.instantiationFailed(
                         "Invalid component instance index: \(export.index)"
                     )
                 }
-                return .instance(context.nestedComponents[export.index])
+                return .instance(context.componentInstances[export.index])
 
             case .value, .type, .component:
                 throw ComponentLoaderError.instantiationFailed(
@@ -1023,6 +1024,15 @@
 
             // Resolve canon options
             let canonOptions = try resolveCanonOptions(canonDef.options, context: &context)
+
+            // The core function must have the type the component function flattens to; otherwise
+            // lifting would read its results as the wrong values.
+            let expectedCoreType = try CanonicalABITypes(resolveType: context.resolveType)
+                .flattenFunctionType(type, lifting: true)
+            guard coreFunction.type == expectedCoreType else {
+                throw ComponentLoaderError.instantiationFailed(
+                    "canon lift of \"\(functionName)\": core type \(coreFunction.type) does not match \(expectedCoreType)")
+            }
 
             // Create a placeholder component instance handle for now
             // This will be updated when we have the actual component instance
@@ -1059,38 +1069,20 @@
                 store: store
             )
             let funcType = componentFunction.type
+            // The lowering side's own options: the arguments and results live in the memory of the
+            // core instance calling the function, not in that of the component implementing it.
+            let options = try resolveCanonOptions(canonDef.options, context: &context)
+            let types = CanonicalABITypes(resolveType: componentFunction.handle.resolveType)
+            let coreFuncType = try types.flattenFunctionType(funcType, lifting: false)
 
-            // Convert component function type to core function type
-            let coreFuncType = flattenComponentFuncType(funcType)
-
-            // Create a host function that wraps the component function
-            // When called, it:
-            // 1. Lifts core arguments to component values
-            // 2. Calls the component function
-            // 3. Lowers component results to core values
+            // A host function that lifts the core arguments, calls the component function, and
+            // lowers its results back for the core caller.
+            let store = self.store
             let wrappedFunction = Function(store: store, type: coreFuncType) { [componentFunction] _, coreArgs in
-                // Lift core arguments to component values
-                var componentArgs: [ComponentValue] = []
-                var argIndex = 0
-                for param in funcType.params {
-                    let componentValue = try param.type.liftFlatCoreValue(coreArgs[argIndex])
-                    componentArgs.append(componentValue)
-                    argIndex += 1
-                }
-
-                // Call the component function
+                var abi = CanonicalABIContext(types: types, options: options, store: store)
+                let componentArgs = try abi.liftArguments(coreArgs, of: funcType)
                 let results = try componentFunction.invoke(componentArgs)
-
-                // Lower component results to core values
-                var coreResults: [Value] = []
-                if let resultType = funcType.result {
-                    for result in results {
-                        let lowered = try lowerFlat(result, paramType: resultType)
-                        coreResults.append(contentsOf: lowered)
-                    }
-                }
-
-                return coreResults
+                return try abi.lowerResults(results, of: funcType, arguments: coreArgs)
             }
 
             return wrappedFunction.handle
@@ -1178,12 +1170,12 @@
                     value = .type(typeIndex)
 
                 case .instance(let index):
-                    guard index < context.nestedComponents.count else {
+                    guard index < context.componentInstances.count else {
                         throw ComponentLoaderError.instantiationFailed(
                             "Invalid nested component index: \(index)"
                         )
                     }
-                    value = .instance(context.nestedComponents[index])
+                    value = .instance(context.componentInstances[index])
 
                 case .coreModule(let moduleIndex):
                     guard moduleIndex < context.coreModules.count else {

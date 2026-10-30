@@ -35,9 +35,11 @@ public struct CanonicalOptions {
     /// FIXME: This deriviation is wrong because the options should be determined by `(canon lift)` or `(canon lower)`
     /// in an encoded component at componetizing-time. (e.g. wit-component tool is one of the componetizers)
     /// Remove this temporary method after we will accept binary form of component file.
-    public static func _derive(from instance: Instance, exportName: String) -> CanonicalOptions {
+    ///
+    /// - Throws: `CanonicalABIError` if the instance exports no `memory`.
+    public static func _derive(from instance: Instance, exportName: String) throws -> CanonicalOptions {
         guard case .memory(let memory) = instance.exports["memory"] else {
-            fatalError("Missing required \"memory\" export")
+            throw CanonicalABIError(description: "Missing required \"memory\" export")
         }
         return CanonicalOptions(
             memory: memory, stringEncoding: .utf8,

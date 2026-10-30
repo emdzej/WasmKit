@@ -33,19 +33,29 @@
     /// - Throws: `WasmKitError` if parsing fails, `ComponentParseError` for semantic errors
     func parseComponent(
         bytes: ArraySlice<UInt8>,
-        features: WasmFeatureSet = .default
+        features: WasmFeatureSet = .default,
+        depth: Int = 0
     ) throws -> ParsedComponent {
         let stream = StaticByteStreamSource(bytes: bytes)
-        return try parseComponent(stream: stream, features: features)
+        return try parseComponent(stream: stream, features: features, depth: depth)
     }
+
+    /// How deeply components may nest. Each level recurses in the parser, so an untrusted
+    /// binary of nested headers could otherwise overflow the host's stack: in a debug build a
+    /// 512 KiB thread stack holds about 40 levels. Real components nest a handful deep.
+    let maxComponentNestingDepth = 32
 
     /// Internal implementation that parses from any ByteStream.
     private func parseComponent<Source: ByteStreamSource>(
         stream: Source,
-        features: WasmFeatureSet
+        features: WasmFeatureSet,
+        depth: Int = 0
     ) throws -> ParsedComponent {
+        guard depth <= maxComponentNestingDepth else {
+            throw ComponentParseError.unsupported("components nested more than \(maxComponentNestingDepth) deep")
+        }
         var parser = WasmParser.ComponentParser(stream: stream, features: features)
-        var builder = ParsedComponentBuilder()
+        var builder = ParsedComponentBuilder(features: features, depth: depth)
 
         while let payload = try parser.parseNext() {
             try builder.process(payload)
@@ -90,13 +100,34 @@
         /// Tracks the order of definitions for interleaved processing
         private enum OrderedDefKind {
             case coreInstance
+            case componentInstance
             case alias
             case canonLift
             case canonLower
+            case canonResource
         }
         private var orderedDefs: [OrderedDefKind] = []
 
-        init() {}
+        /// The features the enclosing component was parsed with, which its contents share.
+        private let features: WasmFeatureSet
+        /// How many components enclose this one.
+        private let depth: Int
+
+        /// The core function index space, in the binary order its definitions appear in.
+        private enum CoreFunctionEntry {
+            /// A `canon lower`, by its position among the lowers.
+            case lowered
+            /// An alias of a core instance export.
+            case alias(instanceIndex: Int, name: String)
+            /// A resource intrinsic, which this loader does not support.
+            case resourceIntrinsic
+        }
+        private var coreFunctionSpace: [CoreFunctionEntry] = []
+
+        init(features: WasmFeatureSet = .default, depth: Int = 0) {
+            self.features = features
+            self.depth = depth
+        }
 
         /// Process a parsing payload from the streaming parser.
         mutating func process(_ payload: ComponentParsingPayload) throws {
@@ -110,7 +141,7 @@
                 break
 
             case .coreModule(let moduleBytes):
-                let module = try parseWasm(bytes: moduleBytes)
+                let module = try parseWasm(bytes: moduleBytes, features: features)
                 coreModules.append(module)
 
             case .coreInstanceSection(let instances):
@@ -175,7 +206,7 @@
 
             // Build nested components (recursively parse component bytes)
             for componentBytes in components {
-                let nestedParsed = try parseComponent(bytes: componentBytes)
+                let nestedParsed = try parseComponent(bytes: componentBytes, features: features, depth: depth + 1)
                 result.nestedComponents.append(nestedParsed)
             }
 
@@ -210,6 +241,7 @@
 
             // Build ordered definitions (preserving binary interleaved order)
             var coreInstanceIndex = 0
+            var componentInstanceIndex = 0
             var aliasIndex = 0
             var canonLiftIndex = 0
             var canonLowerIndex = 0
@@ -218,6 +250,11 @@
                 case .coreInstance:
                     result.orderedDefinitions.append(.coreInstance(index: coreInstanceIndex))
                     coreInstanceIndex += 1
+                case .componentInstance:
+                    result.orderedDefinitions.append(.componentInstance(index: componentInstanceIndex))
+                    componentInstanceIndex += 1
+                case .canonResource:
+                    result.orderedDefinitions.append(.unsupportedCoreFunction)
                 case .alias:
                     result.orderedDefinitions.append(.alias(index: aliasIndex))
                     aliasIndex += 1
@@ -321,12 +358,21 @@
         private mutating func processComponentInstance(_ instance: ComponentInstanceDefinition) throws {
             let info = ComponentInstanceInfo(definition: instance)
             componentInstances.append(info)
+            orderedDefs.append(.componentInstance)
         }
 
         private mutating func processAlias(_ alias: ComponentAlias) throws {
             let resolved = try resolveAlias(alias)
             aliases.append(resolved)
             orderedDefs.append(.alias)
+            if case .core(.func) = resolved.sort {
+                switch resolved.source {
+                case .coreInstanceExport(let instanceIndex, let name):
+                    coreFunctionSpace.append(.alias(instanceIndex: instanceIndex, name: name))
+                default:
+                    coreFunctionSpace.append(.resourceIntrinsic)
+                }
+            }
         }
 
         private mutating func processCanonicalDefinition(_ canonDef: CanonicalDefinition) throws {
@@ -349,10 +395,12 @@
                 )
                 coreFunctionDefs.append(info)
                 orderedDefs.append(.canonLower)
+                coreFunctionSpace.append(.lowered)
 
             case .resourceNew, .resourceDrop, .resourceRep:
-                // Resource operations are deferred
-                break
+                // Unsupported, but each still defines a core function, so later indices count it.
+                orderedDefs.append(.canonResource)
+                coreFunctionSpace.append(.resourceIntrinsic)
             }
         }
 
@@ -405,32 +453,19 @@
         }
 
         private func resolveCoreFunctionIndex(_ index: Int) throws -> (coreInstanceIndex: Int, functionName: String) {
-            // The core function index refers to the core function index space
-            // which is populated by:
-            // 1. Core functions from canon.lower (at indices 0, 1, ...)
-            // 2. Core function aliases (at indices following canon.lower functions)
-
-            // Indices 0..coreFunctionDefs.count-1 are from canon.lower - these can't be resolved
-            // to instance exports directly (they wrap component functions)
-            // For now, we only support resolving core function aliases
-
-            // Start counting from after canon.lower functions
-            var coreFuncCounter = coreFunctionDefs.count
-            for alias in aliases {
-                if case .core(.func) = alias.sort {
-                    if coreFuncCounter == index {
-                        switch alias.source {
-                        case .coreInstanceExport(let instanceIndex, let name):
-                            return (instanceIndex, name)
-                        default:
-                            throw ComponentParseError.unsupported("Unsupported core function alias source")
-                        }
-                    }
-                    coreFuncCounter += 1
-                }
+            // Canon lowers, core function aliases and resource intrinsics share the index space
+            // in the order they appear in the binary, interleaved.
+            guard coreFunctionSpace.indices.contains(index) else {
+                throw ComponentParseError.invalidIndex("Core function index \(index) out of bounds")
             }
-
-            throw ComponentParseError.invalidIndex("Core function index \(index) out of bounds")
+            switch coreFunctionSpace[index] {
+            case .alias(let instanceIndex, let name):
+                return (instanceIndex, name)
+            case .lowered:
+                throw ComponentParseError.unsupported("Core function \(index) is a `canon lower`, not a core export")
+            case .resourceIntrinsic:
+                throw ComponentParseError.unsupported("Core function \(index) is a resource intrinsic")
+            }
         }
 
         private func resolveComponentFuncType(_ typeIndex: UInt32) throws -> ComponentFuncType {

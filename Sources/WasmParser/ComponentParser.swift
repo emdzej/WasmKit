@@ -270,27 +270,43 @@
             }
         }
 
-        /// Parse a value type (primitive or type index).
-        mutating func parseValType() throws(WasmParserError) -> ComponentDefValType {
+        /// Parse a `valtype`: an inline primitive, or a type index.
+        ///
+        /// A type index is an s33, so `64` is `0xC0 0x00`: whether the byte names a primitive
+        /// decides which it is, not whether it is below the primitive opcodes.
+        mutating func parseValTypeRef() throws(WasmParserError) -> ComponentValType {
             let byte = try stream.peek() ?? 0
-            // Check if it's a type index (non-negative SLEB128)
-            if byte < 0x64 {
-                let idx: UInt32 = try parseUnsigned()
-                return .indexed(ComponentTypeIndex(rawValue: Int(idx)))
-            } else {
-                let opcode = try stream.consumeAny()
-                return try parsePrimValTypeFromOpcode(opcode)
+            if PrimitiveValTypeOpcode(rawValue: byte) != nil {
+                _ = try stream.consumeAny()
+                guard case .inlined(let primitive) = try parsePrimValTypeFromOpcode(byte) else {
+                    throw makeError(.malformedValueType(byte))
+                }
+                return primitive
             }
+            return .index(try parseTypeIndex())
         }
 
-        /// Parse an optional value type.
+        /// Parse a type index, encoded as a non-negative s33.
+        mutating func parseTypeIndex() throws(WasmParserError) -> ComponentTypeIndex {
+            let raw = try stream.parseVarSigned33()
+            guard raw >= 0, let index = Int(exactly: raw) else {
+                throw makeError(.invalidFunctionType(raw))
+            }
+            return ComponentTypeIndex(rawValue: index)
+        }
+
+        /// Parse a value type (primitive or type index).
+        mutating func parseValType() throws(WasmParserError) -> ComponentDefValType {
+            .inlined(try parseValTypeRef())
+        }
+
+        /// Parse an optional value type: `0x00`, or `0x01` and a `valtype`.
         mutating func parseOptionalValType() throws(WasmParserError) -> ComponentValType? {
             let present = try stream.consumeAny()
-            if present == 0x00 {
-                return nil
-            } else {
-                let idx: UInt32 = try parseUnsigned()
-                return .index(ComponentTypeIndex(rawValue: Int(idx)))
+            switch present {
+            case 0x00: return nil
+            case 0x01: return try parseValTypeRef()
+            default: throw makeError(.malformedValueType(present))
             }
         }
 
@@ -298,10 +314,9 @@
         mutating func parseDefValType() throws(WasmParserError) -> ComponentDefValType {
             let byte = try stream.peek() ?? 0
 
-            // Check for type index first
-            if byte < 0x64 {
-                let idx: UInt32 = try parseUnsigned()
-                return .indexed(ComponentTypeIndex(rawValue: Int(idx)))
+            // Anything that is not an opcode is a type index (an s33).
+            if PrimitiveValTypeOpcode(rawValue: byte) == nil, CompositeValTypeOpcode(rawValue: byte) == nil {
+                return .inlined(.index(try parseTypeIndex()))
             }
 
             let opcode = try stream.consumeAny()
@@ -318,8 +333,7 @@
             case .record:
                 let fields = try parseVector { p throws(WasmParserError) -> ComponentRecordField in
                     let name = try p.stream.parseName()
-                    let typeIdx: UInt32 = try p.parseUnsigned()
-                    return ComponentRecordField(name: name, type: .index(ComponentTypeIndex(rawValue: Int(typeIdx))))
+                    return ComponentRecordField(name: name, type: try p.parseValTypeRef())
                 }
                 return .record(fields)
 
@@ -327,18 +341,19 @@
                 let cases = try parseVector { p throws(WasmParserError) -> ComponentCaseField in
                     let name = try p.stream.parseName()
                     let typeIdx = try p.parseOptionalValType()
-                    _ = try p.stream.consumeAny()  // consume 0x00 terminator
+                    // The case's `refines` field, which must be absent.
+                    guard try p.stream.consumeAny() == 0x00 else {
+                        throw p.makeError(.malformedValueType(0x01))
+                    }
                     return ComponentCaseField(name: name, type: typeIdx)
                 }
                 return .variant(cases)
 
             case .list:
-                let elemIdx: UInt32 = try parseUnsigned()
-                return .list(.index(ComponentTypeIndex(rawValue: Int(elemIdx))))
+                return .list(try parseValTypeRef())
 
             case .tuple:
-                let typeIndices: [UInt32] = try parseVector { p throws(WasmParserError) -> UInt32 in try p.parseUnsigned() }
-                return .tuple(typeIndices.map { .index(ComponentTypeIndex(rawValue: Int($0))) })
+                return .tuple(try parseVector { p throws(WasmParserError) -> ComponentValType in try p.parseValTypeRef() })
 
             case .flags:
                 let labels = try parseVector { p throws(WasmParserError) -> String in try p.stream.parseName() }
@@ -349,8 +364,7 @@
                 return .enum(labels)
 
             case .option:
-                let someIdx: UInt32 = try parseUnsigned()
-                return .option(.index(ComponentTypeIndex(rawValue: Int(someIdx))))
+                return .option(try parseValTypeRef())
 
             case .result:
                 let okIdx = try parseOptionalValType()
@@ -896,15 +910,13 @@
                 // Parse optional extern desc
                 // 0x00 = no extern desc present
                 // 0x01-0x05 = extern desc type prefix
-                let marker = try p.stream.peek() ?? 0
+                // `externdesc?`: 0x00 for none, or 0x01 and the type ascription.
+                let marker = try p.stream.consumeAny()
                 let externDesc: ComponentExternDesc?
-                if marker == 0x00 {
-                    _ = try p.stream.consumeAny()  // consume the absence marker
-                    externDesc = nil
-                } else if marker >= 0x01 && marker <= 0x05 {
-                    externDesc = try p.parseExternDesc()
-                } else {
-                    externDesc = nil
+                switch marker {
+                case 0x00: externDesc = nil
+                case 0x01: externDesc = try p.parseExternDesc()
+                default: throw p.makeError(.malformedValueType(marker))
                 }
                 return ComponentExportDef(name: name, sort: sort, index: idx, externDesc: externDesc)
             }

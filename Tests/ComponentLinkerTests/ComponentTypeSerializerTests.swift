@@ -2,7 +2,9 @@
     import ComponentLinker
     import ComponentModel
     import Testing
+    import Foundation
     import WasmParser
+    import WasmTools
     import WIT
 
     @Suite
@@ -416,10 +418,9 @@
             #expect(fields.count == 2)
             #expect(fields[0].name == "x")
             #expect(fields[1].name == "y")
-            // Field types are read as type indices by the parser since they're
-            // encoded as primitive opcodes (s32 = 0x7A = 122 as unsigned LEB128)
-            #expect(fields[0].type == .index(ComponentTypeIndex(rawValue: Int(0x7A))))
-            #expect(fields[1].type == .index(ComponentTypeIndex(rawValue: Int(0x7A))))
+            // Field types are inline primitives (s32 is the opcode 0x7A), not type indices.
+            #expect(fields[0].type == .primitive(.s32))
+            #expect(fields[1].type == .primitive(.s32))
         }
 
         @Test func interfaceWithEnumType() throws {
@@ -790,9 +791,9 @@
             #expect(lineFields.count == 2)
             #expect(lineFields[0].name == "start")
             #expect(lineFields[1].name == "end")
-            // point is type index 0 in this instancetype
-            #expect(lineFields[0].type == .index(ComponentTypeIndex(rawValue: 0)))
-            #expect(lineFields[1].type == .index(ComponentTypeIndex(rawValue: 0)))
+            // point is declared as type 0 and exported as type 1, which references use
+            #expect(lineFields[0].type == .index(ComponentTypeIndex(rawValue: 1)))
+            #expect(lineFields[1].type == .index(ComponentTypeIndex(rawValue: 1)))
         }
 
         // MARK: - Error path tests
@@ -968,9 +969,9 @@
             #expect(typeDefIndices.count == 5)
             #expect(exportDecls.count == 5)
 
-            // Export type indices should match: type defs at 0,1,2 + funcs at 3,4
-            // Export "point" → type(eq 0), "color" → type(eq 1), "perms" → type(eq 2)
-            // Export "get-point" → function(3), "get-color" → function(4)
+            // Each type export introduces a type index of its own (Binary.md), so the index space
+            // is: point 0, its export 1, color 2, its export 3, perms 4, its export 5, then the
+            // function types 6 and 7. References use the exported indices.
             #expect(exportDecls[0].name == "point")
             #expect(exportDecls[1].name == "color")
             #expect(exportDecls[2].name == "perms")
@@ -979,10 +980,9 @@
 
             // Verify get-point returns type index 0 (point)
             if let ft = funcTypesByIndex[3] {
-                // The result references point which is type 0; but since point is a
-                // named type, the serializer writes its index (0) as a type reference
+                // The result references point by the index its export introduced.
                 if case .inlined(.index(let idx)) = ft.result {
-                    #expect(idx.rawValue == 0, "get-point should return type 0 (point)")
+                    #expect(idx.rawValue == 1, "get-point should return type 1 (exported point)")
                 } else {
                     Issue.record("Expected indexed result for get-point, got \(String(describing: ft.result))")
                 }
@@ -991,7 +991,7 @@
             // Verify get-color returns type index 1 (color)
             if let ft = funcTypesByIndex[4] {
                 if case .inlined(.index(let idx)) = ft.result {
-                    #expect(idx.rawValue == 1, "get-color should return type 1 (color)")
+                    #expect(idx.rawValue == 3, "get-color should return type 3 (exported color)")
                 } else {
                     Issue.record("Expected indexed result for get-color, got \(String(describing: ft.result))")
                 }
@@ -1109,6 +1109,23 @@
             #expect(betaExportDecl.name == "test:pkg/beta")
         }
 
+        /// wasm-tools accepts what the serializer writes, including nested composites in valtype
+        /// positions and references to exported types.
+        @Test(
+            .enabled(if: FileManager.default.fileExists(atPath: defaultWasmToolsPath), "needs wasm-tools.wasm"),
+            arguments: [
+                "export deep: func(v: list<option<result<u32, string>>>) -> tuple<u8, list<u8>>",
+                "export i: interface { record point { x: s32 } record line { a: point, b: point } f: func(l: line) -> list<point> }",
+                "type t = list<u8>\n export f: func(a: t, b: option<t>)",
+            ])
+        func wasmToolsValidatesTheEncoding(world body: String) throws {
+            let bytes = try encode("package test:pkg\nworld w {\n\(body)\n}", worldName: "w")
+            let result = try runWasmTools(
+                args: ["validate", "/input.wasm"],
+                inputFiles: [WasmToolsInputFile(guestPath: "/input.wasm", content: bytes)])
+            #expect(result.exitCode == 0, "\(result.stderrString)")
+        }
+
         @Test func deeplyNestedCompositeType() throws {
             let bytes = try encode(
                 """
@@ -1118,9 +1135,10 @@
                 }
                 """, worldName: "my-world")
 
-            // Verify the nested type encoding at byte level:
-            // list(0x70) option(0x6B) result(0x6A) ok-present(0x01) u32(0x79) err-present(0x01) string(0x73)
-            let nestedSequence: [UInt8] = [0x70, 0x6B, 0x6A, 0x01, 0x79, 0x01, 0x73]
+            // A valtype names a composite type only by index, so each level is its own declaration,
+            // innermost first: type 0 = result(0x6A) ok-present u32(0x79) err-present string(0x73),
+            // type 1 = option(0x6B) of type 0, type 2 = list(0x70) of type 1.
+            let nestedSequence: [UInt8] = [0x6A, 0x01, 0x79, 0x01, 0x73, 0x01, 0x6B, 0x00, 0x01, 0x70, 0x01]
             #expect(
                 containsSubsequence(bytes, nestedSequence),
                 "Should contain list<option<result<u32, string>>> encoding")

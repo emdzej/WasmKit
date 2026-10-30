@@ -218,64 +218,21 @@
         /// - Throws: A trap if the function invocation fails.
         @discardableResult
         public func invoke(_ arguments: [ComponentValue] = []) throws -> [ComponentValue] {
-            // 1. Lower each argument to core values
-            var coreArgs: [Value] = []
-            for (index, arg) in arguments.enumerated() {
-                let paramType = handle.type.params[index].type
-                let lowered = try arg.lower(
-                    to: paramType,
-                    resolveType: handle.resolveType,
-                    options: handle.canonOptions,
-                    store: store
-                )
-                coreArgs.append(contentsOf: lowered)
-            }
+            var context = CanonicalABIContext(
+                types: CanonicalABITypes(resolveType: handle.resolveType), options: handle.canonOptions, store: store)
+            let type = handle.type
 
-            // 2. Call underlying core function
+            // 1. Lower the arguments into core values, or into memory if there are too many.
+            let coreArguments = try context.lowerArguments(arguments, of: type)
+
+            // 2. Call the core function.
             var stack = ExecutionStack(engine: store.engine)
-            let coreResults = try handle.coreFunction.invoke(coreArgs, store: store, stack: &stack)
+            let coreResults = try handle.coreFunction.invoke(coreArguments, store: store, stack: &stack)
 
-            // 3. Lift return values to component values
-            let results: [ComponentValue]
-            if let resultType = handle.type.result {
-                // Check if indirect return is used (when flattened result count > MAX_FLAT_RESULTS)
-                let flatCount = resultType.flattenedCount
-                if flatCount > MAX_FLAT_RESULTS {
-                    // Indirect return: core function returned a single i32 pointer
-                    // Read the result values from memory at that pointer
-                    guard case .i32(let retptr) = coreResults.first else {
-                        throw CanonicalABIError(description: "Expected i32 return pointer for indirect result")
-                    }
-                    // Debug: Check if memory is available
-                    guard handle.canonOptions.memory != nil else {
-                        throw CanonicalABIError(description: "Indirect result requires memory but canon options has no memory")
-                    }
-                    results = try [
-                        resultType.liftValueFromMemory(
-                            at: retptr,
-                            resolveType: handle.resolveType,
-                            options: handle.canonOptions,
-                            store: store
-                        )
-                    ]
-                } else {
-                    // Direct return: values are in coreResults
-                    var iterator = coreResults.makeIterator()
-                    results = try [
-                        ComponentValue.lift(
-                            from: &iterator,
-                            to: resultType,
-                            resolveType: handle.resolveType,
-                            options: handle.canonOptions,
-                            store: store
-                        )
-                    ]
-                }
-            } else {
-                results = []
-            }
+            // 3. Lift the results, from core values or through the pointer the callee returned.
+            let results = try context.liftResults(coreResults, of: type)
 
-            // 4. Execute post-return if specified
+            // 4. Let the callee free what the results pointed to.
             if let postReturn = handle.canonOptions.postReturn {
                 _ = try postReturn.invoke(coreResults, store: store, stack: &stack)
             }

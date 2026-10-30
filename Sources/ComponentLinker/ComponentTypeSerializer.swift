@@ -102,6 +102,79 @@
             encoder.writeUnsignedLEB128(UInt32(0))
         }
 
+        // MARK: - Declaration scopes
+
+        /// The declarations of one component or instance type, which has a type index space of
+        /// its own.
+        private struct DeclarationScope {
+            var encoder = Encoder()
+            var count: UInt32 = 0
+            var nextTypeIndex: UInt32 = 0
+            /// The types declared under a name, by the index their export introduced.
+            var namedTypes: [String: UInt32] = [:]
+            /// Anonymous composite types declared so far. A valtype names a non-primitive type
+            /// only by index, so `list<u8>` in a parameter must first become a declaration.
+            var anonymousTypes: [TypeReprSyntax: UInt32] = [:]
+
+            /// Appends a `type` declaration whose body `encodeBody` writes, returning its index.
+            mutating func declareType(_ encodeBody: (inout Self, inout Encoder) throws -> Void) rethrows -> UInt32 {
+                var body = Encoder()
+                try encodeBody(&self, &body)
+                encoder.output.append(TypeDeclTag.type.rawValue)
+                encoder.output.append(contentsOf: body.output)
+                defer {
+                    nextTypeIndex += 1
+                    count += 1
+                }
+                return nextTypeIndex
+            }
+
+            /// Appends an `export` declaration of a type, `(export name (type (eq index)))`, which
+            /// introduces a type index of its own. Returns that index.
+            mutating func exportType(_ name: String, index: UInt32) -> UInt32 {
+                encoder.output.append(TypeDeclTag.export.rawValue)
+                encodeImportExportName(name, encoder: &encoder)
+                encoder.output.append(ExternDescKind.type.rawValue)
+                encoder.output.append(TypeBoundOpcode.eq.rawValue)
+                encoder.writeUnsignedLEB128(index)
+                defer {
+                    nextTypeIndex += 1
+                    count += 1
+                }
+                return nextTypeIndex
+            }
+
+            /// Appends an import or export declaration of an instance or function of type `index`.
+            mutating func declareExtern(tag: UInt8, name: String, kind: ExternDescKind, index: UInt32) {
+                encoder.output.append(tag)
+                encodeImportExportName(name, encoder: &encoder)
+                encoder.output.append(kind.rawValue)
+                encoder.writeUnsignedLEB128(index)
+                count += 1
+            }
+
+            /// Declares every anonymous composite type `typeRepr` contains, innermost first,
+            /// including `typeRepr` itself unless `includingSelf` is `false`.
+            mutating func hoist(_ typeRepr: TypeReprSyntax, includingSelf: Bool = true) throws {
+                switch typeRepr {
+                case .list(let element), .option(let element):
+                    try hoist(element)
+                case .tuple(let elements):
+                    for element in elements { try hoist(element) }
+                case .result(let result):
+                    if let ok = result.ok { try hoist(ok) }
+                    if let error = result.error { try hoist(error) }
+                default:
+                    return
+                }
+                guard includingSelf, anonymousTypes[typeRepr] == nil else { return }
+                let index = try declareType { scope, body in
+                    try encodeComposite(typeRepr, scope: scope, encoder: &body)
+                }
+                anonymousTypes[typeRepr] = index
+            }
+        }
+
         // MARK: - Inner componenttype (the world)
 
         private static func encodeWorldComponentType(
@@ -109,47 +182,16 @@
             context: SemanticsContext,
             encoder: inout Encoder
         ) throws {
-            var declEncoder = Encoder()
-            var declCount: UInt32 = 0
-            var nextTypeIndex: UInt32 = 0
-            var worldNamedTypes: [String: UInt32] = [:]
+            var scope = DeclarationScope()
 
             for item in world.items {
                 switch item {
                 case .import(let importSyntax):
-                    try encodeWorldExtern(
-                        kind: importSyntax.kind,
-                        isImport: true,
-                        context: context,
-                        worldNamedTypes: &worldNamedTypes,
-                        encoder: &declEncoder,
-                        declCount: &declCount,
-                        nextTypeIndex: &nextTypeIndex
-                    )
+                    try encodeWorldExtern(kind: importSyntax.kind, isImport: true, context: context, scope: &scope)
                 case .export(let exportSyntax):
-                    try encodeWorldExtern(
-                        kind: exportSyntax.kind,
-                        isImport: false,
-                        context: context,
-                        worldNamedTypes: &worldNamedTypes,
-                        encoder: &declEncoder,
-                        declCount: &declCount,
-                        nextTypeIndex: &nextTypeIndex
-                    )
+                    try encodeWorldExtern(kind: exportSyntax.kind, isImport: false, context: context, scope: &scope)
                 case .type(let typeDefNode):
-                    let typeDef = typeDefNode.syntax
-                    declEncoder.output.append(TypeDeclTag.type.rawValue)
-                    try encodeTypeDefBody(typeDef.body, namedTypes: worldNamedTypes, encoder: &declEncoder)
-                    worldNamedTypes[typeDef.name.text] = nextTypeIndex
-                    nextTypeIndex += 1
-                    declCount += 1
-
-                    declEncoder.output.append(TypeDeclTag.export.rawValue)
-                    encodeImportExportName(typeDef.name.text, encoder: &declEncoder)
-                    declEncoder.output.append(ExternDescKind.type.rawValue)
-                    declEncoder.output.append(TypeBoundOpcode.eq.rawValue)
-                    declEncoder.writeUnsignedLEB128(worldNamedTypes[typeDef.name.text]!)
-                    declCount += 1
+                    try encodeNamedType(typeDefNode.syntax, scope: &scope)
                 case .use:
                     throw Error.unsupportedFeature("use in world")
                 case .include:
@@ -158,8 +200,17 @@
             }
 
             encoder.output.append(DefinedTypeOpcode.componentType.rawValue)  // 0x41
-            encoder.writeUnsignedLEB128(declCount)
-            encoder.output.append(contentsOf: declEncoder.output)
+            encoder.writeUnsignedLEB128(scope.count)
+            encoder.output.append(contentsOf: scope.encoder.output)
+        }
+
+        /// Declares a named type and exports it, so later references use the exported index.
+        private static func encodeNamedType(_ typeDef: TypeDefSyntax, scope: inout DeclarationScope) throws {
+            try hoistTypeDefBody(typeDef.body, scope: &scope)
+            let index = try scope.declareType { scope, body in
+                try encodeTypeDefBody(typeDef.body, scope: scope, encoder: &body)
+            }
+            scope.namedTypes[typeDef.name.text] = scope.exportType(typeDef.name.text, index: index)
         }
 
         // MARK: - World import/export encoding
@@ -168,53 +219,23 @@
             kind: ExternKindSyntax,
             isImport: Bool,
             context: SemanticsContext,
-            worldNamedTypes: inout [String: UInt32],
-            encoder: inout Encoder,
-            declCount: inout UInt32,
-            nextTypeIndex: inout UInt32
+            scope: inout DeclarationScope
         ) throws {
             let tag: UInt8 = isImport ? TypeDeclTag.import.rawValue : TypeDeclTag.export.rawValue
 
             switch kind {
             case .interface(let name, let items):
-                let typeIdx = nextTypeIndex
-                encoder.output.append(TypeDeclTag.type.rawValue)
-                try encodeInstanceType(items: items, encoder: &encoder)
-                nextTypeIndex += 1
-                declCount += 1
-
-                encoder.output.append(tag)
-                encodeImportExportName(name.text, encoder: &encoder)
-                encoder.output.append(ExternDescKind.instance.rawValue)
-                encoder.writeUnsignedLEB128(typeIdx)
-                declCount += 1
+                let typeIdx = try scope.declareType { _, body in try encodeInstanceType(items: items, encoder: &body) }
+                scope.declareExtern(tag: tag, name: name.text, kind: .instance, index: typeIdx)
 
             case .path(let path):
                 let (iface, fqName) = try resolveInterfacePath(path, context: context)
-                let typeIdx = nextTypeIndex
-                encoder.output.append(TypeDeclTag.type.rawValue)
-                try encodeInstanceType(items: iface.items, encoder: &encoder)
-                nextTypeIndex += 1
-                declCount += 1
-
-                encoder.output.append(tag)
-                encodeImportExportName(fqName, encoder: &encoder)
-                encoder.output.append(ExternDescKind.instance.rawValue)
-                encoder.writeUnsignedLEB128(typeIdx)
-                declCount += 1
+                let typeIdx = try scope.declareType { _, body in try encodeInstanceType(items: iface.items, encoder: &body) }
+                scope.declareExtern(tag: tag, name: fqName, kind: .instance, index: typeIdx)
 
             case .function(let name, let funcSyntax):
-                let typeIdx = nextTypeIndex
-                encoder.output.append(TypeDeclTag.type.rawValue)
-                try encodeFuncType(funcSyntax, namedTypes: worldNamedTypes, encoder: &encoder)
-                nextTypeIndex += 1
-                declCount += 1
-
-                encoder.output.append(tag)
-                encodeImportExportName(name.text, encoder: &encoder)
-                encoder.output.append(ExternDescKind.function.rawValue)
-                encoder.writeUnsignedLEB128(typeIdx)
-                declCount += 1
+                let typeIdx = try encodeFuncTypeDeclaration(funcSyntax, scope: &scope)
+                scope.declareExtern(tag: tag, name: name.text, kind: .function, index: typeIdx)
             }
         }
 
@@ -257,41 +278,18 @@
             items: [InterfaceItemSyntax],
             encoder: inout Encoder
         ) throws {
-            var declEncoder = Encoder()
-            var declCount: UInt32 = 0
-            var nextTypeIndex: UInt32 = 0
-            var localNamedTypes: [String: UInt32] = [:]
+            var scope = DeclarationScope()
 
             for item in items {
                 switch item {
                 case .typeDef(let typeDefNode):
-                    let typeDef = typeDefNode.syntax
-                    declEncoder.output.append(TypeDeclTag.type.rawValue)
-                    try encodeTypeDefBody(typeDef.body, namedTypes: localNamedTypes, encoder: &declEncoder)
-                    localNamedTypes[typeDef.name.text] = nextTypeIndex
-                    nextTypeIndex += 1
-                    declCount += 1
-
-                    declEncoder.output.append(TypeDeclTag.export.rawValue)
-                    encodeImportExportName(typeDef.name.text, encoder: &declEncoder)
-                    declEncoder.output.append(ExternDescKind.type.rawValue)
-                    declEncoder.output.append(TypeBoundOpcode.eq.rawValue)
-                    declEncoder.writeUnsignedLEB128(localNamedTypes[typeDef.name.text]!)
-                    declCount += 1
+                    try encodeNamedType(typeDefNode.syntax, scope: &scope)
 
                 case .function(let funcNode):
                     let funcSyntax = funcNode.syntax
-                    let typeIdx = nextTypeIndex
-                    declEncoder.output.append(TypeDeclTag.type.rawValue)
-                    try encodeFuncType(funcSyntax.function, namedTypes: localNamedTypes, encoder: &declEncoder)
-                    nextTypeIndex += 1
-                    declCount += 1
-
-                    declEncoder.output.append(TypeDeclTag.export.rawValue)
-                    encodeImportExportName(funcSyntax.name.text, encoder: &declEncoder)
-                    declEncoder.output.append(ExternDescKind.function.rawValue)
-                    declEncoder.writeUnsignedLEB128(typeIdx)
-                    declCount += 1
+                    let typeIdx = try encodeFuncTypeDeclaration(funcSyntax.function, scope: &scope)
+                    scope.declareExtern(
+                        tag: TypeDeclTag.export.rawValue, name: funcSyntax.name.text, kind: .function, index: typeIdx)
 
                 case .use:
                     throw Error.unsupportedFeature("use in interface")
@@ -299,15 +297,29 @@
             }
 
             encoder.output.append(DefinedTypeOpcode.instanceType.rawValue)  // 0x42
-            encoder.writeUnsignedLEB128(declCount)
-            encoder.output.append(contentsOf: declEncoder.output)
+            encoder.writeUnsignedLEB128(scope.count)
+            encoder.output.append(contentsOf: scope.encoder.output)
         }
 
         // MARK: - Function type encoding
 
+        /// Declares the anonymous types `function` uses, then the function type itself.
+        private static func encodeFuncTypeDeclaration(
+            _ function: FunctionSyntax, scope: inout DeclarationScope
+        ) throws -> UInt32 {
+            for param in function.parameters { try scope.hoist(param.type) }
+            switch function.results {
+            case .anon(let type): try scope.hoist(type)
+            case .named(let params): for param in params { try scope.hoist(param.type) }
+            }
+            return try scope.declareType { scope, body in
+                try encodeFuncType(function, scope: scope, encoder: &body)
+            }
+        }
+
         private static func encodeFuncType(
             _ function: FunctionSyntax,
-            namedTypes: [String: UInt32],
+            scope: DeclarationScope,
             encoder: inout Encoder
         ) throws {
             encoder.output.append(DefinedTypeOpcode.funcSync.rawValue)  // 0x40
@@ -316,29 +328,30 @@
             encoder.writeUnsignedLEB128(UInt32(function.parameters.count))
             for param in function.parameters {
                 encoder.encode(param.name.text)
-                try encodeValType(param.type, namedTypes: namedTypes, encoder: &encoder)
+                try encodeValType(param.type, scope: scope, encoder: &encoder)
             }
 
             // Results
             switch function.results {
             case .anon(let type):
                 encoder.output.append(ResultMarker.hasResult.rawValue)  // 0x00
-                try encodeValType(type, namedTypes: namedTypes, encoder: &encoder)
+                try encodeValType(type, scope: scope, encoder: &encoder)
             case .named(let params):
                 encoder.output.append(ResultMarker.namedResults.rawValue)  // 0x01
                 encoder.writeUnsignedLEB128(UInt32(params.count))
                 for param in params {
                     encoder.encode(param.name.text)
-                    try encodeValType(param.type, namedTypes: namedTypes, encoder: &encoder)
+                    try encodeValType(param.type, scope: scope, encoder: &encoder)
                 }
             }
         }
 
         // MARK: - Value type encoding
 
+        /// Writes a `valtype`: a primitive opcode, or the s33 index of a named or hoisted type.
         private static func encodeValType(
             _ typeRepr: TypeReprSyntax,
-            namedTypes: [String: UInt32],
+            scope: DeclarationScope,
             encoder: inout Encoder
         ) throws {
             switch typeRepr {
@@ -359,8 +372,9 @@
 
             // Named type reference
             case .name(let id):
-                if let idx = namedTypes[id.text] {
-                    encoder.writeUnsignedLEB128(idx)
+                if let idx = scope.namedTypes[id.text] {
+                    // A valtype's type index is an s33; see `ComponentEncoder.encodeValType`.
+                    encoder.writeSignedLEB128(Int64(idx))
                 } else {
                     switch id.text {
                     case "f32": encoder.output.append(PrimitiveValTypeOpcode.float32.rawValue)
@@ -370,26 +384,44 @@
                     }
                 }
 
-            // Composite inline types
+            // Composite types, declared beforehand by `DeclarationScope.hoist`
+            case .list, .option, .result, .tuple:
+                guard let index = scope.anonymousTypes[typeRepr] else {
+                    throw Error.unsupportedFeature("composite type \(typeRepr) was not declared before use")
+                }
+                encoder.writeSignedLEB128(Int64(index))
+
+            case .handle, .future, .stream:
+                throw Error.unsupportedFeature("handle/future/stream types not yet supported")
+            }
+        }
+
+        /// Writes the `defvaltype` of a composite type, whose element types are valtypes.
+        private static func encodeComposite(
+            _ typeRepr: TypeReprSyntax,
+            scope: DeclarationScope,
+            encoder: inout Encoder
+        ) throws {
+            switch typeRepr {
             case .list(let elem):
                 encoder.output.append(CompositeValTypeOpcode.list.rawValue)
-                try encodeValType(elem, namedTypes: namedTypes, encoder: &encoder)
+                try encodeValType(elem, scope: scope, encoder: &encoder)
 
             case .option(let inner):
                 encoder.output.append(CompositeValTypeOpcode.option.rawValue)
-                try encodeValType(inner, namedTypes: namedTypes, encoder: &encoder)
+                try encodeValType(inner, scope: scope, encoder: &encoder)
 
             case .result(let resultSyntax):
                 encoder.output.append(CompositeValTypeOpcode.result.rawValue)
                 if let ok = resultSyntax.ok {
                     encoder.output.append(OptionalMarker.present.rawValue)
-                    try encodeValType(ok, namedTypes: namedTypes, encoder: &encoder)
+                    try encodeValType(ok, scope: scope, encoder: &encoder)
                 } else {
                     encoder.output.append(OptionalMarker.absent.rawValue)
                 }
                 if let err = resultSyntax.error {
                     encoder.output.append(OptionalMarker.present.rawValue)
-                    try encodeValType(err, namedTypes: namedTypes, encoder: &encoder)
+                    try encodeValType(err, scope: scope, encoder: &encoder)
                 } else {
                     encoder.output.append(OptionalMarker.absent.rawValue)
                 }
@@ -398,19 +430,38 @@
                 encoder.output.append(CompositeValTypeOpcode.tuple.rawValue)
                 encoder.writeUnsignedLEB128(UInt32(elems.count))
                 for elem in elems {
-                    try encodeValType(elem, namedTypes: namedTypes, encoder: &encoder)
+                    try encodeValType(elem, scope: scope, encoder: &encoder)
                 }
 
-            case .handle, .future, .stream:
-                throw Error.unsupportedFeature("handle/future/stream types not yet supported")
+            default:
+                // A primitive or a name is a valtype, which a `defvaltype` may hold as well.
+                try encodeValType(typeRepr, scope: scope, encoder: &encoder)
             }
         }
 
         // MARK: - Type definition body encoding
 
+        /// Declares the anonymous types a named type's body uses.
+        private static func hoistTypeDefBody(_ body: TypeDefBodySyntax, scope: inout DeclarationScope) throws {
+            switch body {
+            case .record(let recordSyntax):
+                for field in recordSyntax.fields { try scope.hoist(field.type) }
+            case .variant(let variantSyntax):
+                for variantCase in variantSyntax.cases {
+                    if let type = variantCase.type { try scope.hoist(type) }
+                }
+            case .alias(let aliasSyntax):
+                // The alias's own composite is the declaration being made; only what it holds
+                // needs declaring first.
+                try scope.hoist(aliasSyntax.typeRepr, includingSelf: false)
+            case .enum, .flags, .resource, .union:
+                break
+            }
+        }
+
         private static func encodeTypeDefBody(
             _ body: TypeDefBodySyntax,
-            namedTypes: [String: UInt32],
+            scope: DeclarationScope,
             encoder: inout Encoder
         ) throws {
             switch body {
@@ -419,7 +470,7 @@
                 encoder.writeUnsignedLEB128(UInt32(recordSyntax.fields.count))
                 for field in recordSyntax.fields {
                     encoder.encode(field.name.text)
-                    try encodeValType(field.type, namedTypes: namedTypes, encoder: &encoder)
+                    try encodeValType(field.type, scope: scope, encoder: &encoder)
                 }
 
             case .enum(let enumSyntax):
@@ -443,7 +494,7 @@
                     encoder.encode(variantCase.name.text)
                     if let type = variantCase.type {
                         encoder.output.append(OptionalMarker.present.rawValue)
-                        try encodeValType(type, namedTypes: namedTypes, encoder: &encoder)
+                        try encodeValType(type, scope: scope, encoder: &encoder)
                     } else {
                         encoder.output.append(OptionalMarker.absent.rawValue)
                     }
@@ -451,7 +502,7 @@
                 }
 
             case .alias(let aliasSyntax):
-                try encodeValType(aliasSyntax.typeRepr, namedTypes: namedTypes, encoder: &encoder)
+                try encodeComposite(aliasSyntax.typeRepr, scope: scope, encoder: &encoder)
 
             case .resource:
                 throw Error.unsupportedFeature("resource types not yet supported")

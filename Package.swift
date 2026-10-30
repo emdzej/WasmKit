@@ -296,6 +296,10 @@ let package = Package(
                     name: "ComponentModel",
                     condition: .when(traits: ["ComponentModel"])
                 ),
+                .target(
+                    name: "WasmTools",
+                    condition: .when(traits: ["ComponentModel"])
+                ),
             ],
             swiftSettings: swiftSettings
         ),

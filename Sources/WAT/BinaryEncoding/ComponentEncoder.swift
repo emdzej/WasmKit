@@ -1419,11 +1419,12 @@
                     break
                 }
             }
-            // Otherwise encode as type index (with remapping)
+            // Otherwise encode as type index (with remapping), an s33: as unsigned LEB128, 64
+            // would come out as 0x40, which reads back as -64.
             guard let mappedIndex = indexMapping[Int(typeIndex.rawValue)] else {
                 throw WatParserError("Type index \(typeIndex.rawValue) not found in index mapping", location: nil)
             }
-            encoder.writeUnsignedLEB128(UInt32(mappedIndex))
+            encoder.writeSignedLEB128(Int64(mappedIndex))
         }
 
         /// Encode a component value type
