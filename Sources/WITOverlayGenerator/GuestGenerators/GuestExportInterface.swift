@@ -43,7 +43,7 @@ struct GuestExportInterface: ASTVisitor {
                     interfaceName: interface.name.text,
                     id: namedFunction.name.text
                 ),
-                implementation: "\(protocolName)Impl.\(try ConvertCase.camelCase(namedFunction.name))"
+                implementation: "\(protocolName)Impl.\(try SwiftName.makeName(namedFunction.name))"
             ).print(
                 typeResolver: {
                     try context.resolveType($0, in: interface, sourceFile: sourceFile, contextPackage: packageUnit)

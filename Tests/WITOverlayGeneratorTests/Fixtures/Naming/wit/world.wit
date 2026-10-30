@@ -19,8 +19,28 @@ world naming-test-world {
         if, for,
     }
 
+    // Type names that are Swift keywords, and fields and functions named `self` and `init`.
+    record self {
+        self: u32,
+        %type: u32,
+    }
+
+    enum %type {
+        a, b,
+    }
+
+    variant any {
+        self(u32), none,
+    }
+
+    record protocol {
+        init: u32,
+    }
+
     export roundtrip-record: func(v: keywording-record) -> keywording-record
     export roundtrip-enum: func(v: keywording-enum) -> keywording-enum
     export roundtrip-variant: func(v: keywording-variant) -> keywording-variant
     export roundtrip-flags: func(v: keywording-flags) -> keywording-flags
+    export init: func(self: self) -> self
+    export class: func(t: %type, a: any, p: protocol) -> protocol
 }

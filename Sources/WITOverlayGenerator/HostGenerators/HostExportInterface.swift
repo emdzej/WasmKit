@@ -11,7 +11,7 @@ struct HostExportInterface: ASTVisitor {
 
     var structName: String {
         get throws {
-            return try ConvertCase.pascalCase(interface.name)
+            return SwiftName.makeTypeName(interface.name)
         }
     }
 

@@ -45,7 +45,32 @@ extension Identifier {
             throw ParseError(description: "an identifier expected but got \(token.kind)")
         }
 
+        try validateKebabCase(text)
         return Identifier(text: text, textRange: token.textRange)
+    }
+
+    /// Checks that `text` is a `label` as the component model's explainer defines it: words of
+    /// ASCII letters and digits separated by single dashes, each all lowercase or all uppercase,
+    /// the first starting with a letter. Empty words are rejected too, as wasm-tools does.
+    static func validateKebabCase(_ text: String) throws {
+        guard !text.isEmpty else {
+            throw ParseError(description: "identifier must have at least one character")
+        }
+        for (index, word) in text.split(separator: "-", omittingEmptySubsequences: false).enumerated() {
+            guard let first = word.unicodeScalars.first, index > 0 || ("a"..."z").contains(first) || ("A"..."Z").contains(first)
+            else {
+                throw ParseError(description: "`\(text)` is not in kebab case")
+            }
+            var isUppercase: Bool?
+            for ch in word.unicodeScalars {
+                switch ch {
+                case "0"..."9": continue
+                case "a"..."z" where isUppercase != true: isUppercase = false
+                case "A"..."Z" where isUppercase != false: isUppercase = true
+                default: throw ParseError(description: "`\(text)` is not in kebab case")
+                }
+            }
+        }
     }
 }
 

@@ -20,7 +20,7 @@ struct HostWorldGenerator: ASTVisitor {
         try printer.write(
             line: """
 
-                struct \(ConvertCase.pascalCase(world.name)) {
+                struct \(SwiftName.makeTypeName(world.name)) {
                     let instance: WasmKit.Instance
 
                     static func link(to imports: inout WasmKit.Imports, store: WasmKit.Store) {

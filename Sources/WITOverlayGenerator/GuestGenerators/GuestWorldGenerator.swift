@@ -45,7 +45,7 @@ struct WorldGenerator: ASTVisitor {
                 function: function,
                 definitionMapping: definitionMapping,
                 name: .world(name.text),
-                implementation: "\(protocolName)Impl.\(try ConvertCase.camelCase(name))"
+                implementation: "\(protocolName)Impl.\(try SwiftName.makeName(name))"
             ).print(
                 typeResolver: {
                     try context.resolveType($0, in: world, sourceFile: sourceFile, contextPackage: packageUnit)

@@ -45,7 +45,7 @@ extension StaticCanonicalLifting {
 
     func liftRecord(fields: [Operand], type: WITRecord) throws -> Operand {
         let arguments = zip(fields, type.fields).map { operand, field in
-            (ConvertCase.camelCase(kebab: field.name), operand)
+            (SwiftName.makeName(kebab: field.name), operand)
         }
         let swiftTypeName = try definitionMapping.lookupSwiftName(record: type)
         return .call(swiftTypeName, arguments: arguments)

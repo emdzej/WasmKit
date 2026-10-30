@@ -38,9 +38,9 @@ struct SignatureTranslation {
         case .string: return "String"
         case .name(let identifier):
             if let (interface, package) = interfaceContext {
-                return try typeNamespace(packageName: package.packageName, interface: interface.name) + "." + ConvertCase.pascalCase(identifier)
+                return try typeNamespace(packageName: package.packageName, interface: interface.name) + "." + SwiftName.makeTypeName(identifier)
             }
-            return try ConvertCase.pascalCase(identifier)
+            return SwiftName.makeTypeName(identifier)
         case .list(let typeRepr):
             return try "[\(convertType(typeRepr))]"
         case .tuple(let array):

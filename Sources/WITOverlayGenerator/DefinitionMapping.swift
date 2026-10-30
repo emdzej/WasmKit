@@ -86,11 +86,11 @@ private func deriveQualifiedSwiftName(
 ) throws -> String {
     switch parent {
     case .interface(let id, .package(let packageName)):
-        return try typeNamespace(packageName: packageName, interface: id) + "." + ConvertCase.pascalCase(kebab: name)
+        return try typeNamespace(packageName: packageName, interface: id) + "." + SwiftName.makeTypeName(kebab: name)
     case .interface(let id, parent: .world):
         return id.text + ConvertCase.pascalCase(kebab: name)
     case .world:
-        return ConvertCase.pascalCase(kebab: name)
+        return SwiftName.makeTypeName(kebab: name)
     }
 }
 

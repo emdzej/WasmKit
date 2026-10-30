@@ -19,6 +19,21 @@ enum SwiftName {
     static func makeName(kebab: String) -> String {
         makeName(ConvertCase.camelCase(kebab: kebab))
     }
+
+    /// Make a Swift type name from the given kebab-case text.
+    ///
+    /// A type named after a keyword gets a trailing underscore rather than backticks: `Self`
+    /// and `Any` cannot be declared at all, a nested type cannot be named `Type` or
+    /// `Protocol`, and a qualified reference such as ``Outer.`Type` `` in an expression means
+    /// the metatype even when escaped.
+    static func makeTypeName(kebab: String) -> String {
+        let name = ConvertCase.pascalCase(kebab: kebab)
+        return keywordSet.contains(name) ? name + "_" : name
+    }
+
+    static func makeTypeName(_ identifier: Identifier) -> String {
+        makeTypeName(kebab: identifier.text)
+    }
 }
 
 /// List of Swift keywords.

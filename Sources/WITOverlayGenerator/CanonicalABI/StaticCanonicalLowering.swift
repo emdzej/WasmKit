@@ -80,18 +80,19 @@ extension StaticCanonicalLowering {
         )
     }
 
+    /// - Parameter fieldNames: Each field's kebab-case name, or a tuple element's index.
     private func lowerRecordLike(_ value: Operand, fieldNames: [String], temporaryVariablePrefix: String) -> [Operand] {
         var lowered: [Operand] = []
         for fieldName in fieldNames {
             let fieldVar = builder.variable(temporaryVariablePrefix + ConvertCase.pascalCase(kebab: fieldName))
-            printer.write(line: "let \(fieldVar) = \(value).\(fieldName)")
+            printer.write(line: "let \(fieldVar) = \(value).\(SwiftName.makeName(kebab: fieldName))")
             lowered.append(.variable(fieldVar))
         }
         return lowered
     }
     func lowerRecord(_ value: Operand, type: WITRecord) -> [Operand] {
         return lowerRecordLike(
-            value, fieldNames: type.fields.map { ConvertCase.camelCase(kebab: $0.name) },
+            value, fieldNames: type.fields.map(\.name),
             temporaryVariablePrefix: "record"
         )
     }

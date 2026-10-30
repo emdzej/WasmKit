@@ -13,20 +13,7 @@ wabt 1.0.42.
 
 ## Correctness
 
-### 1. WIT overlay generator misses some Swift keywords
-
-- **Where:** `Sources/WITOverlayGenerator`. `SwiftName.makeName` is used for most names, but not
-  for:
-  - type names from `ConvertCase.pascalCase`: `record self` emits `struct Self`
-    (`TypeDefinition.swift`, `DefinitionMapping.swift`, `SignatureTranslation.swift`);
-  - function names: `init` emits `Impl.init(...)` (`GuestExportInterface.swift:46`,
-    `HostExportFunction.swift`);
-  - member access: a field `self` emits `result.self` (`StaticCanonicalLowering.swift`,
-    `StaticCanonicalLifting.swift`).
-- **Fix:** escape after case conversion everywhere. Test by type-checking the generated Swift.
-- **Also:** WIT names are not validated as kebab-case, so `%--` yields an empty Swift identifier.
-
-### 2. GC type canonicalization ignores recursion groups
+### 1. GC type canonicalization ignores recursion groups
 
 - **Where:** `Sources/WasmKit/TypeCanonicalization.swift` and `TypeMatching.swift`.
 - **Problem:** finality and supertypes are ignored too. Types in `(rec (type $a (func)) (type $b (func)))`
@@ -34,7 +21,7 @@ wabt 1.0.42.
 - **Fix:** implement iso-recursive canonicalization, or reject non-trivial rec groups and `sub`
   declarations until GC execution exists. Mind the tests in `Tests/WasmKitTests/ExtraSuite/gc`.
 
-### 3. Smaller items
+### 2. Smaller items
 
 - **Shared memory growth:** `SharedMemoryStorage.grow` turns a resource-limiter error into `-1`,
   and calls the limiter while holding `growLock`. The other memory backends propagate the error.
@@ -62,7 +49,7 @@ wabt 1.0.42.
 
 ## Performance
 
-### 4. SIMD still dispatches through one handler
+### 3. SIMD still dispatches through one handler
 
 - **Where:** `Sources/WasmKit/Execution/Instructions/SIMDCore.swift`.
 - **Problem:** every SIMD instruction decodes `SIMDOpcode` and switches on it, then switches again
@@ -70,7 +57,7 @@ wabt 1.0.42.
 - **Fix:** generate one instruction per operation in `Utilities/Sources/VMGen.swift` and
   `VMSpec`, working on `SIMD16<UInt8>`, `SIMD4<Float>` and so on via `V128Storage`.
 
-### 5. WASI I/O
+### 4. WASI I/O
 
 - **Vectored I/O:** `Sources/WASI/Platform/File.swift` makes one syscall per buffer. Use
   `readv`/`writev`/`preadv`/`pwritev` behind `GuestBuffers.transfer`, keeping its semantics:
@@ -81,7 +68,7 @@ wabt 1.0.42.
 - **Opening under the lock:** `path_open` holds the global `fdTable` lock while opening, so
   opening a FIFO blocks every other guest thread. Open outside the lock and reserve the slot first.
 
-### 6. Component calls allocate a stack each
+### 5. Component calls allocate a stack each
 
 - **Where:** `ComponentFunction.invoke` in `ComponentInstance.swift` allocates a 512 KiB
   `ExecutionStack` per call. (`realloc` inside one call already reuses one.)

@@ -35,7 +35,11 @@ class SourcePrinter {
 final class SwiftFunctionBuilder {
     private var variables: Set<String> = []
 
+    /// A new variable name based on `name`, which may be an escaped identifier.
     func variable(_ name: String) -> String {
+        // A name built from an escaped one, such as "`self`Lowered", drops the backticks.
+        var name = name.replacingOccurrences(of: "`", with: "")
+        if SwiftName.keywordSet.contains(name) { name += "_" }
         if variables.insert(name).inserted {
             return name
         }

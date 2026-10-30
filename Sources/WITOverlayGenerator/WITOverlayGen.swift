@@ -102,7 +102,7 @@ public func generateGuestExportInterface(
                 interfaceName: interface.name.text,
                 id: namedFunction.name.text
             ),
-            implementation: try ConvertCase.camelCase(namedFunction.name)
+            implementation: try SwiftName.makeName(namedFunction.name)
         )
         try guestExport.print(typeResolver: typeResolver, printer: printer)
     }

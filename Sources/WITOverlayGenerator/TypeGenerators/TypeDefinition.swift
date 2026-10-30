@@ -18,30 +18,37 @@ struct TypeDefinition {
     func print(printer: SourcePrinter, signatureTranslation: SignatureTranslation, typeDef: SyntaxNode<TypeDefSyntax>) throws {
         switch typeDef.body {
         case .record(let record):
-            try printer.write(line: "\(accessLevel) struct \(ConvertCase.pascalCase(typeDef.name)) {")
+            try printer.write(line: "\(accessLevel) struct \(SwiftName.makeTypeName(typeDef.name)) {")
             try printer.indent {
                 for field in record.fields {
                     try printer.write(line: "\(accessLevel) var \(SwiftName.makeName(field.name)): \(signatureTranslation.convertType(field.type))")
                 }
 
+                // A parameter named `self` would shadow the instance, so it is called `self_` inside.
+                func parameterName(_ field: FieldSyntax) throws -> String {
+                    let name = try ConvertCase.camelCase(field.name)
+                    return name == "self" ? "self_" : SwiftName.makeName(name)
+                }
                 try printer.write(
                     line: "\(accessLevel) init("
                         + record.fields.map { field in
-                            try "\(SwiftName.makeName(field.name)): \(signatureTranslation.convertType(field.type))"
+                            let label = try SwiftName.makeName(field.name)
+                            let name = try parameterName(field)
+                            return try "\(label == name ? label : "\(label) \(name)"): \(signatureTranslation.convertType(field.type))"
                         }.joined(separator: ", ") + ") {")
                 try printer.indent {
                     for field in record.fields {
-                        try printer.write(line: "self.\(SwiftName.makeName(field.name)) = \(SwiftName.makeName(field.name))")
+                        try printer.write(line: "self.\(SwiftName.makeName(field.name)) = \(parameterName(field))")
                     }
                 }
                 printer.write(line: "}")
             }
             printer.write(line: "}")
         case .alias(let typeAlias):
-            try printer.write(line: "\(accessLevel) typealias \(ConvertCase.pascalCase(typeDef.name)) = \(signatureTranslation.convertType(typeAlias.typeRepr))")
+            try printer.write(line: "\(accessLevel) typealias \(SwiftName.makeTypeName(typeDef.name)) = \(signatureTranslation.convertType(typeAlias.typeRepr))")
         case .enum(let enumType):
             let discriminantType = CanonicalABI.discriminantType(numberOfCases: UInt32(enumType.cases.count))
-            try printer.write(line: "\(accessLevel) enum \(ConvertCase.pascalCase(typeDef.name)): \(discriminantType.swiftTypeName) {")
+            try printer.write(line: "\(accessLevel) enum \(SwiftName.makeTypeName(typeDef.name)): \(discriminantType.swiftTypeName) {")
             try printer.indent {
                 for enumCase in enumType.cases {
                     try printer.write(line: "case \(SwiftName.makeName(enumCase.name))")
@@ -55,7 +62,7 @@ struct TypeDefinition {
             }
             printer.write(line: "}")
         case .variant(let variant):
-            try printer.write(line: "\(accessLevel) enum \(ConvertCase.pascalCase(typeDef.name)) {")
+            try printer.write(line: "\(accessLevel) enum \(SwiftName.makeTypeName(typeDef.name)) {")
             try printer.indent {
                 for variantCase in variant.cases {
                     var caseDef = try "case \(SwiftName.makeName(variantCase.name))"
@@ -67,7 +74,7 @@ struct TypeDefinition {
             }
             printer.write(line: "}")
         case .flags(let flags):
-            let typeName = try ConvertCase.pascalCase(typeDef.name)
+            let typeName = SwiftName.makeTypeName(typeDef.name)
             printer.write(line: "\(accessLevel) struct \(typeName): Swift.OptionSet {")
             try printer.indent {
                 let rawValueType = CanonicalABI.rawType(ofFlags: flags.flags.count)
@@ -180,8 +187,8 @@ struct TypeDefinition {
             interfaceName = name
         }
         for name in use.names {
-            let newName = try ConvertCase.pascalCase(name.asName ?? name.name)
-            try printer.write(line: "\(accessLevel) typealias \(newName) = \(typeNamespace(packageName: packageName, interface: interfaceName)).\(ConvertCase.pascalCase(name.name))")
+            let newName = SwiftName.makeTypeName(name.asName ?? name.name)
+            try printer.write(line: "\(accessLevel) typealias \(newName) = \(typeNamespace(packageName: packageName, interface: interfaceName)).\(SwiftName.makeTypeName(name.name))")
         }
     }
 }

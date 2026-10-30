@@ -178,8 +178,8 @@ struct GuestExportFunction {
         try printer.indent {
             for (i, parameter) in function.parameters.enumerated() {
                 let isEnd = i == function.parameters.count - 1
-                let paramName = try ConvertCase.camelCase(parameter.name)
-                printer.write(line: "\(paramName): \(paramName)\(isEnd ? "" : ",")")
+                let label = try ConvertCase.camelCase(parameter.name)
+                printer.write(line: "\(label): \(try SwiftName.makeName(parameter.name))\(isEnd ? "" : ",")")
             }
         }
         printer.write(line: ")")
@@ -265,7 +265,7 @@ struct GuestExportFunction {
 
 extension CanonicalABI.SignatureSegment {
     fileprivate var swiftLabelName: String {
-        ConvertCase.camelCase(label.map(ConvertCase.camelCase))
+        SwiftName.makeName(ConvertCase.camelCase(label.map(ConvertCase.camelCase)))
     }
 }
 
