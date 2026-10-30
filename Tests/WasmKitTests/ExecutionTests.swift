@@ -56,6 +56,42 @@ struct ExecutionTests {
         #expect(results == [.i32(42)])
     }
 
+    /// Calls the host makes reuse the stacks their store keeps, and a call made while another
+    /// runs, from a host function, gets a stack of its own.
+    @Test
+    func callsReuseTheStoresStacks() throws {
+        let module = try parseWasm(
+            bytes: wat2wasm(
+                """
+                (module
+                    (import "host" "callback" (func $callback (param i32) (result i32)))
+                    (func (export "f") (param i32) (result i32) (call $callback (local.get 0)))
+                    (func (export "g") (param i32) (result i32) (i32.add (local.get 0) (i32.const 1)))
+                )
+                """
+            )
+        )
+        let store = Store(engine: Engine())
+        var g: Function?
+        let callback = Function(store: store, parameters: [.i32], results: [.i32]) { _, arguments in
+            try g!(arguments)
+        }
+        let instance = try module.instantiate(store: store, imports: ["host": ["callback": callback]])
+        g = instance.exports[function: "g"]
+        let f = try #require(instance.exports[function: "f"])
+
+        #expect(try f([.i32(1)]) == [.i32(2)])
+        let first = try #require(store.executionStacks.take())
+        let second = try #require(store.executionStacks.take())
+        #expect(first != second)
+        #expect(store.executionStacks.take() == nil)
+        #expect(store.executionStacks.give(first))
+        #expect(store.executionStacks.give(second))
+
+        #expect(try f([.i32(41)]) == [.i32(42)])
+        #expect(try g!([.i32(0)]) == [.i32(1)])
+    }
+
     /// A raw host function that leaves a result unwritten, or writes one of another type, traps
     /// when called from Wasm as when called from the host, rather than crashing or storing
     /// placeholder bits as a reference.

@@ -323,7 +323,7 @@
             let coreArguments = try instance.withoutLeaving { try context.lowerArguments(arguments, of: type) }
 
             // 2. Call the core function.
-            var stack = ExecutionStack(engine: store.engine)
+            var stack = ExecutionStack(pool: store.executionStacks)
             let coreResults = try coreFunction.invoke(coreArguments, store: store, stack: &stack)
 
             // 3. Lift the results, from core values or through the pointer the callee returned.

@@ -42,12 +42,6 @@ wabt 1.0.42.
 - **Opening under the lock:** `path_open` holds the global `fdTable` lock while opening, so
   opening a FIFO blocks every other guest thread. Open outside the lock and reserve the slot first.
 
-### 4. Component calls allocate a stack each
-
-- **Where:** `ComponentFunction.invoke` in `ComponentInstance.swift` allocates a 512 KiB
-  `ExecutionStack` per call. (`realloc` inside one call already reuses one.)
-- **Fix:** keep a stack per store, or pass one in.
-
 ## Notes
 
 - **GC types:** `TypeCanonicalizer` (`Sources/WasmKit/TypeCanonicalization.swift`) identifies a

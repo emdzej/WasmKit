@@ -135,7 +135,7 @@ public struct Function: Equatable {
     /// - Returns: The results of the function invocation.
     @discardableResult
     public func invoke(_ arguments: [Value] = []) throws -> [Value] {
-        var stack = ExecutionStack(engine: store.engine)
+        var stack = ExecutionStack(pool: store.executionStacks)
         return try handle.invoke(arguments, store: store, stack: &stack)
     }
 

@@ -344,7 +344,7 @@
                 throw CanonicalABIError(description: "\(byteCount) bytes do not fit in guest memory")
             }
             if stack == nil {
-                stack = ExecutionStack(engine: store.engine)
+                stack = ExecutionStack(pool: store.executionStacks)
             }
             let results = try realloc.invoke(
                 [.i32(0), .i32(0), .i32(UInt32(alignment)), .i32(size)], store: store, stack: &stack!)

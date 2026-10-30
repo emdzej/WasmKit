@@ -232,7 +232,7 @@ public struct Module: Sendable {
         // Step 17.
         if let startIndex = start {
             let startFunction = try instance.functions[validating: Int(startIndex)]
-            var stack = ExecutionStack(engine: store.engine)
+            var stack = ExecutionStack(pool: store.executionStacks)
             _ = try startFunction.invoke([], store: store, stack: &stack)
         }
 

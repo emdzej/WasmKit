@@ -97,11 +97,14 @@ public final class Store {
     let allocator: StoreAllocator
     /// The engine associated with this store.
     public let engine: Engine
+    /// Stacks for the calls made through this store.
+    let executionStacks: ExecutionStackPool
 
     /// Create a new store associated with the given engine.
     public init(engine: Engine) {
         self.engine = engine
         self.allocator = StoreAllocator(funcTypeInterner: engine.funcTypeInterner)
+        self.executionStacks = ExecutionStackPool(engine: engine)
         self.isFuelMetered = engine.configuration.fuelMetering
         self.epochCounter = UnsafePointer(engine.epochTicker.counter.address)
     }
