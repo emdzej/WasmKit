@@ -33,5 +33,10 @@ add_wasmkit_library(WASI
   WASIBridgeToHost.swift
 )
 
+# SwiftPM's default traits enable MultiThread; without it the fd table falls back to an
+# unsynchronized mutex, while the CMake-built CLI still runs wasi-threads guests.
+target_compile_options(WASI PRIVATE
+  $<$<COMPILE_LANGUAGE:Swift>:-DMultiThread>)
+
 target_link_wasmkit_libraries(WASI PUBLIC
   WasmTypes)

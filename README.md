@@ -156,8 +156,7 @@ $ swift test
 
 This project was originally developed by [@akkyie](https://github.com/akkyie), and is now maintained by the community.
 
-[^1]: On a 2020 Mac mini (M1, 16GB RAM) with Swift 5.10. Measured by `swift package resolve && swift package clean && time swift build --product PrintAdd`.
-License
+[^1]: On a 2020 Mac mini (M1, 16GB RAM) with Swift 5.10. Measured by `swift package resolve && swift package clean && time swift build --package-path Examples --product PrintAdd`.
 
 ## License
 

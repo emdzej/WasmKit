@@ -38,6 +38,7 @@ while let payload = try parser.parseNext() {
     case .codeSection(let codeSection): print("Code section: \(codeSection)")
     case .dataSection(let dataSection): print("Data section: \(dataSection)")
     case .dataCount(let count): print("Data count: \(count)")
+    case .tagSection(let tags): print("Tag section: \(tags)")
     }
 }
 ```
