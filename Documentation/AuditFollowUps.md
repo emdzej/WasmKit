@@ -15,11 +15,12 @@ wabt 1.0.42.
 
 ### 1. Smaller items
 
-- **Import type checks:** function and value types are checked, by structural equality as
-  wasm-tools does (`ComponentTypeMatching.swift`). Parameter names may differ unless the loader
-  is created with `importTypeChecking: .strict`, as wasmtime's linker allows. Not checked: the
-  types of imported values, components and core modules, and instance or component exports
-  nested inside an instance import's type.
+- **Import type checks:** function, value and core module types are checked
+  (`ComponentTypeMatching.swift`). Parameter names may differ unless the loader is created with
+  `importTypeChecking: .strict`, as wasmtime's linker allows. Not checked: the types of imported
+  values and components, and instance or component exports nested inside an instance import's
+  type. `wasmtime/import.wast` and `wasmtime/instance.wast` need exports the test harness's
+  `host` instance does not have yet (`ComponentResourceTests.SpectestHost`).
 
 ## Performance
 

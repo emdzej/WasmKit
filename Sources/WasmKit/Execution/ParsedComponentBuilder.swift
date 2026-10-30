@@ -328,10 +328,20 @@
             for importDef in imports {
                 let kind = try convertImportKind(importDef.externDesc)
                 var declaredType: ComponentTypeIndex?
-                if case .instance(let typeIndex) = importDef.externDesc {
+                var declaredModuleType: CoreModuleType?
+                switch importDef.externDesc {
+                case .instance(let typeIndex):
                     declaredType = ComponentTypeIndex(rawValue: Int(typeIndex))
+                case .coreModule(let typeIndex):
+                    if coreTypes.indices.contains(Int(typeIndex)), case .module(let type) = coreTypes[Int(typeIndex)] {
+                        declaredModuleType = type
+                    }
+                default:
+                    break
                 }
-                result.imports.append(ParsedComponentImport(name: importDef.name, kind: kind, declaredType: declaredType))
+                result.imports.append(
+                    ParsedComponentImport(
+                        name: importDef.name, kind: kind, declaredType: declaredType, declaredModuleType: declaredModuleType))
             }
 
             // Build exports

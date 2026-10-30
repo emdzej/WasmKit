@@ -238,3 +238,179 @@
     }
 
 #endif
+
+#if ComponentModel
+    import WasmTypes
+
+    // MARK: - Core module types
+
+    /// Checks that a module has the type a component declares for it, as wasmtime's linker does,
+    /// with its messages: the module exports at least what the type declares, each a subtype of
+    /// the declared one, and imports at most what the type declares, each a supertype.
+    ///
+    /// Function types compare by equality, with any concrete reference types in them compared by
+    /// their index in each type section.
+    struct CoreModuleTypeMatcher {
+        let module: Module
+
+        /// An import's or export's type, with function types resolved. A function type is `nil`
+        /// where the matcher does not know it, from an outer alias, and is then not checked.
+        enum ExternType {
+            case function(FunctionType?)
+            case table(TableType)
+            case memory(MemoryType)
+            case global(GlobalType)
+            case tag(FunctionType?)
+
+            var kind: String {
+                switch self {
+                case .function: return "func"
+                case .table: return "table"
+                case .memory: return "memory"
+                case .global: return "global"
+                case .tag: return "tag"
+                }
+            }
+        }
+
+        func match(_ declared: CoreModuleType) throws {
+            // The module type's own type index space.
+            var types: [FunctionType?] = []
+            var declaredImports: [String: [String: ImportDescriptor]] = [:]
+            var declaredExports: [(name: String, descriptor: ImportDescriptor)] = []
+            for declaration in declared.declarations {
+                switch declaration {
+                case .type(.function(let type)): types.append(type)
+                case .type(.module): types.append(nil)
+                // An outer alias names a type of the enclosing component, which is not resolved.
+                case .alias: types.append(nil)
+                case .import(let entry): declaredImports[entry.module, default: [:]][entry.name] = entry.descriptor
+                case .exportDecl(let name, let descriptor): declaredExports.append((name, descriptor))
+                }
+            }
+            func declaredType(_ descriptor: ImportDescriptor) -> ExternType {
+                Self.externType(descriptor) { types.indices.contains(Int($0)) ? types[Int($0)] : nil }
+            }
+
+            for export in declaredExports {
+                guard let provided = module.exports.first(where: { $0.name == export.name }) else {
+                    throw ComponentTypeMismatch("module export `\(export.name)` not defined")
+                }
+                let expected = declaredType(export.descriptor)
+                let found = try externType(of: provided.descriptor)
+                guard expected.kind == found.kind else {
+                    throw ComponentTypeMismatch("expected \(expected.kind) found \(found.kind)")
+                }
+                if let detail = Self.mismatch(found, isSubtypeOf: expected) {
+                    throw ComponentTypeMismatch("export `\(export.name)` has the wrong type: \(detail)")
+                }
+            }
+
+            for entry in module.imports {
+                guard let descriptor = declaredImports[entry.module]?[entry.name] else {
+                    throw ComponentTypeMismatch("module import `\(entry.module)::\(entry.name)` not defined")
+                }
+                let required = Self.externType(entry.descriptor) { try? module.types.functionType(at: $0) }
+                let given = declaredType(descriptor)
+                guard required.kind == given.kind else {
+                    throw ComponentTypeMismatch("expected \(required.kind) found \(given.kind)")
+                }
+                // What the component gives must be a subtype of what the module needs.
+                if let detail = Self.mismatch(given, isSubtypeOf: required) {
+                    throw ComponentTypeMismatch("module import `\(entry.module)::\(entry.name)` has the wrong type: \(detail)")
+                }
+            }
+        }
+
+        private static func externType(
+            _ descriptor: ImportDescriptor, functionType: (TypeIndex) -> FunctionType?
+        ) -> ExternType {
+            switch descriptor {
+            case .function(let index): return .function(functionType(index))
+            case .table(let type): return .table(type)
+            case .memory(let type): return .memory(type)
+            case .global(let type): return .global(type)
+            case .tag(let index): return .tag(functionType(index))
+            }
+        }
+
+        /// The type of what the module exports.
+        private func externType(of descriptor: ExportDescriptor) throws -> ExternType {
+            func element<T>(_ array: [T], _ index: UInt32) throws -> T {
+                guard array.indices.contains(Int(index)) else {
+                    throw ComponentTypeMismatch("module export index \(index) out of range")
+                }
+                return array[Int(index)]
+            }
+            switch descriptor {
+            case .function(let index):
+                return .function(try? module.resolveFunctionType(index))
+            case .table(let index):
+                return .table(try element(module.tableTypes, index))
+            case .memory(let index):
+                return .memory(try element(module.memoryTypes, index))
+            case .global(let index):
+                let imported = module.imports.compactMap { entry -> GlobalType? in
+                    guard case .global(let type) = entry.descriptor else { return nil }
+                    return type
+                }
+                return .global(try element(imported + module.globals.map(\.type), index))
+            case .tag(let index):
+                return .tag(try? module.types.functionType(at: try element(module.tagTypes, index)))
+            }
+        }
+
+        /// Why `sub` is not a subtype of `sup`, which has the same kind, or `nil` if it is.
+        private static func mismatch(_ sub: ExternType, isSubtypeOf sup: ExternType) -> String? {
+            switch (sub, sup) {
+            case (.function(let subType), .function(let supType)), (.tag(let subType), .tag(let supType)):
+                guard let subType, let supType, subType != supType else { return nil }
+                return "expected type `\(describe(supType))`, found type `\(describe(subType))`"
+            case (.table(let subType), .table(let supType)):
+                guard subType.elementType == supType.elementType else {
+                    return "expected \(supType.elementType) elements, found \(subType.elementType)"
+                }
+                return limitsMismatch(
+                    subMin: subType.limits.min, subMax: subType.limits.max, supMin: supType.limits.min, supMax: supType.limits.max)
+            case (.memory(let subType), .memory(let supType)):
+                guard subType.shared == supType.shared, subType.isMemory64 == supType.isMemory64 else {
+                    return "the memories differ in whether they are shared or 64-bit"
+                }
+                return limitsMismatch(subMin: subType.min, subMax: subType.max, supMin: supType.min, supMax: supType.max)
+            case (.global(let subType), .global(let supType)):
+                guard subType.mutability != supType.mutability || subType.valueType != supType.valueType else { return nil }
+                return "expected global \(supType), found \(subType)"
+            default:
+                return "expected \(sup.kind) found \(sub.kind)"
+            }
+        }
+
+        /// Why limits `sub` do not fit in `sup`, at least its minimum and at most its maximum.
+        private static func limitsMismatch(subMin: UInt64, subMax: UInt64?, supMin: UInt64, supMax: UInt64?) -> String? {
+            guard subMin >= supMin else { return "expected a minimum of at least \(supMin), found \(subMin)" }
+            if let supMax {
+                guard let subMax else { return "expected a maximum of at most \(supMax), found none" }
+                guard subMax <= supMax else { return "expected a maximum of at most \(supMax), found \(subMax)" }
+            }
+            return nil
+        }
+
+        private static func describe(_ type: FunctionType) -> String {
+            var text = "(func"
+            if !type.parameters.isEmpty { text += " (param \(type.parameters.map(describe).joined(separator: " ")))" }
+            if !type.results.isEmpty { text += " (result \(type.results.map(describe).joined(separator: " ")))" }
+            return text + ")"
+        }
+
+        private static func describe(_ type: ValueType) -> String {
+            switch type {
+            case .i32: return "i32"
+            case .i64: return "i64"
+            case .f32: return "f32"
+            case .f64: return "f64"
+            case .v128: return "v128"
+            case .ref(let reference): return "\(reference)"
+            }
+        }
+    }
+#endif

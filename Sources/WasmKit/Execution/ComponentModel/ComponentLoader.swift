@@ -608,10 +608,17 @@
         /// instance is checked against
         public let declaredType: ComponentTypeIndex?
 
-        public init(name: String, kind: ParsedComponentImportKind, declaredType: ComponentTypeIndex? = nil) {
+        /// The type a core module import declares, which the provided module is checked against
+        public let declaredModuleType: CoreModuleType?
+
+        public init(
+            name: String, kind: ParsedComponentImportKind, declaredType: ComponentTypeIndex? = nil,
+            declaredModuleType: CoreModuleType? = nil
+        ) {
             self.name = name
             self.kind = kind
             self.declaredType = declaredType
+            self.declaredModuleType = declaredModuleType
         }
     }
 
@@ -756,6 +763,9 @@
                 try checkFunction(function, against: type, in: context.types, name: importDef.name)
                 context.componentFunctions.append(function)
             case (.module, .coreModule(let module)):
+                if let declared = importDef.declaredModuleType {
+                    try checkModule(module, against: declared, name: importDef.name)
+                }
                 context.coreModules.append(module)
             case (.component, .component(let definition)):
                 context.components.append(definition)
@@ -809,6 +819,15 @@
             }
         }
 
+        /// Checks that `module` has the module type `declared`.
+        private func checkModule(_ module: Module, against declared: CoreModuleType, name: String) throws {
+            do {
+                try CoreModuleTypeMatcher(module: module).match(declared)
+            } catch let mismatch as ComponentTypeMismatch {
+                throw ComponentLoaderError.mismatchedImportType(name: name, reason: mismatch.description)
+            }
+        }
+
         /// Checks that `function` has `type`, whose type indices resolve in `space`.
         private func checkFunction(
             _ function: InternalComponentFunction, against type: ComponentFuncType, in space: ComponentTypeSpace, name: String
@@ -830,12 +849,13 @@
             context: InstantiationContext
         ) throws {
             let exports = instance.exports
-            // The instance type's own type index space.
+            // The instance type's own type index spaces.
             let local = ComponentTypeSpace()
+            var localCoreTypes: [CoreTypeDef] = []
             for decl in declaration.declarations {
                 switch decl {
-                case .coreType:
-                    break
+                case .coreType(let type):
+                    localCoreTypes.append(type)
                 case .type(let type):
                     switch type {
                     case .definedValue(let type): local.append(.value(type))
@@ -876,6 +896,11 @@
                     guard provided.sortDescription == expected else {
                         throw ComponentLoaderError.incompatibleImport(
                             name: "\(name).\(export.name)", expected: expected, got: provided.sortDescription)
+                    }
+                    if case .coreModule(let typeIndex) = export.externDesc, case .coreModule(let module) = provided,
+                        localCoreTypes.indices.contains(Int(typeIndex)), case .module(let type) = localCoreTypes[Int(typeIndex)]
+                    {
+                        try checkModule(module, against: type, name: "\(name).\(export.name)")
                     }
                     if case .function(let typeIndex) = export.externDesc, case .function(let function) = provided,
                         case .function(let type) = try local.entry(ComponentTypeIndex(rawValue: Int(typeIndex)))
@@ -1043,6 +1068,16 @@
                 case .memory:
                     // Core memory aliases are resolved when needed (in canon options)
                     break
+                case .module:
+                    switch alias.source {
+                    case .componentInstanceExport(let instanceIndex, let name):
+                        guard case .coreModule(let module) = try componentInstanceExport(instanceIndex, name, context: context) else {
+                            throw ComponentLoaderError.instantiationFailed("Export '\(name)' of instance \(instanceIndex) is not a core module")
+                        }
+                        context.coreModules.append(module)
+                    case .outer, .coreInstanceExport:
+                        throw ComponentLoaderError.instantiationFailed("Core module aliases other than instance exports are not supported yet")
+                    }
                 default:
                     break
                 }

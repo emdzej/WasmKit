@@ -30,6 +30,13 @@
             try run("wasm-tools/resources.wast", instantiate: .withoutImports)
         }
 
+        /// wasmtime's tests of linking, including module types: the text format encoder here
+        /// cannot encode their instance and module types.
+        @Test(.enabled(if: available), arguments: ["wasmtime/modules.wast", "wasmtime/linking.wast"])
+        func wasmtimeLinking(_ path: String) throws {
+            try run(path, instantiate: .all)
+        }
+
         /// A host passes and receives handles to a component's resources and its own.
         @Test(.enabled(if: FileManager.default.fileExists(atPath: defaultWasmToolsPath)))
         func hostPassesHandles() throws {
@@ -188,6 +195,11 @@
                         let parsed = try component(command)
                         if instantiate == .all || parsed.imports.isEmpty {
                             current = try loader.instantiate(component: parsed, imports: imports)
+                            // As in wasmtime's harness, a named component's instance can be
+                            // imported by that name from then on.
+                            if let name = command.name, let current {
+                                imports.define(name: name.hasPrefix("$") ? String(name.dropFirst()) : name, instance: current)
+                            }
                         }
                     case "module_definition":
                         let parsed = try component(command)
