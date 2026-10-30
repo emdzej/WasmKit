@@ -15,9 +15,6 @@ wabt 1.0.42.
 
 ### 1. Smaller items
 
-- **`poll_oneoff`:** a memfs file or a directory makes the whole call fail with `EBADF`. Regular
-  files should be reported as ready, and an error should go in that subscription's event
-  (`Sources/WASI/Poll.swift`).
 - **Resource gaps:** a host that owns a guest-defined resource has no way to drop it, so its
   destructor never runs. The spec's reentrance checks (`may_enter`/`may_leave`) are not
   implemented, for resource destructors or otherwise.
@@ -26,8 +23,6 @@ wabt 1.0.42.
   is created with `importTypeChecking: .strict`, as wasmtime's linker allows. Not checked: the
   types of imported values, components and core modules, and instance or component exports
   nested inside an instance import's type.
-- **Possible dead code:** `WasmFunctionEntity.ensureCompiled` in `Function.swift` may duplicate
-  the `EntityHandle` version. Confirm which overload each call site resolves to before removing it.
 
 ## Performance
 

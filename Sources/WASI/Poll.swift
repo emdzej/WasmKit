@@ -1,12 +1,21 @@
 import WasmTypes
 
-extension FdTable {
-    fileprivate func hostFileDescriptor(fd: WASIAbi.Fd) throws -> CInt {
-        guard case .file(let entry) = self[fd], let hostFd = entry.hostFileDescriptor else {
-            throw WASIAbi.Errno.EBADF
-        }
+/// What a descriptor subscription waits on.
+private enum FdTarget {
+    /// A host descriptor, polled with the platform's `poll`.
+    case host(CInt)
+    /// A file with no host descriptor, such as one in memfs, which is always ready, as a regular
+    /// file is to `poll(2)`.
+    case ready
+    /// A descriptor that cannot be polled, such as a directory: its event reports the error.
+    case failed(WASIAbi.Errno)
+}
 
-        return hostFd
+extension FdTable {
+    fileprivate func pollTarget(fd: WASIAbi.Fd) -> FdTarget {
+        guard case .file(let entry) = self[fd] else { return .failed(.EBADF) }
+        guard let hostFd = entry.hostFileDescriptor else { return .ready }
+        return .host(hostFd)
     }
 }
 
@@ -30,6 +39,8 @@ func poll<M: GuestMemory>(
 ) throws -> WASIAbi.Size {
     var pollSubscriptions = [PlatformPoll.Subscription]()
     var fdUserData = [WASIAbi.UserData]()
+    // Events for descriptors that need no waiting, in subscription order.
+    var immediateEvents: [WASIAbi.Event] = []
     var clocks: [(userData: WASIAbi.UserData, remaining: WASIAbi.Timestamp)] = []
     // nil means no clock subscription, i.e. wait until a descriptor is ready.
     var timeout: WASIAbi.Timestamp?
@@ -50,19 +61,35 @@ func poll<M: GuestMemory>(
             let remaining = try clock.remainingDuration(now: clockReading)
             timeout = min(timeout ?? .max, remaining)
             clocks.append((userData: subscription.userData, remaining: remaining))
-        case .fdRead(let fd):
-            pollSubscriptions.append(.init(fd: try fdTable.hostFileDescriptor(fd: fd), waitWrite: false))
-            fdUserData.append(subscription.userData)
-        case .fdWrite(let fd):
-            pollSubscriptions.append(.init(fd: try fdTable.hostFileDescriptor(fd: fd), waitWrite: true))
-            fdUserData.append(subscription.userData)
+        case .fdRead(let fd), .fdWrite(let fd):
+            let eventType: WASIAbi.EventType
+            if case .fdWrite = union { eventType = .fdWrite } else { eventType = .fdRead }
+            switch fdTable.pollTarget(fd: fd) {
+            case .host(let hostFd):
+                pollSubscriptions.append(.init(fd: hostFd, waitWrite: eventType == .fdWrite))
+                fdUserData.append(subscription.userData)
+            case .ready:
+                immediateEvents.append(
+                    .init(userData: subscription.userData, error: .SUCCESS, eventType: eventType, fdReadWrite: .init(nBytes: 0, flags: [])))
+            case .failed(let errno):
+                immediateEvents.append(
+                    .init(userData: subscription.userData, error: errno, eventType: eventType, fdReadWrite: .init(nBytes: 0, flags: [])))
+            }
         case .unknown:
             throw WASIAbi.Errno.EINVAL
         }
     }
 
+    // A descriptor that is ready already means the call does not wait: the host descriptors are
+    // only checked, so they are reported too if they are ready.
+    if !immediateEvents.isEmpty {
+        timeout = 0
+    }
+
     let readyStates: [PlatformPoll.ReadyState]?
-    if pollSubscriptions.isEmpty, let timeout {
+    if pollSubscriptions.isEmpty, !immediateEvents.isEmpty {
+        readyStates = []
+    } else if pollSubscriptions.isEmpty, let timeout {
         // `PlatformPoll.poll` counts its timeout in whole milliseconds.
         try PlatformPoll.sleep(nanoseconds: timeout)
         readyStates = nil
@@ -70,6 +97,10 @@ func poll<M: GuestMemory>(
         readyStates = try PlatformPoll.poll(subscriptions: pollSubscriptions, timeoutNanoseconds: timeout)
     }
     var updatedEvents: WASIAbi.Size = 0
+    for event in immediateEvents {
+        try events.write(at: updatedEvents, event, to: memory)
+        updatedEvents += 1
+    }
     for (i, state) in (readyStates ?? []).enumerated() {
         guard !state.isEmpty else { continue }
         let eventIndex = updatedEvents

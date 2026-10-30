@@ -334,15 +334,6 @@ struct WasmFunctionEntity {
         self.index = index
     }
 
-    mutating func ensureCompiled(store: StoreRef) throws -> InstructionSequence {
-        switch code {
-        case .uncompiled(let code):
-            return try compile(store: store, code: code)
-        case .compiled(let iseq), .debuggable(_, let iseq):
-            return iseq
-        }
-    }
-
     @inline(never)
     mutating func compile(store: StoreRef, code: InternalUncompiledCode) throws -> InstructionSequence {
         let store = store.value

@@ -79,6 +79,61 @@ import WasmTypes
         return (try (0..<count).map { try output.read(at: $0, in: memory) }, elapsed)
     }
 
+    // MARK: - Descriptors without a host descriptor
+
+    /// fd 3 refers to `/a`, and fd 4 is `/a/file.txt`, a memfs file.
+    private func withMemoryFile(_ body: (WASIImplementation) throws -> Void) throws {
+        let fs = try MemoryFileSystem()
+        try fs.ensureDirectory(at: "/a")
+        try fs.addFile(at: "/a/file.txt", content: "content")
+        let bridge = try WASIBridgeToHost(fileSystem: .memory(fs).withPreopens([.init(guestPath: "/a", hostPath: "/a")]))
+        try bridge.runAndClose { bridge in
+            let fd = try bridge.underlying.path_open(
+                dirFd: 3, dirFlags: [], path: "file.txt", oflags: [], fsRightsBase: [.FD_READ, .FD_WRITE],
+                fsRightsInheriting: [], fdflags: [])
+            #expect(fd == 4)
+            try body(bridge.underlying)
+        }
+    }
+
+    private static func fdEvent(_ userData: WASIAbi.UserData, _ type: WASIAbi.EventType, error: WASIAbi.Errno = .SUCCESS) -> WASIAbi.Event {
+        .init(userData: userData, error: error, eventType: type, fdReadWrite: .init(nBytes: 0, flags: []))
+    }
+
+    /// A memfs file is always ready, as a regular file is, so the call does not wait for the clock.
+    @Test func aMemoryFileIsReadyAtOnce() throws {
+        try withMemoryFile { wasi in
+            let (events, elapsed) = try pollOneoff(
+                wasi,
+                [
+                    .init(userData: 1, union: .fdRead(4)),
+                    .init(userData: 2, union: .fdWrite(4)),
+                    Self.clock(3, .MONOTONIC, timeout: 10_000_000_000),
+                ])
+            #expect(events == [Self.fdEvent(1, .fdRead), Self.fdEvent(2, .fdWrite)])
+            #expect(elapsed < .seconds(5))
+        }
+    }
+
+    /// A descriptor that cannot be polled gets an error in its own event, rather than failing
+    /// the call.
+    @Test func aDescriptorThatCannotBePolledReportsAnError() throws {
+        try withMemoryFile { wasi in
+            let (events, _) = try pollOneoff(
+                wasi,
+                [
+                    .init(userData: 1, union: .fdRead(3)),  // a directory
+                    .init(userData: 2, union: .fdWrite(99)),  // not open
+                    .init(userData: 3, union: .fdRead(4)),
+                ])
+            #expect(
+                events == [
+                    Self.fdEvent(1, .fdRead, error: .EBADF), Self.fdEvent(2, .fdWrite, error: .EBADF), Self.fdEvent(3, .fdRead),
+                ])
+        }
+    }
+
+    // MARK: - Waiting
     // MARK: - Waiting
 
     @Test(.disabled(if: TestSupport.pollUnavailable, "poll is not available on this platform"), arguments: [WASIAbi.ClockId.MONOTONIC, .REALTIME])
