@@ -146,7 +146,7 @@ public final class MemoryFileSystem: Sendable {
     @discardableResult
     private static func createFileNode(in directory: MemoryDirectoryNode, at relativePath: String, oflags: WASIAbi.Oflags) throws -> MemoryFileNode {
         let (parentDir, fileName) = try resolveParent(from: directory, path: relativePath)
-        let fileNode = try parentDir.getOrCreateChildFile(name: fileName)
+        let fileNode = try parentDir.getOrCreateChildFile(name: fileName, exclusive: oflags.contains(.EXCL))
         if oflags.contains(.TRUNC) {
             fileNode.truncateToEmpty()
         }
@@ -403,6 +403,8 @@ public final class MemoryFileSystem: Sendable {
         let dirNode = memoryDir.dirNode
 
         var node = try Self.resolve(from: dirNode, path: path)
+        // A trailing slash names a directory, so it cannot name a file or create one.
+        let namesDirectory = path.hasSuffix("/")
 
         if node != nil {
             if oflags.contains(.EXCL) && oflags.contains(.CREAT) {
@@ -410,6 +412,9 @@ public final class MemoryFileSystem: Sendable {
             }
         } else {
             if oflags.contains(.CREAT) {
+                guard !namesDirectory else { throw WASIAbi.Errno.EISDIR }
+                // Another thread may create the file after the lookup above, so with `EXCL` the
+                // check is repeated in the same step as the creation.
                 node = try Self.createFileNode(in: dirNode, at: path, oflags: oflags)
             } else {
                 throw WASIAbi.Errno.ENOENT
@@ -420,7 +425,7 @@ public final class MemoryFileSystem: Sendable {
             throw WASIAbi.Errno.ENOENT
         }
 
-        if oflags.contains(.DIRECTORY) {
+        if oflags.contains(.DIRECTORY) || namesDirectory {
             guard resolvedNode.type == .directory else {
                 throw WASIAbi.Errno.ENOTDIR
             }
@@ -451,7 +456,8 @@ public final class MemoryFileSystem: Sendable {
                 accessMode.insert(.write)
             }
 
-            return .file(MemoryFileEntry(fileNode: fileNode, fileSystem: self, accessMode: accessMode, position: 0))
+            return .file(
+                MemoryFileEntry(fileNode: fileNode, fileSystem: self, accessMode: accessMode, position: 0, flags: fdflags))
         }
 
         if resolvedNode.type == .characterDevice {

@@ -1,6 +1,7 @@
 /// A WASIDir implementation backed by an in-memory directory node.
 struct MemoryDirEntry: WASIDir {
     struct MemoryDirectoryIterator: WASIReaddirIterator {
+        /// `.` and `..`, as a host directory lists them, then the directory's children.
         let children: [String]
         let dirNode: MemoryDirectoryNode
         var nextIndex: Int
@@ -11,17 +12,20 @@ struct MemoryDirEntry: WASIDir {
             let name = children[index]
             nextIndex += 1
             return Result(catching: {
-                // Ask the directory this descriptor refers to for the child,
-                // rather than looking the name up by path from the root.
-                guard let childNode = dirNode.getChild(name: name) else {
-                    throw WASIAbi.Errno.ENOENT
-                }
-
                 let fileType: WASIAbi.FileType
-                switch childNode.type {
-                case .directory: fileType = .DIRECTORY
-                case .file: fileType = .REGULAR_FILE
-                case .characterDevice: fileType = .CHARACTER_DEVICE
+                if index < MemoryDirEntry.dotEntries.count {
+                    fileType = .DIRECTORY
+                } else {
+                    // Ask the directory this descriptor refers to for the child,
+                    // rather than looking the name up by path from the root.
+                    guard let childNode = dirNode.getChild(name: name) else {
+                        throw WASIAbi.Errno.ENOENT
+                    }
+                    switch childNode.type {
+                    case .directory: fileType = .DIRECTORY
+                    case .file: fileType = .REGULAR_FILE
+                    case .characterDevice: fileType = .CHARACTER_DEVICE
+                    }
                 }
 
                 let dirent = WASIAbi.Dirent(
@@ -38,6 +42,9 @@ struct MemoryDirEntry: WASIDir {
         mutating func close() {
         }
     }
+
+    /// No child can be named either: paths that would create one are rejected.
+    static let dotEntries = [".", ".."]
 
     let preopenPath: String?
     let dirNode: MemoryDirectoryNode
@@ -133,7 +140,7 @@ struct MemoryDirEntry: WASIDir {
     func readEntries(cookie: WASIAbi.DirCookie) throws -> WASIReaddirEntries {
         WASIReaddirEntries(
             MemoryDirectoryIterator(
-                children: dirNode.listChildren(),
+                children: Self.dotEntries + dirNode.listChildren(),
                 dirNode: dirNode,
                 nextIndex: Int(clamping: cookie)
             ))

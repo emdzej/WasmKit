@@ -11,12 +11,19 @@ final class MemoryFileEntry: WASIFile {
     let accessMode: FileAccessMode
     // See `WASIImplementation.fdTable` for why this is a `nonisolated(unsafe) var`.
     nonisolated(unsafe) var position: PlatformMutex<Int>
+    /// The descriptor's flags. Only `APPEND` changes what memfs does: every write then goes to
+    /// the end of the file.
+    nonisolated(unsafe) var flags: PlatformMutex<WASIAbi.Fdflags>
 
-    init(fileNode: MemoryFileNode, fileSystem: MemoryFileSystem, accessMode: FileAccessMode, position: Int = 0) {
+    init(
+        fileNode: MemoryFileNode, fileSystem: MemoryFileSystem, accessMode: FileAccessMode, position: Int = 0,
+        flags: WASIAbi.Fdflags = []
+    ) {
         self.fileNode = fileNode
         self.fileSystem = fileSystem
         self.accessMode = accessMode
         self.position = PlatformMutex(position)
+        self.flags = PlatformMutex(flags)
     }
 
     // MARK: - WASIEntry
@@ -35,7 +42,7 @@ final class MemoryFileEntry: WASIFile {
     }
 
     func status() throws -> WASIAbi.Fdflags {
-        return []
+        flags.withLock { $0 }
     }
 
     func setTimes(
@@ -89,14 +96,14 @@ final class MemoryFileEntry: WASIFile {
 
         return WASIAbi.FdStat(
             fsFileType: .REGULAR_FILE,
-            fsFlags: [],
+            fsFlags: try status(),
             fsRightsBase: fsRightsBase,
             fsRightsInheriting: []
         )
     }
 
     func setFdStatFlags(_ flags: WASIAbi.Fdflags) throws {
-        // No-op for memory filesystem
+        self.flags.withLock { $0 = flags }
     }
 
     func setFilestatSize(_ size: WASIAbi.FileSize) throws {
@@ -156,8 +163,9 @@ final class MemoryFileEntry: WASIFile {
         guard accessMode.contains(.write) else {
             throw WASIAbi.Errno.EBADF
         }
+        let append = try status().contains(.APPEND)
         return try position.withLock { pos in
-            let result = try fileNode.write(vectored: buffers, position: pos)
+            let result = try fileNode.write(vectored: buffers, position: pos, append: append)
             pos = result.newPosition
             return result.count
         }

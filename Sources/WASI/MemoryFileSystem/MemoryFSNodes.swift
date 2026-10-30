@@ -94,9 +94,13 @@ package final class MemoryDirectoryNode: MemFSNode {
 
     /// Returns the existing regular file `name`, creating an empty one if absent.
     /// Throws `EISDIR` if a directory already occupies the name.
-    func getOrCreateChildFile(name: String) throws -> MemoryFileNode {
+    /// The file `name`, created if there is none. With `exclusive`, an existing entry is an
+    /// error: the check and the creation happen under one lock, so two exclusive creations of
+    /// one name cannot both succeed.
+    func getOrCreateChildFile(name: String, exclusive: Bool = false) throws -> MemoryFileNode {
         try state.withLock { s in
             if let existing = s.children[name] {
+                guard !exclusive else { throw WASIAbi.Errno.EEXIST }
                 guard let file = existing as? MemoryFileNode else {
                     throw WASIAbi.Errno.EISDIR
                 }
@@ -316,8 +320,10 @@ final class MemoryFileNode: MemFSNode {
         return total
     }
 
+    /// Writes at `position`, or at the end of the file if `append` is set. The end is found in
+    /// the same step as the write for a `.bytes` file, so no other write can land in between.
     func write(
-        vectored buffers: GuestBuffers, position: Int
+        vectored buffers: GuestBuffers, position: Int, append: Bool = false
     ) throws -> (count: WASIAbi.Size, newPosition: Int) {
         let (count, newPosition, handle): (WASIAbi.Size, Int, FileDescriptor?) = try state.withLock { s in
             switch s.content {
@@ -327,7 +333,7 @@ final class MemoryFileNode: MemFSNode {
                 // bytes go back however this case exits, including by a throw.
                 s.content = .bytes([])
                 defer { s.content = .bytes(bytes) }
-                var cur = position
+                var cur = append ? bytes.count : position
                 let total = try buffers.transfer { bufferPtr in
                     let bytesToWrite = bufferPtr.count
                     // The position comes from a guest-chosen seek or pwrite
@@ -352,7 +358,8 @@ final class MemoryFileNode: MemFSNode {
             }
         }
         guard let handle else { return (count, newPosition) }
-        var currentOffset = Int64(position)
+        // The host file's end, which other writers to it can move, unlike a `.bytes` file's.
+        var currentOffset = append ? Int64(try handle.attributes().size) : Int64(position)
         let total = try buffers.transfer { bufferPtr in
             let nwritten = try handle.writeAll(toAbsoluteOffset: currentOffset, bufferPtr)
             currentOffset += Int64(nwritten)

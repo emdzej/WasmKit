@@ -124,7 +124,9 @@ import WasmTypes
         while let element = entries.next() {
             names.append(try element.get().name)
         }
-        return names
+        // The children: every directory lists `.` and `..` first.
+        #expect(names.prefix(2) == [".", ".."])
+        return Array(names.dropFirst(2))
     }
 
     @Test(arguments: ["../outside.txt", "..", ".", "/outside.txt"])

@@ -15,9 +15,6 @@ wabt 1.0.42.
 
 ### 1. Smaller items
 
-- **memfs exclusive create:** `MemoryFileSystem` checks `CREAT|EXCL` and creates in separate steps,
-  so two threads can race. memfs also ignores `APPEND`, lists no `.`/`..` in readdir, and opens
-  `"file/"` as a regular file.
 - **`poll_oneoff`:** a memfs file or a directory makes the whole call fail with `EBADF`. Regular
   files should be reported as ready, and an error should go in that subscription's event
   (`Sources/WASI/Poll.swift`).
