@@ -20,6 +20,11 @@ public struct Fuel: Sendable {
 /// <https://webassembly.github.io/spec/core/exec/runtime.html#store>
 public final class Store {
     var nameRegistry = NameRegistry()
+    /// Caught exceptions, indexed by the address an `exnref` to them holds.
+    ///
+    /// An `exnref` can be kept in a global or table, or passed to the host, and used by a later
+    /// call, so the exceptions live as long as the store, like its other entities.
+    var exceptions: [WasmKitException] = []
     @_spi(Fuzzing)  // Consider making this public
     public var resourceLimiter: ResourceLimiter = DefaultResourceLimiter()
 

@@ -320,8 +320,8 @@ struct FileDescriptor: Sendable, Hashable {
     func setTimes(access: FileTime = .omit, modification: FileTime = .omit) throws {
         #if os(Windows)
             let handle = HANDLE(bitPattern: _get_osfhandle(rawValue))
-            var atime = _windowsFILETIME(from: access)
-            var mtime = _windowsFILETIME(from: modification)
+            var atime = try _windowsFILETIME(from: access)
+            var mtime = try _windowsFILETIME(from: modification)
             guard atime != nil || mtime != nil else { return }
             let ok = _withOptionalPointer(to: &atime) { atimePtr in
                 _withOptionalPointer(to: &mtime) { mtimePtr in
@@ -765,7 +765,7 @@ enum PlatformScheduler {
 
     /// Converts to a `FILETIME` for `SetFileTime`: nil for `omit`, the
     /// current system time for `now`.
-    func _windowsFILETIME(from time: FileTime) -> FILETIME? {
+    func _windowsFILETIME(from time: FileTime) throws -> FILETIME? {
         switch time.representation {
         case .omit:
             return nil
@@ -774,7 +774,12 @@ enum PlatformScheduler {
             GetSystemTimeAsFileTime(&now)
             return now
         case .absolute(let seconds, let nanoseconds):
-            let intervals = (seconds * 1_000_000_000 + nanoseconds) / 100 + _windowsUnixEpochIntervals
+            // Seconds and nanoseconds come from a guest timestamp, so this math must not trap:
+            // 100 ns intervals of the seconds alone, then of the remainder.
+            let (secondIntervals, overflow) = seconds.multipliedReportingOverflow(by: 10_000_000)
+            let (sinceEpoch, sumOverflow) = secondIntervals.addingReportingOverflow(nanoseconds / 100)
+            let (intervals, epochOverflow) = sinceEpoch.addingReportingOverflow(_windowsUnixEpochIntervals)
+            guard !overflow, !sumOverflow, !epochOverflow else { throw WASIAbi.Errno.EINVAL }
             return FILETIME(
                 dwLowDateTime: DWORD(UInt64(bitPattern: intervals) & 0xFFFF_FFFF),
                 dwHighDateTime: DWORD(UInt64(bitPattern: intervals) >> 32)

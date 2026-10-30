@@ -19,10 +19,6 @@
 package struct GDBHostCommandDecoder {
     /// Errors that can be thrown during host command decoding.
     package enum Error: Swift.Error {
-        /// Expected `+` acknowledgement character to be included in the packet, when
-        /// ``GDBHostCommandDecoder/isNoAckModeActive`` is set to `false`.
-        case expectedAck
-
         /// Expected command to start with `$` character`.
         case expectedCommandStart
 
@@ -101,29 +97,23 @@ package struct GDBHostCommandDecoder {
             return buffer[index]
         }
 
-        guard var startDelimiter = read() else {
-            // Not enough data to parse.
-            return nil
-        }
-
-        // Whether decoding this packet completes activation of no-ack mode:
-        // the packet following `QStartNoAckMode` still carries the host's
-        // final `+` (acknowledging our response); later ones don't.
-        var activatesNoAckMode = false
-        if !self.isNoAckModeActive {
-            guard startDelimiter == UInt8(ascii: "+") else {
-                logger.error("unexpected ack character: \(Character(UnicodeScalar(startDelimiter)))")
-                throw Error.expectedAck
-            }
-
-            guard let secondStartDelimiter = read() else {
+        // Between packets the host may send acknowledgements, a NAK asking for the last
+        // response again, or the interrupt byte. This stub answers each packet before reading
+        // the next and does not run the guest in the background, so there is nothing to resend
+        // or interrupt: skip them instead of failing the session.
+        var startDelimiter: UInt8
+        repeat {
+            guard let byte = read() else {
                 // Not enough data to parse.
                 return nil
             }
+            startDelimiter = byte
+        } while startDelimiter == UInt8(ascii: "+") || startDelimiter == UInt8(ascii: "-") || startDelimiter == 0x03
 
-            startDelimiter = secondStartDelimiter
-            activatesNoAckMode = self.isNoAckModeRequested
-        }
+        // Whether decoding this packet completes activation of no-ack mode: the packet
+        // following `QStartNoAckMode` still carries the host's final `+` (acknowledging our
+        // response); later ones don't.
+        let activatesNoAckMode = !self.isNoAckModeActive && self.isNoAckModeRequested
 
         // Command start delimiters.
         guard startDelimiter == UInt8(ascii: "$") else {

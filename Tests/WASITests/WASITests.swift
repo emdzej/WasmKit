@@ -166,8 +166,10 @@ struct WASITests {
                 try assertNotResolve("link-secret-dir-b/secret-c.txt", followSymlink: true) { error in
                     #expect(error == .EPERM)
                 }
+                // Lookup flags only govern the final component, so the intermediate link is
+                // still followed, and refused for leaving the sandbox.
                 try assertNotResolve("link-secret-dir-b/secret-c.txt", followSymlink: false) { error in
-                    #expect(error == .ENOTDIR)
+                    #expect(error == .EPERM)
                 }
 
                 try assertNotResolve("link-root", followSymlink: true) { error in
@@ -421,24 +423,24 @@ struct WASITests {
         let event = WASIAbi.Event(userData: 3, error: .EIO, eventType: .fdRead, fdReadWrite: .init(nBytes: 37, flags: [.hangup]))
         let eventOffset = clockOffset + WASIAbi.Subscription.sizeInGuest
         let finalOffset = eventOffset + WASIAbi.Event.sizeInGuest
-        WASIAbi.Subscription.writeToGuest(at: &pointer, in: memory, value: .init(userData: 1, union: read))
+        try WASIAbi.Subscription.writeToGuest(at: &pointer, in: memory, value: .init(userData: 1, union: read))
         #expect(pointer.offset == writeOffset)
-        WASIAbi.Subscription.writeToGuest(at: &pointer, in: memory, value: .init(userData: 2, union: write))
+        try WASIAbi.Subscription.writeToGuest(at: &pointer, in: memory, value: .init(userData: 2, union: write))
         #expect(pointer.offset == clockOffset)
-        WASIAbi.Subscription.writeToGuest(at: &pointer, in: memory, value: .init(userData: 3, union: clock))
+        try WASIAbi.Subscription.writeToGuest(at: &pointer, in: memory, value: .init(userData: 3, union: clock))
         #expect(pointer.offset == eventOffset)
-        WASIAbi.Event.writeToGuest(at: &pointer, in: memory, value: event)
+        try WASIAbi.Event.writeToGuest(at: &pointer, in: memory, value: event)
         #expect(pointer.offset == finalOffset)
 
         // Test that reading back yields same result
         pointer = start
-        #expect(WASIAbi.Subscription.readFromGuest(&pointer, in: memory) == .init(userData: 1, union: read))
+        #expect(try WASIAbi.Subscription.readFromGuest(&pointer, in: memory) == .init(userData: 1, union: read))
         #expect(pointer.offset == writeOffset)
-        #expect(WASIAbi.Subscription.readFromGuest(&pointer, in: memory) == .init(userData: 2, union: write))
+        #expect(try WASIAbi.Subscription.readFromGuest(&pointer, in: memory) == .init(userData: 2, union: write))
         #expect(pointer.offset == clockOffset)
-        #expect(WASIAbi.Subscription.readFromGuest(&pointer, in: memory) == .init(userData: 3, union: clock))
+        #expect(try WASIAbi.Subscription.readFromGuest(&pointer, in: memory) == .init(userData: 3, union: clock))
         #expect(pointer.offset == eventOffset)
-        #expect(WASIAbi.Event.readFromGuest(&pointer, in: memory) == event)
+        #expect(try WASIAbi.Event.readFromGuest(&pointer, in: memory) == event)
         #expect(pointer.offset == finalOffset)
 
         #if !os(Windows)
@@ -1064,18 +1066,18 @@ struct WASITests {
 
             let memory = TestSupport.TestGuestMemory()
             let writeData = Array("Hello, WASI!".utf8)
-            let writeVecs = memory.writeIOVecs([writeData])
+            let writeVecs = try memory.writeIOVecs([writeData])
 
             let nwritten = try wasi.fd_write(fileDescriptor: fd, ioVectors: writeVecs, memory: memory)
             #expect(nwritten == UInt32(writeData.count))
 
             _ = try wasi.fd_seek(fd: fd, offset: 0, whence: .SET)
 
-            let readVecs = memory.readIOVecs(sizes: [writeData.count])
+            let readVecs = try memory.readIOVecs(sizes: [writeData.count])
             let nread = try wasi.fd_read(fd: fd, iovs: readVecs, memory: memory)
             #expect(nread == UInt32(writeData.count))
 
-            let readData = memory.loadIOVecs(readVecs)
+            let readData = try memory.loadIOVecs(readVecs)
             #expect(readData[0] == writeData)
 
             try wasi.fd_close(fd: fd)
@@ -1110,7 +1112,7 @@ struct WASITests {
             do {
                 let memory = TestSupport.TestGuestMemory()
                 let writeData = Array("Fail".utf8)
-                let iovecs = memory.writeIOVecs([writeData])
+                let iovecs = try memory.writeIOVecs([writeData])
 
                 _ = try wasi.fd_write(fileDescriptor: fd, ioVectors: iovecs, memory: memory)
                 #expect(Bool(false), "Should not be able to write to read-only file")
@@ -1149,13 +1151,13 @@ struct WASITests {
 
             let memory = TestSupport.TestGuestMemory()
             let writeData = Array("Write only".utf8)
-            let writeVecs = memory.writeIOVecs([writeData])
+            let writeVecs = try memory.writeIOVecs([writeData])
 
             let nwritten = try wasi.fd_write(fileDescriptor: fd, ioVectors: writeVecs, memory: memory)
             #expect(nwritten == UInt32(writeData.count))
 
             do {
-                let readVecs = memory.readIOVecs(sizes: [10])
+                let readVecs = try memory.readIOVecs(sizes: [10])
                 _ = try wasi.fd_read(fd: fd, iovs: readVecs, memory: memory)
                 #expect(Bool(false), "Should not be able to read from write-only file")
             } catch let error as WASIAbi.Errno {
@@ -1202,7 +1204,7 @@ struct WASITests {
 
                 let memory = TestSupport.TestGuestMemory()
                 let writeData = Array("Via handle".utf8)
-                let iovecs = memory.writeIOVecs([writeData])
+                let iovecs = try memory.writeIOVecs([writeData])
 
                 let nwritten = try wasi.fd_write(fileDescriptor: openedFd, ioVectors: iovecs, memory: memory)
                 #expect(nwritten == UInt32(writeData.count))
@@ -1245,7 +1247,7 @@ struct WASITests {
 
             let memory = TestSupport.TestGuestMemory()
             let writeData = Array("End".utf8)
-            let iovecs = memory.writeIOVecs([writeData])
+            let iovecs = try memory.writeIOVecs([writeData])
 
             let nwritten = try wasi.fd_write(fileDescriptor: fd, ioVectors: iovecs, memory: memory)
             #expect(nwritten == UInt32(writeData.count))
@@ -1297,7 +1299,7 @@ struct WASITests {
 
             let memory = TestSupport.TestGuestMemory()
             let writeData = Array("Hello, stdout!".utf8)
-            let iovecs = memory.writeIOVecs([writeData])
+            let iovecs = try memory.writeIOVecs([writeData])
 
             let nwritten = try wasi.fd_write(fileDescriptor: 1, ioVectors: iovecs, memory: memory)
             #expect(nwritten == UInt32(writeData.count))
@@ -1318,7 +1320,7 @@ struct WASITests {
 
             let memory = TestSupport.TestGuestMemory()
             let writeData = Array("Error message".utf8)
-            let iovecs = memory.writeIOVecs([writeData])
+            let iovecs = try memory.writeIOVecs([writeData])
 
             let nwritten = try wasi.fd_write(fileDescriptor: 2, ioVectors: iovecs, memory: memory)
             #expect(nwritten == UInt32(writeData.count))
@@ -1339,7 +1341,7 @@ struct WASITests {
 
             let memory = TestSupport.TestGuestMemory()
             let writeData = Array("Should fail".utf8)
-            let iovecs = memory.writeIOVecs([writeData])
+            let iovecs = try memory.writeIOVecs([writeData])
 
             do {
                 _ = try wasi.fd_write(fileDescriptor: 0, ioVectors: iovecs, memory: memory)
@@ -1363,7 +1365,7 @@ struct WASITests {
             let wasi = bridge.underlying
 
             let memory = TestSupport.TestGuestMemory()
-            let iovecs = memory.readIOVecs(sizes: [10])
+            let iovecs = try memory.readIOVecs(sizes: [10])
 
             do {
                 _ = try wasi.fd_read(fd: 1, iovs: iovecs, memory: memory)
@@ -1387,7 +1389,7 @@ struct WASITests {
             let wasi = bridge.underlying
 
             let memory = TestSupport.TestGuestMemory()
-            let iovecs = memory.readIOVecs(sizes: [10])
+            let iovecs = try memory.readIOVecs(sizes: [10])
 
             do {
                 _ = try wasi.fd_read(fd: 2, iovs: iovecs, memory: memory)
@@ -1429,14 +1431,14 @@ struct WASITests {
             )
 
             let memory = TestSupport.TestGuestMemory()
-            let readVecs = memory.readIOVecs(sizes: [4])
+            let readVecs = try memory.readIOVecs(sizes: [4])
             _ = try wasi.fd_read(fd: fd, iovs: readVecs, memory: memory)
 
             let stat2 = try wasi.fd_filestat_get(fd: fd)
             #expect(stat2.atim >= stat1.atim)
 
             let writeData = Array("more".utf8)
-            let writeVecs = memory.writeIOVecs([writeData])
+            let writeVecs = try memory.writeIOVecs([writeData])
             _ = try wasi.fd_write(fileDescriptor: fd, ioVectors: writeVecs, memory: memory)
 
             let stat3 = try wasi.fd_filestat_get(fd: fd)
@@ -1632,7 +1634,7 @@ struct WASITests {
                     count: 4096
                 )
                 let writeData = Array("hello".utf8)
-                let writeVecs = memory.writeIOVecs([writeData])
+                let writeVecs = try memory.writeIOVecs([writeData])
 
                 for _ in 0..<1000 {
                     let fd = try wasi.path_open(
@@ -1653,7 +1655,7 @@ struct WASITests {
                     let stat = try wasi.path_filestat_get(dirFd: dir2Fd, flags: .SYMLINK_FOLLOW, path: "foo/quux")
                     #expect(stat.size == 5)  // hello
                     let count = try Int(wasi.path_readlink(fd: dir2Fd, path: "foo/quux", buffer: buffer, memory: memory))
-                    buffer.withHostPointer(in: memory) { ptr in
+                    try buffer.withHostPointer(in: memory) { ptr in
                         #expect(String(decoding: ptr[..<count], as: UTF8.self) == "baz")
                     }
                     try wasi.path_unlink_file(dirFd: dir2Fd, path: "foo/baz")

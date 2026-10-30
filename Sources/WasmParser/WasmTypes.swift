@@ -46,8 +46,36 @@ extension AbstractHeapType {
 /// > Note:
 /// <https://webassembly.github.io/spec/core/binary/modules.html#binary-code>
 public struct Code: Sendable {
-    /// Local variables in the function
-    public let locals: [ValueType]
+    /// A run of locals of one type, as the binary format declares them.
+    public struct LocalDeclaration: Equatable, Sendable {
+        /// The number of locals in the run.
+        public let count: UInt32
+        /// The type of each local in the run.
+        public let type: ValueType
+
+        @inlinable
+        public init(count: UInt32, type: ValueType) {
+            self.count = count
+            self.type = type
+        }
+    }
+
+    /// The function's local declarations, in order.
+    public let localDeclarations: [LocalDeclaration]
+
+    /// Local variables in the function, one entry per local.
+    ///
+    /// Expanded from ``localDeclarations`` on each access rather than stored: a few bytes of
+    /// declarations can name tens of thousands of locals, so storing them one by one would let a
+    /// small module take a large amount of memory before any function runs.
+    public var locals: [ValueType] {
+        var locals: [ValueType] = []
+        locals.reserveCapacity(localDeclarations.reduce(0) { $0 + Int($1.count) })
+        for declaration in localDeclarations {
+            locals.append(contentsOf: repeatElement(declaration.type, count: Int(declaration.count)))
+        }
+        return locals
+    }
     /// Expression body of the function
     public let expression: ArraySlice<UInt8>
 
@@ -68,8 +96,8 @@ public struct Code: Sendable {
     #endif
 
     @inlinable
-    init(locals: [ValueType], expression: ArraySlice<UInt8>, offset: Int, bodyOffset: Int, features: WasmFeatureSet) {
-        self.locals = locals
+    init(localDeclarations: [LocalDeclaration], expression: ArraySlice<UInt8>, offset: Int, bodyOffset: Int, features: WasmFeatureSet) {
+        self.localDeclarations = localDeclarations
         self.expression = expression
         self.offset = offset
         self.bodyOffset = bodyOffset
@@ -79,7 +107,7 @@ public struct Code: Sendable {
 
 extension Code: Equatable {
     public static func == (lhs: Code, rhs: Code) -> Bool {
-        return lhs.locals == rhs.locals && lhs.expression == rhs.expression
+        return lhs.localDeclarations == rhs.localDeclarations && lhs.expression == rhs.expression
     }
 }
 

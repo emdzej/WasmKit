@@ -33,6 +33,7 @@ let guestPrelude = """
                 static var _initialized = false
             }
             guard !Static._initialized else { return }
+            Static._initialized = true
             __wasm_call_ctors()
         }
 

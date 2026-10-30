@@ -190,8 +190,8 @@ struct ResumableCallTests {
             (table.fill $t (i32.const 0) (ref.func 0) (local.get $n))))
         """
 
-    private static func byte(of memory: WasmKit.Memory, at offset: UInt) -> UInt8 {
-        memory.withUnsafeBufferPointer(offset: offset, count: 1) { $0[0] }
+    private static func byte(of memory: WasmKit.Memory, at offset: UInt) throws -> UInt8 {
+        try memory.withUnsafeBufferPointer(offset: offset, count: 1) { $0[0] }
     }
 
     @Test(arguments: testedThreadingModels)
@@ -208,15 +208,15 @@ struct ResumableCallTests {
             return
         }
         #expect(suspension.reason == .outOfFuel(required: 100))
-        #expect(Self.byte(of: memory, at: 0) == 0)
+        #expect(try Self.byte(of: memory, at: 0) == 0)
         #expect(try #require(store.fuel).remaining == 0)
         store.fuel = Fuel(remaining: 100)
         guard case .returned = try call.resume() else {
             Issue.record("expected the call to return")
             return
         }
-        #expect(Self.byte(of: memory, at: 0) == 0xab)
-        #expect(Self.byte(of: memory, at: 64 * 100 - 1) == 0xab)
+        #expect(try Self.byte(of: memory, at: 0) == 0xab)
+        #expect(try Self.byte(of: memory, at: 64 * 100 - 1) == 0xab)
         #expect(try #require(store.fuel).remaining == 0)
     }
 

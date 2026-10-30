@@ -480,6 +480,32 @@
         }
     }
 
+    /// Calls the guest's `realloc` for a new `byteCount`-byte block and checks what it returned.
+    ///
+    /// The pointer comes from the guest, so it must be aligned and leave room for the whole
+    /// block before the host writes through it.
+    private func callRealloc(
+        _ realloc: InternalFunction, alignment: UInt32, byteCount: UInt32,
+        memory: InternalMemory, store: Store
+    ) throws -> UInt32 {
+        var stack = ExecutionStack(engine: store.engine)
+        let allocResult = try realloc.invoke(
+            [.i32(0), .i32(0), .i32(alignment), .i32(byteCount)],
+            store: store,
+            stack: &stack
+        )
+        guard case .i32(let pointer) = allocResult.first else {
+            throw CanonicalABIError(description: "realloc did not return i32 pointer")
+        }
+        guard alignment == 0 || pointer % alignment == 0 else {
+            throw CanonicalABIError(description: "realloc returned \(pointer), which is not aligned to \(alignment)")
+        }
+        guard UInt64(pointer) + UInt64(byteCount) <= UInt64(memory.byteCount) else {
+            throw CanonicalABIError(description: "realloc returned \(pointer), leaving no room for \(byteCount) bytes")
+        }
+        return pointer
+    }
+
     /// Lower a string to core wasm values (pointer, length).
     /// Allocates memory using realloc and writes encoded bytes.
     private func lowerString(
@@ -503,18 +529,11 @@
             let byteCount = UInt32(utf8Bytes.count)
 
             // Allocate memory: realloc(old_ptr=0, old_size=0, align=1, new_size)
-            var stack = ExecutionStack(engine: store.engine)
-            let allocResult = try realloc.invoke(
-                [.i32(0), .i32(0), .i32(1), .i32(byteCount)],
-                store: store,
-                stack: &stack
-            )
-            guard case .i32(let pointer) = allocResult.first else {
-                throw CanonicalABIError(description: "realloc did not return i32 pointer")
-            }
+            let pointer = try callRealloc(
+                realloc, alignment: 1, byteCount: byteCount, memory: memory, store: store)
 
             // Write UTF-8 bytes to memory
-            memoryInstance.withUnsafeMutableBufferPointer(offset: UInt(pointer), count: Int(byteCount)) { buffer in
+            try memoryInstance.withUnsafeMutableBufferPointer(offset: UInt(pointer), count: Int(byteCount)) { buffer in
                 for (index, byte) in utf8Bytes.enumerated() {
                     buffer[index] = byte
                 }
@@ -528,17 +547,10 @@
             let byteCount = codeUnitCount * 2
 
             // Allocate memory: realloc(old_ptr=0, old_size=0, align=2, new_size)
-            var stack = ExecutionStack(engine: store.engine)
-            let allocResult = try realloc.invoke(
-                [.i32(0), .i32(0), .i32(2), .i32(byteCount)],
-                store: store,
-                stack: &stack
-            )
-            guard case .i32(let pointer) = allocResult.first else {
-                throw CanonicalABIError(description: "realloc did not return i32 pointer")
-            }
+            let pointer = try callRealloc(
+                realloc, alignment: 2, byteCount: byteCount, memory: memory, store: store)
 
-            memoryInstance.lowerUTF16LE(pointer, byteCount, string)
+            try memoryInstance.lowerUTF16LE(pointer, byteCount, string)
 
             return [.i32(pointer), .i32(codeUnitCount)]
 
@@ -553,18 +565,11 @@
                 let byteCount = UInt32(latin1Bytes.count)
 
                 // Allocate memory: realloc(old_ptr=0, old_size=0, align=2, new_size)
-                var stack = ExecutionStack(engine: store.engine)
-                let allocResult = try realloc.invoke(
-                    [.i32(0), .i32(0), .i32(2), .i32(byteCount)],
-                    store: store,
-                    stack: &stack
-                )
-                guard case .i32(let pointer) = allocResult.first else {
-                    throw CanonicalABIError(description: "realloc did not return i32 pointer")
-                }
+                let pointer = try callRealloc(
+                    realloc, alignment: 2, byteCount: byteCount, memory: memory, store: store)
 
                 // Write Latin-1 bytes to memory
-                memoryInstance.withUnsafeMutableBufferPointer(offset: UInt(pointer), count: Int(byteCount)) { buffer in
+                try memoryInstance.withUnsafeMutableBufferPointer(offset: UInt(pointer), count: Int(byteCount)) { buffer in
                     for (index, byte) in latin1Bytes.enumerated() {
                         buffer[index] = byte
                     }
@@ -578,17 +583,10 @@
                 let byteCount = codeUnitCount * 2
 
                 // Allocate memory: realloc(old_ptr=0, old_size=0, align=2, new_size)
-                var stack = ExecutionStack(engine: store.engine)
-                let allocResult = try realloc.invoke(
-                    [.i32(0), .i32(0), .i32(2), .i32(byteCount)],
-                    store: store,
-                    stack: &stack
-                )
-                guard case .i32(let pointer) = allocResult.first else {
-                    throw CanonicalABIError(description: "realloc did not return i32 pointer")
-                }
+                let pointer = try callRealloc(
+                    realloc, alignment: 2, byteCount: byteCount, memory: memory, store: store)
 
-                memoryInstance.lowerUTF16LE(pointer, byteCount, string)
+                try memoryInstance.lowerUTF16LE(pointer, byteCount, string)
 
                 // Return pointer and code units with UTF16_TAG
                 let UTF16_TAG: UInt32 = 1 << 31
@@ -622,15 +620,8 @@
         let totalBytes = elementSize * Int(elementCount)
 
         // Allocate memory: realloc(old_ptr=0, old_size=0, align, new_size)
-        var stack = ExecutionStack(engine: store.engine)
-        let allocResult = try realloc.invoke(
-            [.i32(0), .i32(0), .i32(UInt32(alignment)), .i32(UInt32(totalBytes))],
-            store: store,
-            stack: &stack
-        )
-        guard case .i32(let pointer) = allocResult.first else {
-            throw CanonicalABIError(description: "realloc did not return i32 pointer")
-        }
+        let pointer = try callRealloc(
+            realloc, alignment: UInt32(alignment), byteCount: UInt32(totalBytes), memory: memory, store: store)
 
         // Write each element to memory
         let memoryInstance = Memory(handle: memory, allocator: store.allocator)
@@ -771,51 +762,51 @@
 
         switch (value, resolvedType) {
         case (.bool(let b), .inlined(.primitive(.bool))):
-            memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 1) { buffer in
+            try memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 1) { buffer in
                 buffer.storeBytes(of: UInt8(b ? 1 : 0), as: UInt8.self)
             }
         case (.u8(let v), .inlined(.primitive(.u8))):
-            memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 1) { buffer in
+            try memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 1) { buffer in
                 buffer.storeBytes(of: v, as: UInt8.self)
             }
         case (.u16(let v), .inlined(.primitive(.u16))):
-            memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 2) { buffer in
+            try memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 2) { buffer in
                 buffer.storeBytes(of: v, as: UInt16.self)
             }
         case (.u32(let v), .inlined(.primitive(.u32))):
-            memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 4) { buffer in
+            try memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 4) { buffer in
                 buffer.storeBytes(of: v, as: UInt32.self)
             }
         case (.u64(let v), .inlined(.primitive(.u64))):
-            memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 8) { buffer in
+            try memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 8) { buffer in
                 buffer.storeBytes(of: v, as: UInt64.self)
             }
         case (.s8(let v), .inlined(.primitive(.s8))):
-            memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 1) { buffer in
+            try memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 1) { buffer in
                 buffer.storeBytes(of: v, as: Int8.self)
             }
         case (.s16(let v), .inlined(.primitive(.s16))):
-            memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 2) { buffer in
+            try memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 2) { buffer in
                 buffer.storeBytes(of: v, as: Int16.self)
             }
         case (.s32(let v), .inlined(.primitive(.s32))):
-            memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 4) { buffer in
+            try memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 4) { buffer in
                 buffer.storeBytes(of: v, as: Int32.self)
             }
         case (.s64(let v), .inlined(.primitive(.s64))):
-            memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 8) { buffer in
+            try memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 8) { buffer in
                 buffer.storeBytes(of: v, as: Int64.self)
             }
         case (.float32(let v), .inlined(.primitive(.float32))):
-            memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 4) { buffer in
+            try memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 4) { buffer in
                 buffer.storeBytes(of: v.bitPattern, as: UInt32.self)
             }
         case (.float64(let v), .inlined(.primitive(.float64))):
-            memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 8) { buffer in
+            try memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 8) { buffer in
                 buffer.storeBytes(of: v.bitPattern, as: UInt64.self)
             }
         case (.char(let scalar), .inlined(.primitive(.char))):
-            memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 4) { buffer in
+            try memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 4) { buffer in
                 buffer.storeBytes(of: scalar.value, as: UInt32.self)
             }
         case (.string(let s), .inlined(.primitive(.string))):
@@ -824,7 +815,7 @@
             guard case .i32(let ptr) = lowered[0], case .i32(let len) = lowered[1] else {
                 throw CanonicalABIError(description: "String lowering did not return i32 values")
             }
-            memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 8) { buffer in
+            try memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: 8) { buffer in
                 buffer.storeBytes(of: ptr, toByteOffset: 0, as: UInt32.self)
                 buffer.storeBytes(of: len, toByteOffset: 4, as: UInt32.self)
             }
@@ -847,7 +838,7 @@
             }
 
             // Write discriminant
-            memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: discriminantSize) { buffer in
+            try memory.withUnsafeMutableBufferPointer(offset: UInt(offset), count: discriminantSize) { buffer in
                 switch discriminantSize {
                 case 1:
                     buffer.storeBytes(of: UInt8(caseIndex), as: UInt8.self)
@@ -881,9 +872,9 @@
     }
 
     extension Memory {
-        fileprivate func lowerUTF16LE(_ pointer: UInt32, _ byteCount: UInt32, _ string: String) {
+        fileprivate func lowerUTF16LE(_ pointer: UInt32, _ byteCount: UInt32, _ string: String) throws {
             // Write UTF-16LE code units to memory
-            self.withUnsafeMutableBufferPointer(offset: UInt(pointer), count: Int(byteCount)) { buffer in
+            try self.withUnsafeMutableBufferPointer(offset: UInt(pointer), count: Int(byteCount)) { buffer in
                 for (index, codeUnit) in string.utf16.enumerated() {
                     let offset = index * 2
                     // Little-endian encoding
@@ -898,7 +889,7 @@
             var codeUnits: [UInt16] = []
             codeUnits.reserveCapacity(codeUnitCount)
 
-            self.withUnsafeBufferPointer(offset: UInt(pointer), count: byteCount) { buffer in
+            try self.withUnsafeBufferPointer(offset: UInt(pointer), count: byteCount) { buffer in
                 for i in 0..<codeUnitCount {
                     let offset = i * 2
                     let low = UInt16(buffer[offset])
@@ -943,7 +934,7 @@
             // UTF-8 has alignment 1, so no check needed
 
             // Read UTF-8 bytes from memory
-            let string = memoryInstance.withUnsafeBufferPointer(offset: UInt(pointer), count: byteCount) { buffer in
+            let string = try memoryInstance.withUnsafeBufferPointer(offset: UInt(pointer), count: byteCount) { buffer in
                 let bytes = Array(buffer.bindMemory(to: UInt8.self))
                 return String(decoding: bytes, as: UTF8.self)
             }
@@ -1000,7 +991,7 @@
                 }
 
                 // Read Latin-1 bytes and decode
-                let string = memoryInstance.withUnsafeBufferPointer(offset: UInt(pointer), count: byteCount) { buffer in
+                let string = try memoryInstance.withUnsafeBufferPointer(offset: UInt(pointer), count: byteCount) { buffer in
                     let bytes = Array(buffer.bindMemory(to: UInt8.self))
                     // Latin-1 maps directly to Unicode scalars 0-255
                     let scalars = bytes.map { Unicode.Scalar($0) }
@@ -1080,73 +1071,73 @@
         // Primitives
         case .inlined(.primitive(.bool)):
             try checkBounds(count: 1)
-            let v: UInt8 = memory.withUnsafeBufferPointer(offset: UInt(offset), count: 1) { buffer in
+            let v: UInt8 = try memory.withUnsafeBufferPointer(offset: UInt(offset), count: 1) { buffer in
                 buffer.load(as: UInt8.self)
             }
             return .bool(v != 0)
         case .inlined(.primitive(.u8)):
             try checkBounds(count: 1)
-            let v: UInt8 = memory.withUnsafeBufferPointer(offset: UInt(offset), count: 1) { buffer in
+            let v: UInt8 = try memory.withUnsafeBufferPointer(offset: UInt(offset), count: 1) { buffer in
                 buffer.load(as: UInt8.self)
             }
             return .u8(v)
         case .inlined(.primitive(.u16)):
             try checkBounds(count: 2)
-            let v: UInt16 = memory.withUnsafeBufferPointer(offset: UInt(offset), count: 2) { buffer in
+            let v: UInt16 = try memory.withUnsafeBufferPointer(offset: UInt(offset), count: 2) { buffer in
                 buffer.load(as: UInt16.self)
             }
             return .u16(v)
         case .inlined(.primitive(.u32)):
             try checkBounds(count: 4)
-            let v: UInt32 = memory.withUnsafeBufferPointer(offset: UInt(offset), count: 4) { buffer in
+            let v: UInt32 = try memory.withUnsafeBufferPointer(offset: UInt(offset), count: 4) { buffer in
                 buffer.load(as: UInt32.self)
             }
             return .u32(v)
         case .inlined(.primitive(.u64)):
             try checkBounds(count: 8)
-            let v: UInt64 = memory.withUnsafeBufferPointer(offset: UInt(offset), count: 8) { buffer in
+            let v: UInt64 = try memory.withUnsafeBufferPointer(offset: UInt(offset), count: 8) { buffer in
                 buffer.load(as: UInt64.self)
             }
             return .u64(v)
         case .inlined(.primitive(.s8)):
             try checkBounds(count: 1)
-            let v: Int8 = memory.withUnsafeBufferPointer(offset: UInt(offset), count: 1) { buffer in
+            let v: Int8 = try memory.withUnsafeBufferPointer(offset: UInt(offset), count: 1) { buffer in
                 buffer.load(as: Int8.self)
             }
             return .s8(v)
         case .inlined(.primitive(.s16)):
             try checkBounds(count: 2)
-            let v: Int16 = memory.withUnsafeBufferPointer(offset: UInt(offset), count: 2) { buffer in
+            let v: Int16 = try memory.withUnsafeBufferPointer(offset: UInt(offset), count: 2) { buffer in
                 buffer.load(as: Int16.self)
             }
             return .s16(v)
         case .inlined(.primitive(.s32)):
             try checkBounds(count: 4)
-            let v: Int32 = memory.withUnsafeBufferPointer(offset: UInt(offset), count: 4) { buffer in
+            let v: Int32 = try memory.withUnsafeBufferPointer(offset: UInt(offset), count: 4) { buffer in
                 buffer.load(as: Int32.self)
             }
             return .s32(v)
         case .inlined(.primitive(.s64)):
             try checkBounds(count: 8)
-            let v: Int64 = memory.withUnsafeBufferPointer(offset: UInt(offset), count: 8) { buffer in
+            let v: Int64 = try memory.withUnsafeBufferPointer(offset: UInt(offset), count: 8) { buffer in
                 buffer.load(as: Int64.self)
             }
             return .s64(v)
         case .inlined(.primitive(.float32)):
             try checkBounds(count: 4)
-            let bits: UInt32 = memory.withUnsafeBufferPointer(offset: UInt(offset), count: 4) { buffer in
+            let bits: UInt32 = try memory.withUnsafeBufferPointer(offset: UInt(offset), count: 4) { buffer in
                 buffer.load(as: UInt32.self)
             }
             return .float32(Float(bitPattern: bits))
         case .inlined(.primitive(.float64)):
             try checkBounds(count: 8)
-            let bits: UInt64 = memory.withUnsafeBufferPointer(offset: UInt(offset), count: 8) { buffer in
+            let bits: UInt64 = try memory.withUnsafeBufferPointer(offset: UInt(offset), count: 8) { buffer in
                 buffer.load(as: UInt64.self)
             }
             return .float64(Double(bitPattern: bits))
         case .inlined(.primitive(.char)):
             try checkBounds(count: 4)
-            let v: UInt32 = memory.withUnsafeBufferPointer(offset: UInt(offset), count: 4) { buffer in
+            let v: UInt32 = try memory.withUnsafeBufferPointer(offset: UInt(offset), count: 4) { buffer in
                 buffer.load(as: UInt32.self)
             }
             guard let scalar = Unicode.Scalar(v) else {
@@ -1156,7 +1147,7 @@
         case .inlined(.primitive(.string)):
             // String is stored as (pointer, length) pair
             try checkBounds(count: 8)
-            let (ptr, len): (UInt32, UInt32) = memory.withUnsafeBufferPointer(offset: UInt(offset), count: 8) { buffer in
+            let (ptr, len): (UInt32, UInt32) = try memory.withUnsafeBufferPointer(offset: UInt(offset), count: 8) { buffer in
                 let ptr = buffer.load(fromByteOffset: 0, as: UInt32.self)
                 let len = buffer.load(fromByteOffset: 4, as: UInt32.self)
                 return (ptr, len)
@@ -1194,73 +1185,73 @@
             // Primitives (single values stored in memory)
             case .inlined(.primitive(.bool)):
                 try checkBounds(offset: UInt(offset), count: 1)
-                let v: UInt8 = memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 1) { buffer in
+                let v: UInt8 = try memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 1) { buffer in
                     buffer.load(as: UInt8.self)
                 }
                 return .bool(v != 0)
             case .inlined(.primitive(.u8)):
                 try checkBounds(offset: UInt(offset), count: 1)
-                let v: UInt8 = memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 1) { buffer in
+                let v: UInt8 = try memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 1) { buffer in
                     buffer.load(as: UInt8.self)
                 }
                 return .u8(v)
             case .inlined(.primitive(.s8)):
                 try checkBounds(offset: UInt(offset), count: 1)
-                let v: Int8 = memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 1) { buffer in
+                let v: Int8 = try memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 1) { buffer in
                     buffer.load(as: Int8.self)
                 }
                 return .s8(v)
             case .inlined(.primitive(.u16)):
                 try checkBounds(offset: UInt(offset), count: 2)
-                let v: UInt16 = memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 2) { buffer in
+                let v: UInt16 = try memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 2) { buffer in
                     buffer.load(as: UInt16.self)
                 }
                 return .u16(v)
             case .inlined(.primitive(.s16)):
                 try checkBounds(offset: UInt(offset), count: 2)
-                let v: Int16 = memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 2) { buffer in
+                let v: Int16 = try memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 2) { buffer in
                     buffer.load(as: Int16.self)
                 }
                 return .s16(v)
             case .inlined(.primitive(.u32)):
                 try checkBounds(offset: UInt(offset), count: 4)
-                let v: UInt32 = memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 4) { buffer in
+                let v: UInt32 = try memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 4) { buffer in
                     buffer.load(as: UInt32.self)
                 }
                 return .u32(v)
             case .inlined(.primitive(.s32)):
                 try checkBounds(offset: UInt(offset), count: 4)
-                let v: Int32 = memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 4) { buffer in
+                let v: Int32 = try memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 4) { buffer in
                     buffer.load(as: Int32.self)
                 }
                 return .s32(v)
             case .inlined(.primitive(.u64)):
                 try checkBounds(offset: UInt(offset), count: 8)
-                let v: UInt64 = memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 8) { buffer in
+                let v: UInt64 = try memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 8) { buffer in
                     buffer.load(as: UInt64.self)
                 }
                 return .u64(v)
             case .inlined(.primitive(.s64)):
                 try checkBounds(offset: UInt(offset), count: 8)
-                let v: Int64 = memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 8) { buffer in
+                let v: Int64 = try memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 8) { buffer in
                     buffer.load(as: Int64.self)
                 }
                 return .s64(v)
             case .inlined(.primitive(.float32)):
                 try checkBounds(offset: UInt(offset), count: 4)
-                let bits: UInt32 = memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 4) { buffer in
+                let bits: UInt32 = try memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 4) { buffer in
                     buffer.load(as: UInt32.self)
                 }
                 return .float32(Float(bitPattern: bits))
             case .inlined(.primitive(.float64)):
                 try checkBounds(offset: UInt(offset), count: 8)
-                let bits: UInt64 = memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 8) { buffer in
+                let bits: UInt64 = try memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 8) { buffer in
                     buffer.load(as: UInt64.self)
                 }
                 return .float64(Double(bitPattern: bits))
             case .inlined(.primitive(.char)):
                 try checkBounds(offset: UInt(offset), count: 4)
-                let v: UInt32 = memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 4) { buffer in
+                let v: UInt32 = try memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 4) { buffer in
                     buffer.load(as: UInt32.self)
                 }
                 guard let scalar = Unicode.Scalar(v) else {
@@ -1271,7 +1262,7 @@
             // String: (ptr, len) pair at the offset
             case .inlined(.primitive(.string)):
                 try checkBounds(offset: UInt(offset), count: 8)
-                let (ptr, len): (UInt32, UInt32) = memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 8) { buffer in
+                let (ptr, len): (UInt32, UInt32) = try memoryInstance.withUnsafeBufferPointer(offset: UInt(offset), count: 8) { buffer in
                     let ptr = buffer.load(fromByteOffset: 0, as: UInt32.self)
                     let len = buffer.load(fromByteOffset: 4, as: UInt32.self)
                     return (ptr, len)

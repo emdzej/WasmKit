@@ -14,11 +14,17 @@ public enum CanonicalLifting {
         loadElement: (UnsafeGuestRawPointer) throws -> Element,
         context: CanonicalCallContext
     ) throws -> [Element] {
+        // The pointer and length come from the guest: check the whole list is inside the
+        // memory before reserving room for it or loading any element.
+        let byteLength = UInt64(length) * UInt64(elementSize)
+        guard UInt64(pointer) + byteLength <= UInt64(context.guestMemory.byteCount) else {
+            throw CanonicalABIError(description: "list of \(length) elements at \(pointer) is out of bounds")
+        }
         var elements = [Element]()
-        elements.reserveCapacity(Int(elementSize))
+        elements.reserveCapacity(Int(length))
         let guestPointer = UnsafeGuestRawPointer(offset: pointer)
         for i in 0..<length {
-            let element = try loadElement(guestPointer.advanced(by: i * elementSize))
+            let element = try loadElement(guestPointer.advanced(by: i &* elementSize))
             elements.append(element)
         }
         return elements

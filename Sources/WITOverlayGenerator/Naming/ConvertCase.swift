@@ -24,7 +24,9 @@ enum ConvertCase {
     }
 
     static func camelCase(_ components: [String]) -> String {
-        var id = "\(components[0])"
+        // A name of only dashes, such as `%--`, has no components.
+        guard let first = components.first else { return "" }
+        var id = first
         for component in components.dropFirst() {
             id += component[component.startIndex].uppercased()
             id += component[component.index(after: component.startIndex)...]

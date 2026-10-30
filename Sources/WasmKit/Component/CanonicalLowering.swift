@@ -9,13 +9,16 @@ public enum CanonicalLowering {
             throw CanonicalABIError(description: "Unsupported string encoding: \(context.options.stringEncoding)")
         }
         let bytes = value.utf8
+        guard let length = UInt32(exactly: bytes.count) else {
+            throw CanonicalABIError(description: "string of \(bytes.count) bytes does not fit in guest memory")
+        }
         let newBuffer = try context.realloc(
-            old: 0, oldSize: 0, oldAlign: 1, newSize: UInt32(bytes.count)
+            old: 0, oldSize: 0, oldAlign: 1, newSize: length
         )
-        newBuffer.withHostPointer(in: context.guestMemory, count: bytes.count) { newBuffer in
+        try newBuffer.withHostPointer(in: context.guestMemory, count: bytes.count) { newBuffer in
             newBuffer.copyBytes(from: bytes)
         }
-        return (newBuffer.offset, UInt32(bytes.count))
+        return (newBuffer.offset, length)
     }
 
     /// Lowers a Swift Array value to a pair of a pointer and a length.
@@ -32,13 +35,17 @@ public enum CanonicalLowering {
         storeElement: (Element, UnsafeGuestRawPointer) throws -> Void,
         context: CanonicalCallContext
     ) throws -> (pointer: UInt32, length: UInt32) {
-        let byteLength = UInt32(value.count) * elementSize
+        guard let count = UInt32(exactly: value.count),
+            case let (byteLength, overflow) = count.multipliedReportingOverflow(by: elementSize), !overflow
+        else {
+            throw CanonicalABIError(description: "list of \(value.count) elements does not fit in guest memory")
+        }
         let newBuffer = try context.realloc(
             old: 0, oldSize: 0, oldAlign: elementAlignment, newSize: byteLength
         )
         for (i, element) in value.enumerated() {
-            try storeElement(element, newBuffer.advanced(by: elementSize * UInt32(i)))
+            try storeElement(element, newBuffer.advanced(by: elementSize &* UInt32(i)))
         }
-        return (newBuffer.offset, UInt32(value.count))
+        return (newBuffer.offset, count)
     }
 }

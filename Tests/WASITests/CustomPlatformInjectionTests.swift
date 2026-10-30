@@ -248,15 +248,15 @@ struct CustomPlatformInjectionTests {
             fsRightsBase: [.FD_READ], fsRightsInheriting: [], fdflags: []
         )
         let expected = "Hello, injected world!"
-        let readVecs = memory.readIOVecs(sizes: [expected.utf8.count])
+        let readVecs = try memory.readIOVecs(sizes: [expected.utf8.count])
         let nread = try wasi.fd_read(fd: fd, iovs: readVecs, memory: memory)
         #expect(nread == WASIAbi.Size(expected.utf8.count))
-        let content = memory.loadIOVecs(readVecs)[0]
+        let content = try memory.loadIOVecs(readVecs)[0]
         #expect(String(decoding: content, as: UTF8.self) == expected)
         try wasi.fd_close(fd: fd)
 
         // Write to the injected stdout sink.
-        let writeVecs = memory.writeIOVecs([Array("ping".utf8)])
+        let writeVecs = try memory.writeIOVecs([Array("ping".utf8)])
         let written = try wasi.fd_write(fileDescriptor: 1, ioVectors: writeVecs, memory: memory)
         #expect(written == 4)
         #expect(stdout.captured.withLock { String(decoding: $0, as: UTF8.self) } == "ping")
@@ -275,8 +275,8 @@ struct CustomPlatformInjectionTests {
         #expect(monotonic == 42_000)
 
         let memory = TestSupport.TestGuestMemory()
-        wasi.random_get(buffer: UnsafeGuestPointer<UInt8>(offset: 0x100), length: 4, memory: memory)
-        let randomBytes = memory.withUnsafeMutableBufferPointer(offset: 0x100, count: 4) { [UInt8]($0) }
+        try wasi.random_get(buffer: UnsafeGuestPointer<UInt8>(offset: 0x100), length: 4, memory: memory)
+        let randomBytes = try memory.withUnsafeMutableBufferPointer(offset: 0x100, count: 4) { [UInt8]($0) }
         #expect(randomBytes == [1, 2, 3, 4])
 
         try bridge.close()

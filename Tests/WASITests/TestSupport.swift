@@ -92,9 +92,9 @@ enum TestSupport {
             offset: UInt,
             count: Int,
             _ body: (UnsafeMutableRawBufferPointer) throws -> T
-        ) rethrows -> T {
-            guard offset + UInt(count) <= data.count else {
-                fatalError("Memory access out of bounds")
+        ) throws -> T {
+            guard offset <= UInt(data.count), UInt(count) <= UInt(data.count) - offset else {
+                throw GuestMemoryError(offset: UInt64(offset), count: UInt64(count))
             }
             return try data.withUnsafeMutableBytes { buffer in
                 let start = buffer.baseAddress!.advanced(by: Int(offset))
@@ -111,7 +111,7 @@ enum TestSupport {
             Array(data[Int(offset)..<Int(offset) + count])
         }
 
-        func writeIOVecs(_ buffers: [[UInt8]]) -> UnsafeGuestBufferPointer<WASIAbi.IOVec> {
+        func writeIOVecs(_ buffers: [[UInt8]]) throws -> UnsafeGuestBufferPointer<WASIAbi.IOVec> {
             var currentDataOffset: UInt32 = 0
             let iovecOffset: UInt32 = 32768
 
@@ -127,7 +127,7 @@ enum TestSupport {
                     buffer: UnsafeGuestRawPointer(offset: dataReadOffset),
                     length: UInt32(buffer.count)
                 )
-                WASIAbi.IOVec.writeToGuest(
+                try WASIAbi.IOVec.writeToGuest(
                     at: UnsafeGuestRawPointer(offset: iovecWriteOffset),
                     in: self,
                     value: iovec
@@ -142,7 +142,7 @@ enum TestSupport {
             )
         }
 
-        func readIOVecs(sizes: [Int]) -> UnsafeGuestBufferPointer<WASIAbi.IOVec> {
+        func readIOVecs(sizes: [Int]) throws -> UnsafeGuestBufferPointer<WASIAbi.IOVec> {
             var currentDataOffset: UInt32 = 0
             let iovecOffset: UInt32 = 32768
 
@@ -152,7 +152,7 @@ enum TestSupport {
                     buffer: UnsafeGuestRawPointer(offset: currentDataOffset),
                     length: UInt32(size)
                 )
-                WASIAbi.IOVec.writeToGuest(
+                try WASIAbi.IOVec.writeToGuest(
                     at: UnsafeGuestRawPointer(offset: iovecWriteOffset),
                     in: self,
                     value: iovec
@@ -167,14 +167,14 @@ enum TestSupport {
             )
         }
 
-        func loadIOVecs(_ iovecs: UnsafeGuestBufferPointer<WASIAbi.IOVec>) -> [[UInt8]] {
+        func loadIOVecs(_ iovecs: UnsafeGuestBufferPointer<WASIAbi.IOVec>) throws -> [[UInt8]] {
             var result: [[UInt8]] = []
 
             for i in 0..<Int(iovecs.count) {
-                let iovec = (iovecs.baseAddress + UInt32(i)).read(from: self)
+                let iovec = try (iovecs.baseAddress + UInt32(i)).read(from: self)
                 var buffer = [UInt8](repeating: 0, count: Int(iovec.length))
 
-                iovec.buffer.withHostPointer(in: self, count: Int(iovec.length)) { hostBuffer in
+                try iovec.buffer.withHostPointer(in: self, count: Int(iovec.length)) { hostBuffer in
                     buffer.withUnsafeMutableBytes { destBuffer in
                         destBuffer.copyMemory(from: UnsafeRawBufferPointer(hostBuffer))
                     }

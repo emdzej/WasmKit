@@ -40,15 +40,30 @@
             #endif
         }
 
+        /// The most memory a single read reserves ahead of the data actually arriving.
+        static let readChunkSize = 1 << 20
+
         /// Reads up to `maxLength` bytes from the current offset of `fd`.
         /// A result shorter than `maxLength` means end-of-file was reached.
+        ///
+        /// `maxLength` usually comes from a size field in the binary, so memory is reserved a
+        /// chunk at a time as the data arrives rather than up front. A short `read`, as pipes
+        /// give, is followed by another rather than taken for end-of-file.
         static func readBytes(_ fd: CInt, upToCount maxLength: Int) throws(WasmParserError) -> [UInt8] {
-            var result = [UInt8](repeating: 0, count: maxLength)
-            let readCount = result.withUnsafeMutableBytes { rawRead(fd, into: $0) }
-            guard readCount >= 0 else {
-                throw WasmParserError("I/O error: \(errorMessage(CInt(-readCount)))", offset: 0)
+            var result: [UInt8] = []
+            while result.count < maxLength {
+                let chunk = min(maxLength - result.count, readChunkSize)
+                let start = result.count
+                result.append(contentsOf: repeatElement(0, count: chunk))
+                let readCount = result.withUnsafeMutableBytes {
+                    rawRead(fd, into: UnsafeMutableRawBufferPointer(rebasing: $0[start...]))
+                }
+                guard readCount >= 0 else {
+                    throw WasmParserError("I/O error: \(errorMessage(CInt(-readCount)))", offset: 0)
+                }
+                result.removeLast(chunk - readCount)
+                if readCount == 0 { break }
             }
-            result.removeLast(maxLength - readCount)
             return result
         }
 

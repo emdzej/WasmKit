@@ -35,6 +35,12 @@
 
         private let offset = DebuggerMemoryView.executableCodeOffset
 
+        /// A request the handler refuses gets an error reply, which keeps the session open.
+        static func isErrorReply(_ response: GDBTargetResponse) -> Bool {
+            if case .error = response.kind { return true }
+            return false
+        }
+
         private func divergentAddresses() throws -> (requested: Int, resolved: Int) {
             let bytes = try wat2wasm(Self.wat)
             let module = try parseWasm(bytes: bytes)
@@ -267,9 +273,8 @@
         @Test
         func setDetachOnErrorRejectsValuesOtherThanZeroOrOne() throws {
             _ = try withHandler(debugging: Self.wat) { h in
-                #expect(throws: WasmKitGDBHandler.Error.self) {
-                    _ = try h.handle(command: .init(kind: .setDetachOnError, arguments: "2"))
-                }
+                let response = try h.handle(command: .init(kind: .setDetachOnError, arguments: "2"))
+                #expect(Self.isErrorReply(response))
                 #expect(h.detachesOnDisconnect)
             }
         }
@@ -310,9 +315,8 @@
         @Test
         func wasmGlobalRejectsMissingIndex() throws {
             _ = try withHandler(debugging: Self.globalWAT) { h in
-                #expect(throws: WasmKitGDBHandler.Error.self) {
-                    _ = try h.handle(command: .init(kind: .wasmGlobal, arguments: "0;"))
-                }
+                let response = try h.handle(command: .init(kind: .wasmGlobal, arguments: "0;"))
+                #expect(Self.isErrorReply(response))
             }
         }
 
@@ -386,9 +390,8 @@
         @Test
         func wasmGlobalRejectsAnUnparsableInstance() throws {
             _ = try withHandler(debugging: Self.globalWAT) { h in
-                #expect(throws: WasmKitGDBHandler.Error.self) {
-                    _ = try h.handle(command: .init(kind: .wasmGlobal, arguments: "0;instance:;"))
-                }
+                let response = try h.handle(command: .init(kind: .wasmGlobal, arguments: "0;instance:;"))
+                #expect(Self.isErrorReply(response))
             }
         }
 
@@ -396,12 +399,11 @@
         @Test
         func wasmGlobalRejectsARequestMixingAFrameIndexAndAnInstance() throws {
             _ = try withHandler(debugging: Self.globalWAT) { h in
-                #expect(throws: WasmKitGDBHandler.Error.self) {
-                    _ = try h.handle(
+                let response = try h.handle(
                         command: .init(
                             kind: .wasmGlobal,
                             arguments: "0;1;instance:\(DebuggerMemoryView.moduleInstanceID);"))
-                }
+                #expect(Self.isErrorReply(response))
             }
         }
 

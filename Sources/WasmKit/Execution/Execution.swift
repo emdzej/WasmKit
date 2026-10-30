@@ -20,8 +20,6 @@ struct Execution: ~Copyable {
     /// The stack of active exception handlers for `try_table` blocks.
     var exceptionHandlers: [ExceptionHandler] = []
 
-    /// Storage for caught exceptions that may be referenced via `exnref`.
-    var storedExceptions: [WasmKitException] = []
 
     /// An active exception handler entry registered by a `try_table` block.
     struct ExceptionHandler {
@@ -35,9 +33,10 @@ struct Execution: ~Copyable {
         let targetPC: Pc
         /// The register offset where payload values should be written (relative to `sp`).
         let payloadRegBase: VReg
-        /// The number of handlers from the same `try_table` directly below this one,
-        /// which go out of scope together with it when it catches.
-        let siblingsBelow: Int
+        /// The number of handlers directly below this one that go out of scope when it catches:
+        /// the rest of its own `try_table`, and those of enclosing `try_table`s that its label
+        /// lies outside of.
+        let exitedBelow: Int
     }
 
     package init(store: StoreRef, stackEnd: UnsafeMutablePointer<StackSlot>) {

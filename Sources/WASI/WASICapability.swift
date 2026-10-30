@@ -47,7 +47,7 @@ extension WASIImplementation {
             type: .init(parameters: [.i32, .i32], results: [.i32])
         ) { caller, arguments in
             try withMemoryBuffer(caller: caller) { buffer in
-                self.args_get(
+                try self.args_get(
                     argv: .init(offset: arguments[0].i32),
                     argvBuffer: .init(offset: arguments[1].i32),
                     memory: buffer
@@ -62,9 +62,9 @@ extension WASIImplementation {
             try withMemoryBuffer(caller: caller) { buffer in
                 let (argc, bufferSize) = self.args_sizes_get()
                 let argcPointer = UnsafeGuestPointer<WASIAbi.Size>(offset: arguments[0].i32)
-                argcPointer.write(argc, to: buffer)
+                try argcPointer.write(argc, to: buffer)
                 let bufferSizePointer = UnsafeGuestPointer<WASIAbi.Size>(offset: arguments[1].i32)
-                bufferSizePointer.write(bufferSize, to: buffer)
+                try bufferSizePointer.write(bufferSize, to: buffer)
                 return [.i32(.init(WASIAbi.Errno.SUCCESS.rawValue))]
             }
         }
@@ -73,7 +73,7 @@ extension WASIImplementation {
             type: .init(parameters: [.i32, .i32], results: [.i32])
         ) { caller, arguments in
             try withMemoryBuffer(caller: caller) { buffer in
-                self.environ_get(
+                try self.environ_get(
                     environ: .init(offset: arguments[0].i32),
                     environBuffer: .init(offset: arguments[1].i32),
                     memory: buffer
@@ -88,9 +88,9 @@ extension WASIImplementation {
             try withMemoryBuffer(caller: caller) { buffer in
                 let (environSize, bufferSize) = self.environ_sizes_get()
                 let environSizePointer = UnsafeGuestPointer<WASIAbi.Size>(offset: arguments[0].i32)
-                environSizePointer.write(environSize, to: buffer)
+                try environSizePointer.write(environSize, to: buffer)
                 let bufferSizePointer = UnsafeGuestPointer<WASIAbi.Size>(offset: arguments[1].i32)
-                bufferSizePointer.write(bufferSize, to: buffer)
+                try bufferSizePointer.write(bufferSize, to: buffer)
                 return [.i32(.init(WASIAbi.Errno.SUCCESS.rawValue))]
             }
         }
@@ -111,7 +111,7 @@ extension WASIImplementation {
                 let resPointer = UnsafeGuestPointer<WASIAbi.Timestamp>(
                     offset: arguments[1].i32
                 )
-                resPointer.write(res, to: buffer)
+                try resPointer.write(res, to: buffer)
             }
             return [.i32(.init(WASIAbi.Errno.SUCCESS.rawValue))]
         }
@@ -125,7 +125,7 @@ extension WASIImplementation {
                 let resPointer = UnsafeGuestPointer<WASIAbi.Timestamp>(
                     offset: arguments[2].i32
                 )
-                resPointer.write(time, to: buffer)
+                try resPointer.write(time, to: buffer)
             }
             return [.i32(.init(WASIAbi.Errno.SUCCESS.rawValue))]
         }
@@ -141,7 +141,7 @@ extension WASIImplementation {
             type: .init(parameters: [.i32, .i32], results: [.i32])
         ) { caller, arguments in
             try withMemoryBuffer(caller: caller) { buffer in
-                self.random_get(
+                try self.random_get(
                     buffer: UnsafeGuestPointer<UInt8>(offset: arguments[0].i32),
                     length: arguments[1].i32,
                     memory: buffer
@@ -190,7 +190,7 @@ extension WASIImplementation {
                     memory: buffer
                 )
                 let nwrittenPointer = UnsafeGuestPointer<WASIAbi.Size>(offset: arguments[3].i32)
-                nwrittenPointer.write(nwritten, to: buffer)
+                try nwrittenPointer.write(nwritten, to: buffer)
                 return [.i32(.init(WASIAbi.Errno.SUCCESS.rawValue))]
             }
         }
@@ -208,7 +208,7 @@ extension WASIImplementation {
                     memory: buffer
                 )
                 let nreadPointer = UnsafeGuestPointer<WASIAbi.Size>(offset: arguments[3].i32)
-                nreadPointer.write(nread, to: buffer)
+                try nreadPointer.write(nread, to: buffer)
             }
             return [.i32(.init(WASIAbi.Errno.SUCCESS.rawValue))]
         }
@@ -226,7 +226,7 @@ extension WASIImplementation {
             try withMemoryBuffer(caller: caller) { buffer in
                 let stat = try self.fd_fdstat_get(fileDescriptor: arguments[0].i32)
                 let statPointer = UnsafeGuestPointer<WASIAbi.FdStat>(offset: arguments[1].i32)
-                statPointer.write(stat, to: buffer)
+                try statPointer.write(stat, to: buffer)
                 return [.i32(.init(WASIAbi.Errno.SUCCESS.rawValue))]
             }
         }
@@ -254,7 +254,7 @@ extension WASIImplementation {
             )
             try withMemoryBuffer(caller: caller) { buffer in
                 let retPointer = UnsafeGuestPointer<WASIAbi.FileSize>(offset: arguments[3].i32)
-                retPointer.write(ret, to: buffer)
+                try retPointer.write(ret, to: buffer)
             }
             return [.i32(.init(WASIAbi.Errno.SUCCESS.rawValue))]
         }
@@ -263,7 +263,7 @@ extension WASIImplementation {
             let ret = try self.fd_tell(fd: arguments[0].i32)
             try withMemoryBuffer(caller: caller) { buffer in
                 let retPointer = UnsafeGuestPointer<WASIAbi.FileSize>(offset: arguments[1].i32)
-                retPointer.write(ret, to: buffer)
+                try retPointer.write(ret, to: buffer)
             }
             return [.i32(.init(WASIAbi.Errno.SUCCESS.rawValue))]
         }
@@ -286,7 +286,7 @@ extension WASIImplementation {
             try withMemoryBuffer(caller: caller) { buffer in
                 let filestat = try self.fd_filestat_get(fd: arguments[0].i32)
                 let filestatPointer = UnsafeGuestPointer<WASIAbi.Filestat>(offset: arguments[1].i32)
-                filestatPointer.write(filestat, to: buffer)
+                try filestatPointer.write(filestat, to: buffer)
             }
             return [.i32(.init(WASIAbi.Errno.SUCCESS.rawValue))]
         }
@@ -366,7 +366,7 @@ extension WASIImplementation {
                     memory: buffer
                 )
                 let nreadPointer = UnsafeGuestPointer<WASIAbi.Size>(offset: arguments[4].i32)
-                nreadPointer.write(nread, to: buffer)
+                try nreadPointer.write(nread, to: buffer)
             }
             return [.i32(.init(WASIAbi.Errno.SUCCESS.rawValue))]
         }
@@ -385,7 +385,7 @@ extension WASIImplementation {
                     memory: buffer
                 )
                 let nwrittenPointer = UnsafeGuestPointer<WASIAbi.Size>(offset: arguments[4].i32)
-                nwrittenPointer.write(nwritten, to: buffer)
+                try nwrittenPointer.write(nwritten, to: buffer)
             }
             return [.i32(.init(WASIAbi.Errno.SUCCESS.rawValue))]
         }
@@ -394,7 +394,7 @@ extension WASIImplementation {
             let prestat = try self.fd_prestat_get(fd: arguments[0].i32)
             try withMemoryBuffer(caller: caller) { buffer in
                 let prestatPointer = UnsafeGuestPointer<WASIAbi.Prestat>(offset: arguments[1].i32)
-                prestatPointer.write(prestat, to: buffer)
+                try prestatPointer.write(prestat, to: buffer)
             }
             return [.i32(.init(WASIAbi.Errno.SUCCESS.rawValue))]
         }
@@ -423,7 +423,7 @@ extension WASIImplementation {
                     memory: buffer
                 )
                 let nwrittenPointer = UnsafeGuestPointer<WASIAbi.Size>(offset: arguments[4].i32)
-                nwrittenPointer.write(nwritten, to: buffer)
+                try nwrittenPointer.write(nwritten, to: buffer)
                 return [.i32(.init(WASIAbi.Errno.SUCCESS.rawValue))]
             }
         }
@@ -456,7 +456,7 @@ extension WASIImplementation {
                     path: readString(pointer: arguments[2].i32, length: arguments[3].i32, buffer: buffer)
                 )
                 let filestatPointer = UnsafeGuestPointer<WASIAbi.Filestat>(offset: arguments[4].i32)
-                filestatPointer.write(filestat, to: buffer)
+                try filestatPointer.write(filestat, to: buffer)
             }
             return [.i32(.init(WASIAbi.Errno.SUCCESS.rawValue))]
         }
@@ -505,7 +505,7 @@ extension WASIImplementation {
                     fdflags: .init(rawValue: rawFdFlags)
                 )
                 let newFdPointer = UnsafeGuestPointer<WASIAbi.Fd>(offset: arguments[8].i32)
-                newFdPointer.write(newFd, to: buffer)
+                try newFdPointer.write(newFd, to: buffer)
                 return [.i32(.init(WASIAbi.Errno.SUCCESS.rawValue))]
             }
         }
@@ -524,7 +524,7 @@ extension WASIImplementation {
                     memory: buffer
                 )
                 let retPointer = UnsafeGuestPointer<WASIAbi.Size>(offset: arguments[5].i32)
-                retPointer.write(ret, to: buffer)
+                try retPointer.write(ret, to: buffer)
             }
             return [.i32(.init(WASIAbi.Errno.SUCCESS.rawValue))]
         }
@@ -598,7 +598,7 @@ extension WASIImplementation {
                     events: .init(baseAddress: eventsBaseAddress, count: arguments[2].i32),
                     memory: buffer
                 )
-                buffer.withUnsafeMutableBufferPointer(offset: .init(arguments[3].i32), count: MemoryLayout<UInt32>.size) { raw in
+                try buffer.withUnsafeMutableBufferPointer(offset: .init(arguments[3].i32), count: MemoryLayout<UInt32>.size) { raw in
                     raw.withMemoryRebound(to: UInt32.self) { rebound in rebound[0] = size.littleEndian }
                 }
 

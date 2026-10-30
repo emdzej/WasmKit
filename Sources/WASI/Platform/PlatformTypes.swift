@@ -84,8 +84,12 @@ extension WASIAbi.Filestat {
 
 extension WASIAbi.Timestamp {
 
+    /// Saturates at `UInt64.max` nanoseconds (the year 2554) rather than trapping, as a host
+    /// file can carry any timestamp its filesystem stores.
     fileprivate init(seconds: UInt64, nanoseconds: UInt64) {
-        self = nanoseconds + seconds * 1_000_000_000
+        let (scaled, overflow) = seconds.multipliedReportingOverflow(by: 1_000_000_000)
+        let (sum, sumOverflow) = scaled.addingReportingOverflow(nanoseconds)
+        self = overflow || sumOverflow ? .max : sum
     }
 
     init(platformTimeSpec timespec: FileTime) {
@@ -110,6 +114,8 @@ extension WASIAbi.Errno {
         switch error {
         case let errno as WASIAbi.Errno: return errno
         case let failure as CleanupFailure: return reportable(for: failure.underlying)
+        // A guest pointer outside its memory is the guest's mistake, not the host's.
+        case is GuestMemoryError: return .EFAULT
         default: return nil
         }
     }

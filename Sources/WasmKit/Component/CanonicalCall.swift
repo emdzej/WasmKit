@@ -49,6 +49,13 @@ public struct CanonicalCallContext {
         guard case .i32(let new) = results[0] else {
             throw CanonicalABIError(description: "\"cabi_realloc\" export should return an i32 value")
         }
+        // The guest chose this pointer, so check it before anything is written through it.
+        guard oldAlign == 0 || new % oldAlign == 0 else {
+            throw CanonicalABIError(description: "\"cabi_realloc\" returned \(new), which is not aligned to \(oldAlign)")
+        }
+        guard UInt64(new) + UInt64(newSize) <= UInt64(guestMemory.byteCount) else {
+            throw CanonicalABIError(description: "\"cabi_realloc\" returned \(new), leaving no room for \(newSize) bytes")
+        }
         return UnsafeGuestRawPointer(offset: new)
     }
 }

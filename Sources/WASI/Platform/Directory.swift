@@ -109,6 +109,9 @@ extension DirEntry: WASIDir, FdWASIEntry {
     }
 
     func symlink(from sourcePath: String, to destPath: String) throws {
+        // Path resolution refuses absolute targets, so such a link could never be used inside
+        // the sandbox; refusing it here also keeps it from pointing anything else at the host.
+        guard !GuestPath(sourcePath).isAbsolute else { throw WASIAbi.Errno.EPERM }
         let result = try SandboxPrimitives.openParent(
             start: fd, path: destPath
         )
@@ -219,15 +222,31 @@ extension DirEntry: WASIDir, FdWASIEntry {
     }
 
     func attributes(path: String, symlinkFollow: Bool) throws -> WASIAbi.Filestat {
-        var options: FileDescriptor.AtOptions = []
-        if !symlinkFollow {
-            options.insert(.noFollow)
-        }
-        let result = try SandboxPrimitives.openParent(start: fd, path: path)
-        return try result.withFields { dir, basename in
-            let attributes = try dir.attributes(at: basename, options: options)
+        // `fstatat` without `AT_SYMLINK_NOFOLLOW` resolves a final symlink on the host, where
+        // its target can be any host path. Follow links here instead, with the same rules as
+        // `path_open`: relative targets only, resolved inside the sandbox.
+        var path = path
+        var resolvedSymlinks = 0
+        while true {
+            let result = try SandboxPrimitives.openParent(start: fd, path: path)
+            let attributes = try result.withFields { dir, basename in
+                try dir.attributes(at: basename, options: [.noFollow])
+            }
+            guard symlinkFollow, attributes.fileType.isSymlink else {
+                return WASIAbi.Filestat(stat: attributes)
+            }
+            guard resolvedSymlinks < PathResolution.MAX_SYMLINKS else {
+                throw WASIAbi.Errno.ELOOP
+            }
+            resolvedSymlinks += 1
 
-            return WASIAbi.Filestat(stat: attributes)
+            let target = GuestPath(
+                String(decoding: try SandboxPrimitives.readlinkAt(start: fd, path: path), as: UTF8.self))
+            guard !target.isAbsolute else { throw WASIAbi.Errno.EPERM }
+            // `openParent` only names a symlink as the final component, so the link sits in the
+            // parent directory of `path` and its target is relative to that directory.
+            guard let (parent, _) = splitParent(path: path) else { throw WASIAbi.Errno.ENOENT }
+            path = parent.isEmpty ? target.string : parent.string + "/" + target.string
         }
     }
 }

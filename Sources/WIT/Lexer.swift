@@ -60,7 +60,9 @@ struct Lexer {
                 if cursor.eat("/") {
                     depth -= 1
                     if depth == 0 {
-                        break
+                        // `break` would only leave the `switch`, and the loop would go on to
+                        // swallow the rest of the file as part of the comment.
+                        return nil
                     }
                 }
             case "/":
@@ -111,7 +113,8 @@ struct Lexer {
                 // Eat a block comment if it starts with "/*"
                 if cursor.eat("*") {
                     let diag = advanceToEndOfBlockComment()
-                    return LexKindResult(kind: .comment, diagnostic: diag)
+                    // Not a comment the parser skips: the file ends inside it, which is an error.
+                    return LexKindResult(kind: diag == nil ? .comment : .unterminatedBlockComment, diagnostic: diag)
                 }
                 return LexKindResult(kind: .slash)
             case "=": return LexKindResult(kind: .equals)
@@ -302,6 +305,8 @@ extension Lexer: IteratorProtocol, Sequence {
 enum TokenKind: Equatable {
     case whitespace
     case comment
+    /// A `/*` comment that the file ends inside of.
+    case unterminatedBlockComment
 
     case equals
     case comma

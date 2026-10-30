@@ -186,7 +186,7 @@ import WasmTypes
         public let buffer: UnsafeGuestRawPointer
         public let length: WASIAbi.Size
 
-        public func withHostBufferPointer<M: GuestMemory, R>(in memory: M, _ body: (UnsafeMutableRawBufferPointer) throws -> R) rethrows -> R {
+        public func withHostBufferPointer<M: GuestMemory, R>(in memory: M, _ body: (UnsafeMutableRawBufferPointer) throws -> R) throws -> R {
             try buffer.withHostPointer(in: memory, count: Int(length)) { hostPointer in
                 try body(hostPointer)
             }
@@ -200,16 +200,16 @@ import WasmTypes
             max(UnsafeGuestRawPointer.alignInGuest, WASIAbi.Size.alignInGuest)
         }
 
-        public static func readFromGuest<M: GuestMemory>(_ pointer: UnsafeGuestRawPointer, in memory: M) -> IOVec {
+        public static func readFromGuest<M: GuestMemory>(_ pointer: UnsafeGuestRawPointer, in memory: M) throws -> IOVec {
             return IOVec(
-                buffer: .readFromGuest(pointer, in: memory),
-                length: .readFromGuest(pointer.advanced(by: UnsafeGuestRawPointer.sizeInGuest), in: memory)
+                buffer: try .readFromGuest(pointer, in: memory),
+                length: try .readFromGuest(pointer.advanced(by: UnsafeGuestRawPointer.sizeInGuest), in: memory)
             )
         }
 
-        public static func writeToGuest<M: GuestMemory>(at pointer: UnsafeGuestRawPointer, in memory: M, value: IOVec) {
-            UnsafeGuestRawPointer.writeToGuest(at: pointer, in: memory, value: value.buffer)
-            WASIAbi.Size.writeToGuest(at: pointer.advanced(by: UnsafeGuestRawPointer.sizeInGuest), in: memory, value: value.length)
+        public static func writeToGuest<M: GuestMemory>(at pointer: UnsafeGuestRawPointer, in memory: M, value: IOVec) throws {
+            try UnsafeGuestRawPointer.writeToGuest(at: pointer, in: memory, value: value.buffer)
+            try WASIAbi.Size.writeToGuest(at: pointer.advanced(by: UnsafeGuestRawPointer.sizeInGuest), in: memory, value: value.length)
         }
     }
 
@@ -243,22 +243,22 @@ import WasmTypes
         public static let sizeInGuest: UInt32 = 32
         public static let alignInGuest: UInt32 = max(ClockId.alignInGuest, Timestamp.alignInGuest, Flags.alignInGuest)
 
-        public static func readFromGuest<M: GuestMemory>(_ pointer: UnsafeGuestRawPointer, in memory: M) -> Self {
+        public static func readFromGuest<M: GuestMemory>(_ pointer: UnsafeGuestRawPointer, in memory: M) throws -> Self {
             var pointer = pointer
             return .init(
-                id: .readFromGuest(&pointer, in: memory),
-                timeout: .readFromGuest(&pointer, in: memory),
-                precision: .readFromGuest(&pointer, in: memory),
-                flags: .readFromGuest(&pointer, in: memory)
+                id: try .readFromGuest(&pointer, in: memory),
+                timeout: try .readFromGuest(&pointer, in: memory),
+                precision: try .readFromGuest(&pointer, in: memory),
+                flags: try .readFromGuest(&pointer, in: memory)
             )
         }
 
-        public static func writeToGuest<M: GuestMemory>(at pointer: UnsafeGuestRawPointer, in memory: M, value: Self) {
+        public static func writeToGuest<M: GuestMemory>(at pointer: UnsafeGuestRawPointer, in memory: M, value: Self) throws {
             var pointer = pointer
-            ClockId.writeToGuest(at: &pointer, in: memory, value: value.id)
-            Timestamp.writeToGuest(at: &pointer, in: memory, value: value.timeout)
-            Timestamp.writeToGuest(at: &pointer, in: memory, value: value.precision)
-            Flags.writeToGuest(at: &pointer, in: memory, value: value.flags)
+            try ClockId.writeToGuest(at: &pointer, in: memory, value: value.id)
+            try Timestamp.writeToGuest(at: &pointer, in: memory, value: value.timeout)
+            try Timestamp.writeToGuest(at: &pointer, in: memory, value: value.precision)
+            try Flags.writeToGuest(at: &pointer, in: memory, value: value.flags)
         }
     }
 
@@ -282,44 +282,44 @@ import WasmTypes
             public static let sizeInGuest: UInt32 = 40
             public static let alignInGuest: UInt32 = max(Clock.alignInGuest, Fd.alignInGuest)
 
-            public static func readFromGuest<M: GuestMemory>(_ pointer: UnsafeGuestRawPointer, in memory: M) -> Self {
+            public static func readFromGuest<M: GuestMemory>(_ pointer: UnsafeGuestRawPointer, in memory: M) throws -> Self {
                 var pointer = pointer
-                let tag = UInt8.readFromGuest(&pointer, in: memory)
+                let tag = try UInt8.readFromGuest(&pointer, in: memory)
                 // Align to variant content area (max alignment of all variant payloads)
                 pointer = pointer.alignedUp(toMultipleOf: Clock.alignInGuest)
 
                 switch tag {
                 case 0:
-                    return .clock(.readFromGuest(&pointer, in: memory))
+                    return .clock(try .readFromGuest(&pointer, in: memory))
 
                 case 1:
-                    return .fdRead(.readFromGuest(&pointer, in: memory))
+                    return .fdRead(try .readFromGuest(&pointer, in: memory))
 
                 case 2:
-                    return .fdWrite(.readFromGuest(&pointer, in: memory))
+                    return .fdWrite(try .readFromGuest(&pointer, in: memory))
 
                 default:
                     return .unknown(tag)
                 }
             }
 
-            public static func writeToGuest<M: GuestMemory>(at pointer: UnsafeGuestRawPointer, in memory: M, value: Self) {
+            public static func writeToGuest<M: GuestMemory>(at pointer: UnsafeGuestRawPointer, in memory: M, value: Self) throws {
                 var pointer = pointer
                 switch value {
                 case .clock(let clock):
-                    UInt8.writeToGuest(at: &pointer, in: memory, value: 0)
+                    try UInt8.writeToGuest(at: &pointer, in: memory, value: 0)
                     pointer = pointer.alignedUp(toMultipleOf: Clock.alignInGuest)
-                    Clock.writeToGuest(at: &pointer, in: memory, value: clock)
+                    try Clock.writeToGuest(at: &pointer, in: memory, value: clock)
                 case .fdRead(let fd):
-                    UInt8.writeToGuest(at: &pointer, in: memory, value: 1)
+                    try UInt8.writeToGuest(at: &pointer, in: memory, value: 1)
                     pointer = pointer.alignedUp(toMultipleOf: Clock.alignInGuest)
-                    Fd.writeToGuest(at: &pointer, in: memory, value: fd)
+                    try Fd.writeToGuest(at: &pointer, in: memory, value: fd)
                 case .fdWrite(let fd):
-                    UInt8.writeToGuest(at: &pointer, in: memory, value: 2)
+                    try UInt8.writeToGuest(at: &pointer, in: memory, value: 2)
                     pointer = pointer.alignedUp(toMultipleOf: Clock.alignInGuest)
-                    Fd.writeToGuest(at: &pointer, in: memory, value: fd)
+                    try Fd.writeToGuest(at: &pointer, in: memory, value: fd)
                 case .unknown(let tag):
-                    UInt8.writeToGuest(at: &pointer, in: memory, value: tag)
+                    try UInt8.writeToGuest(at: &pointer, in: memory, value: tag)
                 }
             }
         }
@@ -329,15 +329,15 @@ import WasmTypes
         public static let sizeInGuest: UInt32 = 48
         public static let alignInGuest: UInt32 = max(UserData.alignInGuest, Union.alignInGuest)
 
-        public static func readFromGuest<M: GuestMemory>(_ pointer: UnsafeGuestRawPointer, in memory: M) -> Self {
+        public static func readFromGuest<M: GuestMemory>(_ pointer: UnsafeGuestRawPointer, in memory: M) throws -> Self {
             var pointer = pointer
-            return .init(userData: .readFromGuest(&pointer, in: memory), union: .readFromGuest(&pointer, in: memory))
+            return .init(userData: try .readFromGuest(&pointer, in: memory), union: try .readFromGuest(&pointer, in: memory))
         }
 
-        public static func writeToGuest<M: GuestMemory>(at pointer: UnsafeGuestRawPointer, in memory: M, value: Self) {
+        public static func writeToGuest<M: GuestMemory>(at pointer: UnsafeGuestRawPointer, in memory: M, value: Self) throws {
             var pointer = pointer
-            UserData.writeToGuest(at: &pointer, in: memory, value: value.userData)
-            Union.writeToGuest(at: &pointer, in: memory, value: value.union)
+            try UserData.writeToGuest(at: &pointer, in: memory, value: value.userData)
+            try Union.writeToGuest(at: &pointer, in: memory, value: value.union)
         }
     }
 
@@ -354,14 +354,14 @@ import WasmTypes
             public static let sizeInGuest: UInt32 = 16
             public static let alignInGuest: UInt32 = 8
 
-            public static func readFromGuest<M: GuestMemory>(_ pointer: UnsafeGuestRawPointer, in memory: M) -> Self {
+            public static func readFromGuest<M: GuestMemory>(_ pointer: UnsafeGuestRawPointer, in memory: M) throws -> Self {
                 var pointer = pointer
-                return .init(nBytes: FileSize.readFromGuest(&pointer, in: memory), flags: Flags.readFromGuest(&pointer, in: memory))
+                return .init(nBytes: try FileSize.readFromGuest(&pointer, in: memory), flags: try Flags.readFromGuest(&pointer, in: memory))
             }
-            public static func writeToGuest<M: GuestMemory>(at pointer: UnsafeGuestRawPointer, in memory: M, value: Self) {
+            public static func writeToGuest<M: GuestMemory>(at pointer: UnsafeGuestRawPointer, in memory: M, value: Self) throws {
                 var pointer = pointer
-                FileSize.writeToGuest(at: &pointer, in: memory, value: value.nBytes)
-                Flags.writeToGuest(at: &pointer, in: memory, value: value.flags)
+                try FileSize.writeToGuest(at: &pointer, in: memory, value: value.nBytes)
+                try Flags.writeToGuest(at: &pointer, in: memory, value: value.flags)
             }
         }
 
@@ -372,21 +372,21 @@ import WasmTypes
         public static let sizeInGuest: UInt32 = 32
         public static let alignInGuest: UInt32 = 8
 
-        public static func readFromGuest<M: GuestMemory>(_ pointer: UnsafeGuestRawPointer, in memory: M) -> Self {
+        public static func readFromGuest<M: GuestMemory>(_ pointer: UnsafeGuestRawPointer, in memory: M) throws -> Self {
             var pointer = pointer
             return .init(
-                userData: .readFromGuest(&pointer, in: memory),
-                error: .readFromGuest(&pointer, in: memory),
-                eventType: .readFromGuest(&pointer, in: memory),
-                fdReadWrite: .readFromGuest(&pointer, in: memory)
+                userData: try .readFromGuest(&pointer, in: memory),
+                error: try .readFromGuest(&pointer, in: memory),
+                eventType: try .readFromGuest(&pointer, in: memory),
+                fdReadWrite: try .readFromGuest(&pointer, in: memory)
             )
         }
-        public static func writeToGuest<M: GuestMemory>(at pointer: UnsafeGuestRawPointer, in memory: M, value: Self) {
+        public static func writeToGuest<M: GuestMemory>(at pointer: UnsafeGuestRawPointer, in memory: M, value: Self) throws {
             var pointer = pointer
-            UserData.writeToGuest(at: &pointer, in: memory, value: value.userData)
-            Errno.writeToGuest(at: &pointer, in: memory, value: value.error)
-            EventType.writeToGuest(at: &pointer, in: memory, value: value.eventType)
-            FdReadWrite.writeToGuest(at: &pointer, in: memory, value: value.fdReadWrite)
+            try UserData.writeToGuest(at: &pointer, in: memory, value: value.userData)
+            try Errno.writeToGuest(at: &pointer, in: memory, value: value.error)
+            try EventType.writeToGuest(at: &pointer, in: memory, value: value.eventType)
+            try FdReadWrite.writeToGuest(at: &pointer, in: memory, value: value.fdReadWrite)
         }
     }
 
@@ -598,23 +598,25 @@ import WasmTypes
             24
         }
 
-        public static func writeToGuest<M: GuestMemory>(unalignedAt pointer: UnsafeGuestRawPointer, end: UnsafeGuestRawPointer, in memory: M, value: Dirent) {
-            var pointer = pointer
+        /// Writes as much of the entry as fits before `end`, which may cut it short.
+        public static func writeToGuest<M: GuestMemory>(unalignedAt pointer: UnsafeGuestRawPointer, end: UnsafeGuestRawPointer, in memory: M, value: Dirent) throws {
             guard pointer < end else { return }
-            DirCookie.writeToGuest(at: pointer, in: memory, value: value.dNext)
-            pointer = pointer.advanced(by: DirCookie.sizeInGuest)
-
-            guard pointer < end else { return }
-            Inode.writeToGuest(at: pointer, in: memory, value: value.dIno)
-            pointer = pointer.advanced(by: Inode.sizeInGuest)
-
-            guard pointer < end else { return }
-            DirNameLen.writeToGuest(at: pointer, in: memory, value: value.dirNameLen)
-            pointer = pointer.advanced(by: DirNameLen.sizeInGuest)
-
-            guard pointer < end else { return }
-            FileType.writeToGuest(at: pointer, in: memory, value: value.dType)
-            pointer = pointer.advanced(by: FileType.sizeInGuest)
+            // Lay the entry out in full, then copy only the bytes the guest's buffer has room for:
+            // a field that straddles `end` must not be written past it.
+            var bytes = [UInt8](repeating: 0, count: Int(sizeInGuest))
+            func put<T: FixedWidthInteger>(_ value: T, at offset: Int) {
+                withUnsafeBytes(of: value.littleEndian) { field in
+                    bytes.replaceSubrange(offset..<(offset + field.count), with: field)
+                }
+            }
+            put(value.dNext, at: 0)
+            put(value.dIno, at: 8)
+            put(value.dirNameLen, at: 16)
+            put(value.dType.rawValue, at: 20)
+            let count = min(bytes.count, Int(end.offset - pointer.offset))
+            try pointer.withHostPointer(in: memory, count: count) { buffer in
+                buffer.copyBytes(from: bytes.prefix(count))
+            }
         }
     }
 
@@ -650,22 +652,22 @@ import WasmTypes
             FileType.sizeInGuest + Fdflags.sizeInGuest + Rights.sizeInGuest * 2
         }
 
-        public static func readFromGuest<M: GuestMemory>(_ pointer: UnsafeGuestRawPointer, in memory: M) -> FdStat {
+        public static func readFromGuest<M: GuestMemory>(_ pointer: UnsafeGuestRawPointer, in memory: M) throws -> FdStat {
             var pointer = pointer
             return FdStat(
-                fsFileType: .readFromGuest(&pointer, in: memory),
-                fsFlags: .readFromGuest(&pointer, in: memory),
-                fsRightsBase: .readFromGuest(&pointer, in: memory),
-                fsRightsInheriting: .readFromGuest(&pointer, in: memory)
+                fsFileType: try .readFromGuest(&pointer, in: memory),
+                fsFlags: try .readFromGuest(&pointer, in: memory),
+                fsRightsBase: try .readFromGuest(&pointer, in: memory),
+                fsRightsInheriting: try .readFromGuest(&pointer, in: memory)
             )
         }
 
-        public static func writeToGuest<M: GuestMemory>(at pointer: UnsafeGuestRawPointer, in memory: M, value: FdStat) {
+        public static func writeToGuest<M: GuestMemory>(at pointer: UnsafeGuestRawPointer, in memory: M, value: FdStat) throws {
             var pointer = pointer
-            FileType.writeToGuest(at: &pointer, in: memory, value: value.fsFileType)
-            Fdflags.writeToGuest(at: &pointer, in: memory, value: value.fsFlags)
-            Rights.writeToGuest(at: &pointer, in: memory, value: value.fsRightsBase)
-            Rights.writeToGuest(at: &pointer, in: memory, value: value.fsRightsInheriting)
+            try FileType.writeToGuest(at: &pointer, in: memory, value: value.fsFileType)
+            try Fdflags.writeToGuest(at: &pointer, in: memory, value: value.fsFlags)
+            try Rights.writeToGuest(at: &pointer, in: memory, value: value.fsRightsBase)
+            try Rights.writeToGuest(at: &pointer, in: memory, value: value.fsRightsInheriting)
         }
     }
 
@@ -748,26 +750,26 @@ import WasmTypes
             self.ctim = ctim
         }
 
-        public static func readFromGuest<M: GuestMemory>(_ pointer: UnsafeGuestRawPointer, in memory: M) -> WASIAbi.Filestat {
+        public static func readFromGuest<M: GuestMemory>(_ pointer: UnsafeGuestRawPointer, in memory: M) throws -> WASIAbi.Filestat {
             var pointer = pointer
             return Filestat(
-                dev: .readFromGuest(&pointer, in: memory), ino: .readFromGuest(&pointer, in: memory),
-                filetype: .readFromGuest(&pointer, in: memory), nlink: .readFromGuest(&pointer, in: memory),
-                size: .readFromGuest(&pointer, in: memory), atim: .readFromGuest(&pointer, in: memory),
-                mtim: .readFromGuest(&pointer, in: memory), ctim: .readFromGuest(&pointer, in: memory)
+                dev: try .readFromGuest(&pointer, in: memory), ino: try .readFromGuest(&pointer, in: memory),
+                filetype: try .readFromGuest(&pointer, in: memory), nlink: try .readFromGuest(&pointer, in: memory),
+                size: try .readFromGuest(&pointer, in: memory), atim: try .readFromGuest(&pointer, in: memory),
+                mtim: try .readFromGuest(&pointer, in: memory), ctim: try .readFromGuest(&pointer, in: memory)
             )
         }
 
-        public static func writeToGuest<M: GuestMemory>(at pointer: UnsafeGuestRawPointer, in memory: M, value: WASIAbi.Filestat) {
+        public static func writeToGuest<M: GuestMemory>(at pointer: UnsafeGuestRawPointer, in memory: M, value: WASIAbi.Filestat) throws {
             var pointer = pointer
-            Device.writeToGuest(at: &pointer, in: memory, value: value.dev)
-            Inode.writeToGuest(at: &pointer, in: memory, value: value.ino)
-            FileType.writeToGuest(at: &pointer, in: memory, value: value.filetype)
-            LinkCount.writeToGuest(at: &pointer, in: memory, value: value.nlink)
-            FileSize.writeToGuest(at: &pointer, in: memory, value: value.size)
-            Timestamp.writeToGuest(at: &pointer, in: memory, value: value.atim)
-            Timestamp.writeToGuest(at: &pointer, in: memory, value: value.mtim)
-            Timestamp.writeToGuest(at: &pointer, in: memory, value: value.ctim)
+            try Device.writeToGuest(at: &pointer, in: memory, value: value.dev)
+            try Inode.writeToGuest(at: &pointer, in: memory, value: value.ino)
+            try FileType.writeToGuest(at: &pointer, in: memory, value: value.filetype)
+            try LinkCount.writeToGuest(at: &pointer, in: memory, value: value.nlink)
+            try FileSize.writeToGuest(at: &pointer, in: memory, value: value.size)
+            try Timestamp.writeToGuest(at: &pointer, in: memory, value: value.atim)
+            try Timestamp.writeToGuest(at: &pointer, in: memory, value: value.mtim)
+            try Timestamp.writeToGuest(at: &pointer, in: memory, value: value.ctim)
         }
     }
 
@@ -778,21 +780,21 @@ import WasmTypes
         public static var sizeInGuest: UInt32 { 8 }
         public static var alignInGuest: UInt32 { 4 }
 
-        public static func readFromGuest<M: GuestMemory>(_ pointer: UnsafeGuestRawPointer, in memory: M) -> WASIAbi.Prestat {
+        public static func readFromGuest<M: GuestMemory>(_ pointer: UnsafeGuestRawPointer, in memory: M) throws -> WASIAbi.Prestat {
             var pointer = pointer
-            switch UInt8.readFromGuest(&pointer, in: memory) {
+            switch try UInt8.readFromGuest(&pointer, in: memory) {
             case 0:
-                return .dir(.readFromGuest(&pointer, in: memory))
+                return .dir(try .readFromGuest(&pointer, in: memory))
             default: fatalError()
             }
         }
 
-        public static func writeToGuest<M: GuestMemory>(at pointer: UnsafeGuestRawPointer, in memory: M, value: WASIAbi.Prestat) {
+        public static func writeToGuest<M: GuestMemory>(at pointer: UnsafeGuestRawPointer, in memory: M, value: WASIAbi.Prestat) throws {
             var pointer = pointer
             switch value {
             case .dir(let dir):
-                UInt8.writeToGuest(at: &pointer, in: memory, value: 0)
-                PrestatDir.writeToGuest(at: &pointer, in: memory, value: dir)
+                try UInt8.writeToGuest(at: &pointer, in: memory, value: 0)
+                try PrestatDir.writeToGuest(at: &pointer, in: memory, value: dir)
             }
         }
     }
@@ -880,15 +882,15 @@ final class WASIImplementation: Sendable {
         argv: UnsafeGuestPointer<UnsafeGuestPointer<UInt8>>,
         argvBuffer: UnsafeGuestPointer<UInt8>,
         memory: M
-    ) {
+    ) throws {
         var offsets = argv
         var buffer = argvBuffer
         for arg in args {
-            offsets.write(buffer, to: memory)
+            try offsets.write(buffer, to: memory)
             offsets += 1
-            let count = arg.utf8CString.withUnsafeBytes { bytes in
+            let count = try arg.utf8CString.withUnsafeBytes { bytes in
                 let count = UInt32(bytes.count)
-                buffer.raw.withHostPointer(in: memory, count: bytes.count) { hostDestBuffer in
+                try buffer.raw.withHostPointer(in: memory, count: bytes.count) { hostDestBuffer in
                     hostDestBuffer.copyMemory(from: bytes)
                 }
                 return count
@@ -908,15 +910,15 @@ final class WASIImplementation: Sendable {
     }
 
     /// Read environment variable data.
-    func environ_get<M: GuestMemory>(environ: UnsafeGuestPointer<UnsafeGuestPointer<UInt8>>, environBuffer: UnsafeGuestPointer<UInt8>, memory: M) {
+    func environ_get<M: GuestMemory>(environ: UnsafeGuestPointer<UnsafeGuestPointer<UInt8>>, environBuffer: UnsafeGuestPointer<UInt8>, memory: M) throws {
         var offsets = environ
         var buffer = environBuffer
         for (key, value) in environment {
-            offsets.write(buffer, to: memory)
+            try offsets.write(buffer, to: memory)
             offsets += 1
-            let count = "\(key)=\(value)".utf8CString.withUnsafeBytes { bytes in
+            let count = try "\(key)=\(value)".utf8CString.withUnsafeBytes { bytes in
                 let count = UInt32(bytes.count)
-                buffer.raw.withHostPointer(in: memory, count: bytes.count) { hostDestBuffer in
+                try buffer.raw.withHostPointer(in: memory, count: bytes.count) { hostDestBuffer in
                     hostDestBuffer.copyMemory(from: bytes)
                 }
                 return count
@@ -1132,7 +1134,7 @@ final class WASIImplementation: Sendable {
             }
             // Map what is written, not `maxPathLength`: that is the capacity
             // the guest declares, which it need not have actually reserved.
-            path.withHostPointer(in: memory, count: bytes.count) { buffer in
+            try path.withHostPointer(in: memory, count: bytes.count) { buffer in
                 UnsafeMutableRawBufferPointer(buffer).copyBytes(from: bytes)
             }
         }
@@ -1190,7 +1192,7 @@ final class WASIImplementation: Sendable {
                     let copyingBytes = min(WASIAbi.Dirent.sizeInGuest, totalBufferSize - bufferUsed)
                     let rangeStart = buffer.baseAddress.raw.advanced(by: bufferUsed)
                     let rangeEnd = rangeStart.advanced(by: copyingBytes)
-                    WASIAbi.Dirent.writeToGuest(unalignedAt: rangeStart, end: rangeEnd, in: memory, value: entry)
+                    try WASIAbi.Dirent.writeToGuest(unalignedAt: rangeStart, end: rangeEnd, in: memory, value: entry)
                     bufferUsed += copyingBytes
 
                     // bail out if the remaining buffer space is not enough
@@ -1204,8 +1206,8 @@ final class WASIImplementation: Sendable {
                     // Same truncation rule applied as above
                     let copyingBytes = min(entry.dirNameLen, totalBufferSize - bufferUsed)
                     let rangeStart = buffer.baseAddress.raw.advanced(by: bufferUsed)
-                    name.withUTF8 { bytes in
-                        rangeStart.withHostPointer(in: memory, count: Int(copyingBytes)) { hostBuffer in
+                    try name.withUTF8 { bytes in
+                        try rangeStart.withHostPointer(in: memory, count: Int(copyingBytes)) { hostBuffer in
                             hostBuffer.copyMemory(
                                 from: UnsafeRawBufferPointer(start: bytes.baseAddress, count: Int(copyingBytes))
                             )
@@ -1387,7 +1389,7 @@ final class WASIImplementation: Sendable {
         if bytesWritten > 0 {
             // Map the prefix the link fills, not the whole buffer the guest
             // declared: the rest of it need not be addressable.
-            buffer.baseAddress.withHostPointer(in: memory, count: bytesWritten) { hostBuffer in
+            try buffer.baseAddress.withHostPointer(in: memory, count: bytesWritten) { hostBuffer in
                 linkBytes.withUnsafeBytes { linkBytes in
                     guard let source = linkBytes.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return }
                     hostBuffer.baseAddress?.update(from: source, count: bytesWritten)
@@ -1432,7 +1434,7 @@ final class WASIImplementation: Sendable {
         memory: M
     ) throws -> WASIAbi.Size {
         guard !subscriptions.isEmpty else { throw WASIAbi.Errno.EINVAL }
-        let materializedSubscriptions = (0..<subscriptions.count).map { subscriptions.read(at: $0, in: memory) }
+        let materializedSubscriptions = try (0..<subscriptions.count).map { try subscriptions.read(at: $0, in: memory) }
         let table = fdTable.withLock { $0 }
         return try poll(subscriptions: materializedSubscriptions, events: events, table, memory: memory, now: { try self.clock_time_get(id: $0, precision: 0) })
     }
@@ -1454,9 +1456,9 @@ final class WASIImplementation: Sendable {
     }
 
     /// Write high-quality random data into a buffer.
-    func random_get<M: GuestMemory>(buffer: UnsafeGuestPointer<UInt8>, length: WASIAbi.Size, memory: M) {
+    func random_get<M: GuestMemory>(buffer: UnsafeGuestPointer<UInt8>, length: WASIAbi.Size, memory: M) throws {
         guard length > 0 else { return }
-        buffer.withHostPointer(in: memory, count: Int(length)) { hostBuffer in
+        try buffer.withHostPointer(in: memory, count: Int(length)) { hostBuffer in
             self.randomGenerator.withLock { rng in
                 rng.fill(buffer: hostBuffer)
             }

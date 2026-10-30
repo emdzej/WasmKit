@@ -145,6 +145,10 @@ extension WasmParserError.Message {
     @usableFromInline
     static let unexpectedEnd = Self("Unexpected end of the stream")
 
+    /// A function body whose local declarations run past its declared size.
+    @usableFromInline
+    static let unexpectedEndOfFunction = Self("unexpected end of section or function")
+
     @usableFromInline
     static func sectionSizeMismatch(sectionID: UInt8, expected: Int, actual: Int) -> Self {
         Self("Section size mismatch for section \(sectionID): expected \(expected) but got \(actual)")

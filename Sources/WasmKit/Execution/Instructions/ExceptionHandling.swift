@@ -15,8 +15,8 @@ extension Execution {
         payload.reserveCapacity(tagType.parameters.count)
         var slotOffset = VReg.zero
         for paramType in tagType.parameters {
-            let value = UntypedValue(storage: sp[i64: immediate.payloadBase + slotOffset])
-            payload.append(value.cast(to: paramType))
+            // A `v128` takes two slots, so read through the typed accessor.
+            payload.append(sp.loadValue(at: immediate.payloadBase + slotOffset, type: paramType))
             slotOffset += VReg(slotIndex: paramType.stackSlotCount)
         }
         throw WasmKitException(tag: tag, payload: payload)
@@ -29,7 +29,10 @@ extension Execution {
         if ref.isNullRef {
             throw Trap(.message(.init("null exception reference")))
         }
-        let exception = getException(at: Int(ref.i64))
+        // The host can pass in any `exnref`, so an address the store never handed out traps.
+        guard let exception = getException(at: Int(ref.i64)) else {
+            throw Trap(.message(.init("invalid exception reference")))
+        }
         throw exception
     }
 
@@ -50,7 +53,7 @@ extension Execution {
                 sp: sp,
                 targetPC: targetPC,
                 payloadRegBase: entry.payloadRegBase,
-                siblingsBelow: Int(immediate.count) - 1 - i
+                exitedBelow: Int(immediate.count) - 1 - i + Int(entry.enclosingHandlers)
             )
             exceptionHandlers.append(handler)
         }
@@ -86,8 +89,9 @@ extension Execution {
 
             guard isMatch else { continue }
 
-            // The rest of this handler's try_table is exited along with it.
-            exceptionHandlers.removeLast(handler.siblingsBelow)
+            // The rest of this handler's try_table, and any enclosing ones its label is outside
+            // of, are exited along with it.
+            exceptionHandlers.removeLast(handler.exitedBelow)
 
             // Unwind call stack to the handler's frame
             sp = handler.sp
@@ -106,7 +110,7 @@ extension Execution {
                 let tagType = store.value.engine.resolveType(handlerTag.type)
                 var slotOffset = VReg.zero
                 for (i, paramType) in tagType.parameters.enumerated() {
-                    sp[i64: handler.payloadRegBase + slotOffset] = UntypedValue(exception.payload[i]).storage
+                    sp.storeValue(exception.payload[i], at: handler.payloadRegBase + slotOffset, type: paramType)
                     slotOffset += VReg(slotIndex: paramType.stackSlotCount)
                 }
                 // For catch_ref, also write the exnref after the payload
@@ -128,13 +132,17 @@ extension Execution {
 
     /// Store an exception and return its address for use as an `exnref`.
     private mutating func storeException(_ exception: WasmKitException) -> ExceptionAddress {
-        let addr = storedExceptions.count
-        storedExceptions.append(exception)
-        return addr
+        if let address = exception.storeAddress { return address }
+        let store = store.value
+        var exception = exception
+        exception.storeAddress = store.exceptions.count
+        store.exceptions.append(exception)
+        return store.exceptions.count - 1
     }
 
-    /// Get a stored exception by its address.
-    func getException(at address: Int) -> WasmKitException {
-        return storedExceptions[address]
+    /// Get a stored exception by its address, or `nil` if no exception has that address.
+    func getException(at address: Int) -> WasmKitException? {
+        let exceptions = store.value.exceptions
+        return exceptions.indices.contains(address) ? exceptions[address] : nil
     }
 }

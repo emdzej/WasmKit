@@ -89,8 +89,8 @@ import WasmTypes
     func anOffsetBeyondTheAddressableRangeIsRejected(hostBacked: Bool) throws {
         func check(_ wasi: WASIImplementation, _ memory: TestSupport.TestGuestMemory) throws {
             let fd = try self.openFile(wasi)
-            let readVectors = memory.readIOVecs(sizes: [4])
-            let writeVectors = memory.writeIOVecs([Array("x".utf8)])
+            let readVectors = try memory.readIOVecs(sizes: [4])
+            let writeVectors = try memory.writeIOVecs([Array("x".utf8)])
             let offset = WASIAbi.FileSize(Int64.max) + 1
             #expect(throws: WASIAbi.Errno.EINVAL) {
                 _ = try wasi.fd_pread(fd: fd, iovs: readVectors, offset: offset, memory: memory)
@@ -141,7 +141,7 @@ import WasmTypes
     @Test func aWriteThatWouldRunOffTheEndOfThePositionRangeIsRejected() throws {
         try withMemoryBackedWASI { wasi, memory in
             let fd = try self.openFile(wasi)
-            let vectors = memory.writeIOVecs([Array("x".utf8)])
+            let vectors = try memory.writeIOVecs([Array("x".utf8)])
             _ = try wasi.fd_seek(fd: fd, offset: .max, whence: .SET)
             #expect(throws: WASIAbi.Errno.EFBIG) {
                 _ = try wasi.fd_write(fileDescriptor: fd, ioVectors: vectors, memory: memory)

@@ -202,14 +202,12 @@ public enum CanonicalABI {
     }
 
     /// Return the smallest integer type that can represent the given number of cases.
+    ///
+    /// Integer comparisons rather than `log2`, which is `-inf` for zero cases.
     public static func discriminantType(numberOfCases: UInt32) -> DiscriminantType {
-        switch Int(ceil(log2(Double(numberOfCases)) / 8)) {
-        case 0: return .u8
-        case 1: return .u8
-        case 2: return .u16
-        case 3: return .u32
-        default: fatalError("`ceil(log2(UInt32)) / 8` cannot be greater than 3")
-        }
+        if numberOfCases <= 1 << 8 { return .u8 }
+        if numberOfCases <= 1 << 16 { return .u16 }
+        return .u32
     }
 
     static func numberOfInt32(flagsCount: Int) -> Int {
@@ -266,7 +264,9 @@ public enum CanonicalABI {
             switch rawType(ofFlags: flags.flags.count) {
             case .u8: return 1
             case .u16: return 2
-            case .u32: return 4
+            // More than 32 flags take one u32 per 32, which `flatten`, loading and storing
+            // already assume; a fixed size of 4 would overlap the next field.
+            case .u32(let count): return 4 * max(count, 1)
             }
         case .enum(let enumType):
             return size(cases: enumType.cases.map { _ in nil })

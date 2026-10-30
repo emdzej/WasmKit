@@ -1283,26 +1283,27 @@ extension Parser {
         for _ in 0..<count {
             let size = try parseUnsigned() as UInt32
             let bodyStart = stream.currentIndex
-            let localTypes = try stream.parseVector { (s) throws(WasmParserError) -> (n: UInt32, type: ValueType) in
+            let localDeclarations = try stream.parseVector { (s) throws(WasmParserError) -> Code.LocalDeclaration in
                 let n: UInt32 = try s.parseUnsigned()
                 let t = try s.parseValueType(features: features)
-                return (n, t)
+                return Code.LocalDeclaration(count: n, type: t)
             }
-            let totalLocals = localTypes.reduce(UInt64(0)) { $0 + UInt64($1.n) }
+            let totalLocals = localDeclarations.reduce(UInt64(0)) { $0 + UInt64($1.count) }
             guard totalLocals < limits.maxFunctionLocals else {
                 throw makeError(.tooManyLocals(totalLocals, limit: limits.maxFunctionLocals))
             }
 
-            let locals = localTypes.flatMap { (n: UInt32, type: ValueType) in
-                return Array(repeating: type, count: Int(n))
-            }
             let expressionStart = stream.currentIndex
-            let expressionBytes = try stream.consume(
-                count: Int(size) - (expressionStart - bodyStart)
-            )
+            // The local declarations must fit in the body's declared size; otherwise the
+            // remaining length is negative and the body would silently come out empty.
+            let declarationsSize = expressionStart - bodyStart
+            guard declarationsSize <= Int(size) else {
+                throw makeError(.unexpectedEndOfFunction)
+            }
+            let expressionBytes = try stream.consume(count: Int(size) - declarationsSize)
             codes.append(
                 Code(
-                    locals: locals, expression: expressionBytes,
+                    localDeclarations: localDeclarations, expression: expressionBytes,
                     offset: expressionStart, bodyOffset: bodyStart, features: features
                 )
             )

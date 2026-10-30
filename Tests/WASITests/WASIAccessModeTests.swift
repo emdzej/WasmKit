@@ -24,7 +24,7 @@ import WasmTypes
                     dirFd: 3, dirFlags: [], path: "a.txt", oflags: [],
                     fsRightsBase: [], fsRightsInheriting: [], fdflags: [])
                 let memory = TestSupport.TestGuestMemory()
-                let vectors = memory.readIOVecs(sizes: [6])
+                let vectors = try memory.readIOVecs(sizes: [6])
                 #expect(throws: WASIAbi.Errno.EBADF) {
                     _ = try wasi.fd_read(fd: fd, iovs: vectors, memory: memory)
                 }

@@ -52,6 +52,9 @@ struct Validate: ParsableCommand {
                 print("\(fileName):\(line):\(column): error: \(diagnostic.message)")
             }
         }
+        if diagnostics.values.contains(where: { !$0.isEmpty }) {
+            throw ExitCode.failure
+        }
     }
 }
 

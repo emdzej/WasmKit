@@ -1090,35 +1090,48 @@ public struct Memory: Equatable {
 }
 
 extension Memory: GuestMemory {
+    /// The host address of `count` bytes at guest `offset`, or `nil` for an empty range.
+    ///
+    /// - Throws: ``GuestMemoryError`` if the range is not inside `memory`.
+    private static func hostAddress(
+        of memory: borrowing MemoryEntity, offset: UInt, count: Int
+    ) throws(GuestMemoryError) -> UnsafeMutableRawPointer? {
+        // Compare without overflow: `offset` comes from the guest and may be near `UInt.max`.
+        guard count >= 0, offset <= UInt(memory.byteCount), UInt(count) <= UInt(memory.byteCount) - offset else {
+            throw GuestMemoryError(offset: UInt64(offset), count: UInt64(max(count, 0)))
+        }
+        guard count > 0 else { return nil }
+        // A memory with room for at least one byte always has a base address.
+        return memory.baseAddress.map { $0.advanced(by: Int(offset)) }
+    }
+
     /// Executes the given closure with an immutable buffer pointer to the host memory region mapped as guest memory.
+    ///
+    /// - Throws: ``GuestMemoryError`` if `offset..<offset + count` is not inside the memory,
+    ///   or whatever `body` throws.
     public func withUnsafeBufferPointer<T>(
         offset: UInt,
         count: Int,
         _ body: (UnsafeRawBufferPointer) throws -> T
-    ) rethrows -> T {
+    ) throws -> T {
         return try handle.withValue { memory in
-            precondition(Int(offset) + count <= memory.byteCount, "Memory access out of bounds")
-            guard let base = memory.baseAddress else {
-                preconditionFailure("Memory has no base address")
-            }
-            let start = base.advanced(by: Int(offset))
-            return try body(UnsafeRawBufferPointer(start: UnsafeRawPointer(start), count: count))
+            let start = try Self.hostAddress(of: memory, offset: offset, count: count)
+            return try body(UnsafeRawBufferPointer(start: start.map(UnsafeRawPointer.init), count: start == nil ? 0 : count))
         }
     }
 
     /// Executes the given closure with a mutable buffer pointer to the host memory region mapped as guest memory.
+    ///
+    /// - Throws: ``GuestMemoryError`` if `offset..<offset + count` is not inside the memory,
+    ///   or whatever `body` throws.
     public func withUnsafeMutableBufferPointer<T>(
         offset: UInt,
         count: Int,
         _ body: (UnsafeMutableRawBufferPointer) throws -> T
-    ) rethrows -> T {
+    ) throws -> T {
         return try handle.withValue { memory in
-            precondition(Int(offset) + count <= memory.byteCount, "Memory access out of bounds")
-            guard let base = memory.baseAddress else {
-                preconditionFailure("Memory has no base address")
-            }
-            let start = base.advanced(by: Int(offset))
-            return try body(UnsafeMutableRawBufferPointer(start: start, count: count))
+            let start = try Self.hostAddress(of: memory, offset: offset, count: count)
+            return try body(UnsafeMutableRawBufferPointer(start: start, count: start == nil ? 0 : count))
         }
     }
 }
@@ -1422,6 +1435,7 @@ extension EntityHandle<HostFunctionEntity> {
 
 extension InternalUncompiledCode {
     var locals: [ValueType] { withValue { $0.locals } }
+    var localDeclarations: [Code.LocalDeclaration] { withValue { $0.localDeclarations } }
     var expression: ArraySlice<UInt8> { withValue { $0.expression } }
     #if WasmDebuggingSupport
         var originalAddress: Int { withValue { $0.originalAddress } }

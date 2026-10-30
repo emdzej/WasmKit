@@ -326,7 +326,10 @@ struct WasmFunctionEntity {
         self.type = type
         self.instance = instance
         self.code = .uncompiled(code)
-        self.numberOfNonParameterLocalSlots = code.locals.reduce(into: 0) { $0 += $1.stackSlotCount }
+        // From the declarations, so that instantiating does not expand every function's locals.
+        self.numberOfNonParameterLocalSlots = code.localDeclarations.reduce(into: 0) {
+            $0 += Int($1.count) * $1.type.stackSlotCount
+        }
         self.codeSize = code.expression.count
         self.index = index
     }

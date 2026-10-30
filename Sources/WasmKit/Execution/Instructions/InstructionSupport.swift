@@ -286,13 +286,17 @@ struct CatchTableEntry {
     var pcOffset: Int32
     /// Register offset where payload values should be written (relative to `sp`).
     var payloadRegBase: VReg
+    /// The number of handlers of enclosing `try_table`s, in the same function, that the branch
+    /// to this clause's label exits.
+    var enclosingHandlers: UInt16
 
-    init(tag: InternalTag?, isRef: Bool, pcOffset: Int32, payloadRegBase: VReg) {
+    init(tag: InternalTag?, isRef: Bool, pcOffset: Int32, payloadRegBase: VReg, enclosingHandlers: UInt16) {
         self.rawTag = tag.map { UInt64(UInt(bitPattern: $0.bitPattern)) } ?? 0
         self.isCatchAll = tag == nil ? 1 : 0
         self.isRef = isRef ? 1 : 0
         self.pcOffset = pcOffset
         self.payloadRegBase = payloadRegBase
+        self.enclosingHandlers = enclosingHandlers
     }
 
     var tag: InternalTag? {

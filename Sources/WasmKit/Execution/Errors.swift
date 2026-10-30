@@ -71,6 +71,9 @@ public struct WasmKitException: Error, CustomStringConvertible {
     let tagIdentity: Int
     /// The exception payload values.
     let payload: [Value]
+    /// The address of this exception in its store's exception table, once an `exnref` to it
+    /// exists. Rethrowing and catching it again then reuses the address instead of adding one.
+    var storeAddress: Int?
 
     init(tag: InternalTag, payload: [Value]) {
         self.tagIdentity = tag.bitPattern

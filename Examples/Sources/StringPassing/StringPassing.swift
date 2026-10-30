@@ -30,7 +30,7 @@ struct Example {
                         guard let memory = caller.instance?.exports[memory: "memory"] else {
                             fatalError("Missing \"memory\" export")
                         }
-                        let string = memory.withUnsafeMutableBufferPointer(
+                        let string = try memory.withUnsafeMutableBufferPointer(
                             offset: UInt(stringPtr),
                             count: stringLength
                         ) { buffer in
@@ -53,7 +53,7 @@ struct Example {
         let ptr = Int(try alloc([Value(signed: Int32(messageBytes.count))])[0].i32)
 
         let memory = instance.exports[memory: "memory"]!
-        memory.withUnsafeMutableBufferPointer(offset: UInt(ptr), count: messageBytes.count) { buffer in
+        try memory.withUnsafeMutableBufferPointer(offset: UInt(ptr), count: messageBytes.count) { buffer in
             messageBytes.withUnsafeBytes { src in
                 buffer.baseAddress!.copyMemory(from: src.baseAddress!, byteCount: src.count)
             }

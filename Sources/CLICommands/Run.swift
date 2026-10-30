@@ -284,7 +284,8 @@ package struct Run: AsyncParsableCommand {
             #endif
 
             guard fileType == .coreModule else {
-                fatalError("Unsupported WebAssembly file type: \(fileType)")
+                // A component reaches here when the CLI is built without component support.
+                throw ValidationError("Unsupported WebAssembly file type: \(fileType)")
             }
 
             let (parsedModule, parseTime) = try measure {
@@ -305,10 +306,7 @@ package struct Run: AsyncParsableCommand {
             if wasiThreads {
                 throw ValidationError("--wasi-threads requires a WASI command module exporting _start.")
             }
-            guard let entry = try instantiateNonWASI(module: module, interceptor: interceptor) else {
-                return
-            }
-            (store, invoke) = entry
+            (store, invoke) = try instantiateNonWASI(module: module, interceptor: interceptor)
         }
         // Reported even when the guest traps or exits: knowing what a run consumed before it
         // stopped is the point of asking for a budget in the first place.
@@ -516,17 +514,17 @@ package struct Run: AsyncParsableCommand {
                     wasi.link(to: &imports, store: store)
                     let moduleInstance = try module.instantiate(store: store, imports: imports)
                     let exitCode = try wasi.start(moduleInstance)
-                    throw ExitCode(Int32(exitCode))
+                    // `proc_exit` takes any u32; `exit(-1)` in the guest arrives as 0xFFFFFFFF.
+                    throw ExitCode(Int32(truncatingIfNeeded: exitCode))
                 }
             }
         )
     }
 
-    func instantiateNonWASI(module: Module, interceptor: EngineInterceptor?) throws -> (Store, () throws -> Void)? {
-        let (functionName, parameters) = Run.parseInvocation(arguments: self.arguments)
+    func instantiateNonWASI(module: Module, interceptor: EngineInterceptor?) throws -> (Store, () throws -> Void) {
+        let (functionName, parameters) = try Run.parseInvocation(arguments: self.arguments)
         guard let functionName else {
-            log("Error: No function specified to run in a given module.")
-            return nil
+            throw ValidationError("No function specified to run in a given module.")
         }
 
         let engine = Engine(configuration: deriveRuntimeConfiguration(), interceptor: interceptor)
@@ -538,8 +536,7 @@ package struct Run: AsyncParsableCommand {
             {
                 log("Started invoking function \"\(functionName)\" with parameters: \(parameters)", verbose: true)
                 guard let toInvoke = instance.exports[function: functionName] else {
-                    log("Error: Function \"\(functionName)\" not found in the module.")
-                    return
+                    throw ValidationError("Function \"\(functionName)\" not found in the module.")
                 }
                 let results = try toInvoke.invoke(parameters)
                 print(results.description)
@@ -579,21 +576,29 @@ package struct Run: AsyncParsableCommand {
 }
 
 extension Run {
-    package static func parseInvocation(arguments: [String]) -> (functionName: String?, parameters: [Value]) {
+    /// Splits the arguments into a function name and its `type:value` parameters.
+    ///
+    /// - Throws: `ValidationError` for a parameter that is not `i32`, `i64`, `f32` or `f64`
+    ///   followed by a value of that type.
+    package static func parseInvocation(arguments: [String]) throws -> (functionName: String?, parameters: [Value]) {
         let functionName = arguments.first
         let arguments = arguments.dropFirst()
 
         var parameters: [Value] = []
         for argument in arguments {
-            let parameter: Value
+            let parameter: Value?
             let type = argument.prefix { $0 != ":" }
             let value = argument.drop { $0 != ":" }.dropFirst()
             switch type {
-            case "i32": parameter = Value(signed: Int32(value)!)
-            case "i64": parameter = Value(signed: Int64(value)!)
-            case "f32": parameter = .f32(Float32(value)!.bitPattern)
-            case "f64": parameter = .f64(Float64(value)!.bitPattern)
-            default: fatalError("unknown type")
+            case "i32": parameter = Int32(value).map { Value(signed: $0) }
+            case "i64": parameter = Int64(value).map { Value(signed: $0) }
+            case "f32": parameter = Float32(value).map { .f32($0.bitPattern) }
+            case "f64": parameter = Float64(value).map { .f64($0.bitPattern) }
+            default:
+                throw ValidationError("Unknown parameter type in \"\(argument)\"; expected i32, i64, f32 or f64")
+            }
+            guard let parameter else {
+                throw ValidationError("Invalid \(type) value in \"\(argument)\"")
             }
             parameters.append(parameter)
         }

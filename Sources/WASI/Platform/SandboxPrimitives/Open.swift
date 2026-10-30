@@ -14,7 +14,7 @@ struct PathResolution {
     private var components: [GuestPath.Component]
     private var resolvedSymlinks: Int = 0
 
-    private static var MAX_SYMLINKS: Int {
+    static var MAX_SYMLINKS: Int {
         // Linux defines MAXSYMLINKS as 40, but on darwin platforms, it's 32.
         // Take a single conservative value here to avoid platform-specific
         // behavior as much as possible.
@@ -99,8 +99,9 @@ struct PathResolution {
             self.baseFd = newFd
             return
         } catch let openErrno as WASIAbi.Errno {
-            if self.options.contains(.noFollow) {
-                // If "open" failed with O_NOFOLLOW, no need to retry.
+            if self.options.contains(.noFollow) && self.components.isEmpty {
+                // The guest asked not to follow a symlink in the final component, and lookup
+                // flags say nothing about intermediate ones, which are always followed.
                 throw openErrno
             }
 

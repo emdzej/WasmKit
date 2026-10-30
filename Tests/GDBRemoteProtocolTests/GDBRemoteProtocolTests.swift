@@ -58,6 +58,17 @@ struct GDBRemoteProtocolTests {
         #expect(decoder.accummulatedChecksum == 0)
     }
 
+    /// NAKs and the interrupt byte can arrive between packets, and the first packet need not
+    /// carry an acknowledgement.
+    @Test
+    func strayBytesBetweenPacketsAreSkipped() throws {
+        var decoder = self.decoder
+        decoder.feed(Array("$g#67".utf8) + [0x03] + Array("-+-$g#67".utf8))
+        #expect(try decoder.next()?.payload.kind == .generalRegisters)
+        #expect(try decoder.next()?.payload.kind == .generalRegisters)
+        #expect(try decoder.next() == nil)
+    }
+
     @Test
     func decodingWasmGlobal() throws {
         var decoder = self.decoder

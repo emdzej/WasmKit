@@ -83,7 +83,6 @@
         }
 
         package enum Error: Swift.Error {
-            case unknownTransferArguments
             case unknownReadMemoryArguments
             case unknownWriteMemoryArguments(String)
             case stoppingAtEntrypointFailed
@@ -96,6 +95,20 @@
             case unknownWasmLocalArguments(String)
             case unknownWasmGlobalArguments(String)
             case unknownDetachOnErrorArgument(String)
+
+            /// Whether the error describes a request the host got wrong, rather than a state
+            /// the session cannot continue from.
+            var isMalformedRequest: Bool {
+                switch self {
+                case .unknownReadMemoryArguments, .unknownWriteMemoryArguments, .unknownThreadAction,
+                    .unknownHexEncodedArguments, .unknownWasmLocalArguments, .unknownWasmGlobalArguments,
+                    .unknownDetachOnErrorArgument:
+                    return true
+                case .stoppingAtEntrypointFailed, .multipleThreadsNotSupported, .exitCodeUnknown,
+                    .killRequestReceived:
+                    return false
+                }
+            }
         }
 
         private let moduleFilePath: String
@@ -240,26 +253,16 @@
             }
         }
 
-        private func firstHexArgument<I: FixedWidthInteger>(argumentsString: String, separator: Character, endianness: Endianness) throws -> I {
-            guard let hexString = argumentsString.split(separator: separator).first else {
-                throw Error.unknownHexEncodedArguments(argumentsString)
-            }
-
-            guard let hexBytes = HexEncoding.decode(hexString), hexBytes.count >= MemoryLayout<I>.size else {
-                throw Error.unknownHexEncodedArguments(argumentsString)
-            }
-
-            let prefix = hexBytes.prefix(MemoryLayout<I>.size)
-            let argument: I?
-            switch endianness {
-            case .big: argument = I(bigEndianBytes: prefix)
-            case .little: argument = I(littleEndianBytes: prefix)
-            }
-            guard let argument else {
-                throw Error.unknownHexEncodedArguments(argumentsString)
-            }
-
-            return argument
+        /// The code address a `Z0`/`z0` packet names, or `nil` if it names none.
+        ///
+        /// The address is hex of any length, as LLDB and GDB send it unpadded, and must lie in
+        /// the code space the debugger advertises.
+        private static func breakpointAddress(_ arguments: String) -> Int? {
+            guard let field = arguments.split(separator: ",").first,
+                let address = UInt64(hexEncoded: field),
+                address >= DebuggerMemoryView.executableCodeOffset
+            else { return nil }
+            return Int(exactly: address - DebuggerMemoryView.executableCodeOffset)
         }
 
         private static func writeMemoryArguments(_ arguments: String) throws -> (addressInProtocolSpace: UInt64, bytes: [UInt8]) {
@@ -329,7 +332,20 @@
             }
         }
 
+        /// Handles one host command.
+        ///
+        /// A request whose arguments do not parse gets an error reply, as a GDB stub gives, so
+        /// that one malformed or unsupported packet does not end the session.
         package func handle(command: GDBHostCommand) throws -> GDBTargetResponse {
+            do {
+                return try handleCommand(command)
+            } catch let error as Error where error.isMalformedRequest {
+                logger.debug("refusing \(command.kind.rawValue): \(error)")
+                return .init(kind: Self.errorReply, isNoAckModeActive: false)
+            }
+        }
+
+        private func handleCommand(_ command: GDBHostCommand) throws -> GDBTargetResponse {
             let responseKind: GDBTargetResponse.Kind
             logger.trace("handling GDB host command: \(command.kind.rawValue)")
 
@@ -422,7 +438,9 @@
                         </library-list>
                         """)
                 } else {
-                    throw Error.unknownTransferArguments
+                    // An empty reply tells the client this transfer is not supported, which it
+                    // handles; throwing would end the session.
+                    responseKind = .empty
                 }
 
             case .readMemory:
@@ -502,13 +520,12 @@
                 throw Error.killRequestReceived
 
             case .insertSoftwareBreakpoint:
-                let requested = Int(
-                    try self.firstHexArgument(
-                        argumentsString: command.arguments,
-                        separator: ",",
-                        endianness: .big
-                    ) - DebuggerMemoryView.executableCodeOffset)
                 // Report refusal as a GDB error instead of throwing to keep the connection open.
+                guard let requested = Self.breakpointAddress(command.arguments) else {
+                    logger.debug("refusing a breakpoint at \(command.arguments)")
+                    responseKind = Self.errorReply
+                    break
+                }
                 do {
                     self.userBreakpoints[requested] = try self.debugger.enableBreakpoint(address: requested)
                     responseKind = .ok
@@ -518,12 +535,11 @@
                 }
 
             case .removeSoftwareBreakpoint:
-                let requested = Int(
-                    try self.firstHexArgument(
-                        argumentsString: command.arguments,
-                        separator: ",",
-                        endianness: .big
-                    ) - DebuggerMemoryView.executableCodeOffset)
+                guard let requested = Self.breakpointAddress(command.arguments) else {
+                    logger.debug("refusing to remove a breakpoint at \(command.arguments)")
+                    responseKind = Self.errorReply
+                    break
+                }
                 do {
                     try self.debugger.disableBreakpoint(address: requested)
                     self.userBreakpoints[requested] = nil

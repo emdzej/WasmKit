@@ -74,8 +74,10 @@ extension Version {
             if text.hasPrefix("0"), text.count > 1 {
                 throw ParseError(description: "leading zero not accepted")
             }
-            // integer token contains only digits and it's guaranteed to be parsable by `Int.init`
-            let value = Int(text)!
+            // An integer token holds only digits, but may still be too long for `Int`.
+            guard let value = Int(text) else {
+                throw ParseError(description: "\(text) is too large")
+            }
             return (value, token.textRange)
         }
 

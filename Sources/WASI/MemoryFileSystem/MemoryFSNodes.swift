@@ -251,20 +251,16 @@ final class MemoryFileNode: MemFSNode {
             switch s.content {
             case .bytes(let bytes):
                 var cur = position
-                var total: UInt32 = 0
-                for index in 0..<buffers.count {
-                    try buffers.withHostBuffer(at: index) { bufferPtr in
-                        let available = max(0, bytes.count - cur)
-                        let toRead = min(bufferPtr.count, available)
-                        guard toRead > 0 else { return 0 }
-                        bytes.withUnsafeBytes { contentBytes in
-                            bufferPtr.baseAddress!.copyMemory(
-                                from: contentBytes.baseAddress!.advanced(by: cur), byteCount: toRead)
-                        }
-                        cur += toRead
-                        total += UInt32(toRead)
-                        return toRead
+                let total = try buffers.transfer { bufferPtr in
+                    let available = max(0, bytes.count - cur)
+                    let toRead = min(bufferPtr.count, available)
+                    guard toRead > 0 else { return 0 }
+                    bytes.withUnsafeBytes { contentBytes in
+                        bufferPtr.baseAddress!.copyMemory(
+                            from: contentBytes.baseAddress!.advanced(by: cur), byteCount: toRead)
                     }
+                    cur += toRead
+                    return toRead
                 }
                 s.atim = WASIAbi.Timestamp.currentWallClock()
                 return (total, cur, nil)
@@ -274,13 +270,10 @@ final class MemoryFileNode: MemFSNode {
         }
         guard let handle else { return (count, newPosition) }
         var currentOffset = Int64(position)
-        var total: UInt32 = 0
-        for index in 0..<buffers.count {
-            let nread = try buffers.withHostBuffer(at: index) { bufferPtr in
-                try handle.read(fromAbsoluteOffset: currentOffset, into: bufferPtr)
-            }
+        let total = try buffers.transfer { bufferPtr in
+            let nread = try handle.read(fromAbsoluteOffset: currentOffset, into: bufferPtr)
             currentOffset += Int64(nread)
-            total += UInt32(nread)
+            return nread
         }
         return (total, Int(currentOffset))
     }
@@ -292,20 +285,16 @@ final class MemoryFileNode: MemFSNode {
             switch s.content {
             case .bytes(let bytes):
                 var cur = offset
-                var total: UInt32 = 0
-                for index in 0..<buffers.count {
-                    try buffers.withHostBuffer(at: index) { bufferPtr in
-                        let available = max(0, bytes.count - cur)
-                        let toRead = min(bufferPtr.count, available)
-                        guard toRead > 0 else { return 0 }
-                        bytes.withUnsafeBytes { contentBytes in
-                            bufferPtr.baseAddress!.copyMemory(
-                                from: contentBytes.baseAddress!.advanced(by: cur), byteCount: toRead)
-                        }
-                        cur += toRead
-                        total += UInt32(toRead)
-                        return toRead
+                let total = try buffers.transfer { bufferPtr in
+                    let available = max(0, bytes.count - cur)
+                    let toRead = min(bufferPtr.count, available)
+                    guard toRead > 0 else { return 0 }
+                    bytes.withUnsafeBytes { contentBytes in
+                        bufferPtr.baseAddress!.copyMemory(
+                            from: contentBytes.baseAddress!.advanced(by: cur), byteCount: toRead)
                     }
+                    cur += toRead
+                    return toRead
                 }
                 s.atim = WASIAbi.Timestamp.currentWallClock()
                 return (total, nil)
@@ -315,13 +304,10 @@ final class MemoryFileNode: MemFSNode {
         }
         guard let handle else { return count }
         var currentOffset = Int64(offset)
-        var total: UInt32 = 0
-        for index in 0..<buffers.count {
-            let nread = try buffers.withHostBuffer(at: index) { bufferPtr in
-                try handle.read(fromAbsoluteOffset: currentOffset, into: bufferPtr)
-            }
+        let total = try buffers.transfer { bufferPtr in
+            let nread = try handle.read(fromAbsoluteOffset: currentOffset, into: bufferPtr)
             currentOffset += Int64(nread)
-            total += UInt32(nread)
+            return nread
         }
         return total
     }
@@ -333,24 +319,20 @@ final class MemoryFileNode: MemFSNode {
             switch s.content {
             case .bytes(var bytes):
                 var cur = position
-                var total: UInt32 = 0
-                for index in 0..<buffers.count {
-                    try buffers.withHostBuffer(at: index) { bufferPtr in
-                        let bytesToWrite = bufferPtr.count
-                        // The position comes from a guest-chosen seek or pwrite
-                        // offset, so it can sit at the end of the range.
-                        let (requiredSize, overflow) = cur.addingReportingOverflow(bytesToWrite)
-                        guard !overflow else {
-                            throw WASIAbi.Errno.EFBIG
-                        }
-                        if requiredSize > bytes.count {
-                            bytes.append(contentsOf: Array(repeating: 0, count: requiredSize - bytes.count))
-                        }
-                        bytes.replaceSubrange(cur..<(cur + bytesToWrite), with: bufferPtr)
-                        cur += bytesToWrite
-                        total += UInt32(bytesToWrite)
-                        return bytesToWrite
+                let total = try buffers.transfer { bufferPtr in
+                    let bytesToWrite = bufferPtr.count
+                    // The position comes from a guest-chosen seek or pwrite
+                    // offset, so it can sit at the end of the range.
+                    let (requiredSize, overflow) = cur.addingReportingOverflow(bytesToWrite)
+                    guard !overflow else {
+                        throw WASIAbi.Errno.EFBIG
                     }
+                    if requiredSize > bytes.count {
+                        bytes.append(contentsOf: Array(repeating: 0, count: requiredSize - bytes.count))
+                    }
+                    bytes.replaceSubrange(cur..<(cur + bytesToWrite), with: bufferPtr)
+                    cur += bytesToWrite
+                    return bytesToWrite
                 }
                 s.content = .bytes(bytes)
                 let now = WASIAbi.Timestamp.currentWallClock()
@@ -363,13 +345,10 @@ final class MemoryFileNode: MemFSNode {
         }
         guard let handle else { return (count, newPosition) }
         var currentOffset = Int64(position)
-        var total: UInt32 = 0
-        for index in 0..<buffers.count {
-            let nwritten = try buffers.withHostBuffer(at: index) { bufferPtr in
-                try handle.writeAll(toAbsoluteOffset: currentOffset, bufferPtr)
-            }
+        let total = try buffers.transfer { bufferPtr in
+            let nwritten = try handle.writeAll(toAbsoluteOffset: currentOffset, bufferPtr)
             currentOffset += Int64(nwritten)
-            total += UInt32(nwritten)
+            return nwritten
         }
         return (total, Int(currentOffset))
     }
@@ -381,24 +360,20 @@ final class MemoryFileNode: MemFSNode {
             switch s.content {
             case .bytes(var bytes):
                 var cur = offset
-                var total: UInt32 = 0
-                for index in 0..<buffers.count {
-                    try buffers.withHostBuffer(at: index) { bufferPtr in
-                        let bytesToWrite = bufferPtr.count
-                        // The position comes from a guest-chosen seek or pwrite
-                        // offset, so it can sit at the end of the range.
-                        let (requiredSize, overflow) = cur.addingReportingOverflow(bytesToWrite)
-                        guard !overflow else {
-                            throw WASIAbi.Errno.EFBIG
-                        }
-                        if requiredSize > bytes.count {
-                            bytes.append(contentsOf: Array(repeating: 0, count: requiredSize - bytes.count))
-                        }
-                        bytes.replaceSubrange(cur..<(cur + bytesToWrite), with: bufferPtr)
-                        cur += bytesToWrite
-                        total += UInt32(bytesToWrite)
-                        return bytesToWrite
+                let total = try buffers.transfer { bufferPtr in
+                    let bytesToWrite = bufferPtr.count
+                    // The position comes from a guest-chosen seek or pwrite
+                    // offset, so it can sit at the end of the range.
+                    let (requiredSize, overflow) = cur.addingReportingOverflow(bytesToWrite)
+                    guard !overflow else {
+                        throw WASIAbi.Errno.EFBIG
                     }
+                    if requiredSize > bytes.count {
+                        bytes.append(contentsOf: Array(repeating: 0, count: requiredSize - bytes.count))
+                    }
+                    bytes.replaceSubrange(cur..<(cur + bytesToWrite), with: bufferPtr)
+                    cur += bytesToWrite
+                    return bytesToWrite
                 }
                 s.content = .bytes(bytes)
                 let now = WASIAbi.Timestamp.currentWallClock()
@@ -411,13 +386,10 @@ final class MemoryFileNode: MemFSNode {
         }
         guard let handle else { return count }
         var currentOffset = Int64(offset)
-        var total: UInt32 = 0
-        for index in 0..<buffers.count {
-            let nwritten = try buffers.withHostBuffer(at: index) { bufferPtr in
-                try handle.writeAll(toAbsoluteOffset: currentOffset, bufferPtr)
-            }
+        let total = try buffers.transfer { bufferPtr in
+            let nwritten = try handle.writeAll(toAbsoluteOffset: currentOffset, bufferPtr)
             currentOffset += Int64(nwritten)
-            total += UInt32(nwritten)
+            return nwritten
         }
         return total
     }
@@ -533,14 +505,7 @@ final class MemoryCharacterDeviceEntry: WASIFile {
 
         switch deviceNode.kind {
         case .null:
-            var totalBytes: UInt32 = 0
-            for index in 0..<buffers.count {
-                try buffers.withHostBuffer(at: index) { bufferPtr in
-                    totalBytes += UInt32(bufferPtr.count)
-                    return bufferPtr.count
-                }
-            }
-            return totalBytes
+            return try buffers.transfer { $0.count }
         }
     }
 

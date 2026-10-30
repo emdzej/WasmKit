@@ -584,15 +584,21 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
 
         /// Count the total number of catch handlers that would be exited when
         /// branching to the given relative depth.
-        func catchHandlersToUnwind(relativeDepth: UInt32) -> UInt16 {
-            var count: UInt16 = 0
+        ///
+        /// - Throws: If the count does not fit the 16-bit operand that unwinds them, which nested
+        ///   `try_table`s with many clauses can exceed even though each fits on its own.
+        func catchHandlersToUnwind(relativeDepth: UInt32) throws(WasmKitError) -> UInt16 {
+            var count = 0
             let targetIndex = frames.count - 1 - Int(relativeDepth)
             for i in (targetIndex..<frames.count).reversed() {
                 if case .tryTable(let catchCount) = frames[i].kind {
-                    count += catchCount
+                    count += Int(catchCount)
                 }
             }
-            return count
+            guard let result = UInt16(exactly: count) else {
+                throw WasmKitError(message: .vectorTooLargeForInterpreter("the enclosing `try_table` clauses", count: count))
+            }
+            return result
         }
     }
 
@@ -3070,7 +3076,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
             emit(.onExit(functionIndex))
         }
         // Clean up all exception handlers before returning from the function
-        let handlersToUnwind = controlStack.catchHandlersToUnwind(
+        let handlersToUnwind = try controlStack.catchHandlersToUnwind(
             relativeDepth: UInt32(controlStack.numberOfFrames - 1)
         )
         if handlersToUnwind > 0 {
@@ -3629,8 +3635,8 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
     }
     /// Emit `catchHandlersEnd` instructions for any `try_table` blocks that
     /// would be exited by branching to the given relative depth.
-    private mutating func emitCatchHandlersUnwind(relativeDepth: UInt32) {
-        let count = controlStack.catchHandlersToUnwind(relativeDepth: relativeDepth)
+    private mutating func emitCatchHandlersUnwind(relativeDepth: UInt32) throws(WasmKitError) {
+        let count = try controlStack.catchHandlersToUnwind(relativeDepth: relativeDepth)
         if count > 0 {
             emit(.catchHandlersEnd(Instruction.CatchHandlersEndOperand(count: count)))
         }
@@ -3648,7 +3654,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
         //          +---[  i32 ]<--+ copy [2]
         //              [  i64 ]---+
         try copyOnBranch(targetFrame: frame)
-        emitCatchHandlersUnwind(relativeDepth: relativeDepth)
+        try emitCatchHandlersUnwind(relativeDepth: relativeDepth)
         try emitBranch(Instruction.br, relativeDepth: relativeDepth) { offset, copyCount, popCount in
             return offset
         }
@@ -3715,7 +3721,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
         let accCandidate = iseqBuilder.accProducer
         let frame = try controlStack.branchTarget(relativeDepth: relativeDepth)
         let condition = try popVRegOperand(.i32)
-        let handlersToUnwind = controlStack.catchHandlersToUnwind(relativeDepth: relativeDepth)
+        let handlersToUnwind = try controlStack.catchHandlersToUnwind(relativeDepth: relativeDepth)
 
         if frame.copySlotCount == 0 && handlersToUnwind == 0 {
             guard let condition else { return }
@@ -3947,7 +3953,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
             }
             try checkStackTop(frame.copyTypes)
 
-            let handlersToUnwind = controlStack.catchHandlersToUnwind(relativeDepth: labelIndex)
+            let handlersToUnwind = try controlStack.catchHandlersToUnwind(relativeDepth: labelIndex)
 
             do {
                 let relativeOffset = iseqBuilder.insertingPC.offsetFromHead - brTableAt.offsetFromHead
@@ -4078,7 +4084,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
             return
         }
         // Clean up all exception handlers before the tail call
-        let handlersToUnwind = controlStack.catchHandlersToUnwind(
+        let handlersToUnwind = try controlStack.catchHandlersToUnwind(
             relativeDepth: UInt32(controlStack.numberOfFrames - 1)
         )
         if handlersToUnwind > 0 {
@@ -4101,7 +4107,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
         let internType = funcTypeInterner.intern(calleeType)
 
         // Clean up all exception handlers before the tail call
-        let handlersToUnwind = controlStack.catchHandlersToUnwind(
+        let handlersToUnwind = try controlStack.catchHandlersToUnwind(
             relativeDepth: UInt32(controlStack.numberOfFrames - 1)
         )
         if handlersToUnwind > 0 {
@@ -4197,6 +4203,9 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
             }
 
             let targetFrame = try controlStack.branchTarget(relativeDepth: labelDepth)
+            // Catching branches to `targetFrame`, so the clauses of any `try_table` between it
+            // and this one are exited too, as a `br` to that label would.
+            let enclosingHandlers = try controlStack.catchHandlersToUnwind(relativeDepth: labelDepth)
 
             // Resolve the tag to get the InternalTag handle
             let tag: InternalTag?
@@ -4228,7 +4237,8 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
                 tag: tag,
                 isRef: isRef,
                 pcOffset: 0,  // placeholder
-                payloadRegBase: payloadRegBase
+                payloadRegBase: payloadRegBase,
+                enclosingHandlers: enclosingHandlers
             )
 
             // Schedule the pcOffset to be filled when the target label is resolved.
@@ -5239,7 +5249,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
         guard let callee = try popOnStackOperand(try nullableReference(toType: typeIndex)) else { return }
 
         // Clean up all exception handlers before the tail call
-        let handlersToUnwind = controlStack.catchHandlersToUnwind(
+        let handlersToUnwind = try controlStack.catchHandlersToUnwind(
             relativeDepth: UInt32(controlStack.numberOfFrames - 1)
         )
         if handlersToUnwind > 0 {
@@ -5314,7 +5324,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
     private mutating func emitBranchOnNullness(
         relativeDepth: UInt32, frame: ControlStack.ControlFrame, condition: VReg, branchIfNull: Bool
     ) throws(WasmKitError) {
-        let handlersToUnwind = controlStack.catchHandlersToUnwind(relativeDepth: relativeDepth)
+        let handlersToUnwind = try controlStack.catchHandlersToUnwind(relativeDepth: relativeDepth)
         if frame.copySlotCount == 0 && handlersToUnwind == 0 {
             emitBranchIf(isNull: branchIfNull, condition: condition, to: frame.continuation)
             return

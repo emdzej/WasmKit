@@ -220,7 +220,7 @@ final class Runner {
             RustCase("reverse-complement", .text(fasta)) { runner, instance, data in
                 let expected = try runner.readFile("res/rust/cases/reverse-complement/output.txt")
                 let pointer = try instance.exports[function: "output_ptr"]!([data])[0].i32
-                let actual = runner.readMemory(instance, at: pointer, count: expected.count)
+                let actual = try runner.readMemory(instance, at: pointer, count: expected.count)
                 runner.expect(actual == expected, true, "reverse-complement.output")
             },
             RustCase("regex-redux", .text(fasta)) { runner, instance, data in
@@ -291,7 +291,7 @@ final class Runner {
             let bytes = try readFile(relativePath)
             data = try setup([i32(Int32(bytes.count))])[0]
             let pointer = try instance.exports[function: "input_ptr"]!([data])[0].i32
-            writeMemory(instance, at: pointer, bytes)
+            try writeMemory(instance, at: pointer, bytes)
         }
 
         let run = instance.exports[function: "run"]!
@@ -354,18 +354,18 @@ final class Runner {
 
     // MARK: Guest memory
 
-    private func writeMemory(_ instance: Instance, at pointer: UInt32, _ bytes: [UInt8]) {
+    private func writeMemory(_ instance: Instance, at pointer: UInt32, _ bytes: [UInt8]) throws {
         let memory = instance.exports[memory: "memory"]!
-        memory.withUnsafeMutableBufferPointer(offset: UInt(pointer), count: bytes.count) { buffer in
+        try memory.withUnsafeMutableBufferPointer(offset: UInt(pointer), count: bytes.count) { buffer in
             bytes.withUnsafeBytes { source in
                 buffer.baseAddress!.copyMemory(from: source.baseAddress!, byteCount: source.count)
             }
         }
     }
 
-    func readMemory(_ instance: Instance, at pointer: UInt32, count: Int) -> [UInt8] {
+    func readMemory(_ instance: Instance, at pointer: UInt32, count: Int) throws -> [UInt8] {
         let memory = instance.exports[memory: "memory"]!
-        return memory.withUnsafeMutableBufferPointer(offset: UInt(pointer), count: count) { buffer in
+        return try memory.withUnsafeMutableBufferPointer(offset: UInt(pointer), count: count) { buffer in
             Array(buffer.bindMemory(to: UInt8.self))
         }
     }

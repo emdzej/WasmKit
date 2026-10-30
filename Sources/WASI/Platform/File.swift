@@ -42,28 +42,18 @@ extension FdWASIFile {
             throw WASIAbi.Errno.EBADF
         }
         // TODO: Use `writev`
-        var bytesWritten: UInt32 = 0
-        for index in 0..<buffers.count {
-            bytesWritten += UInt32(
-                try buffers.withHostBuffer(at: index) {
-                    try fd.write(UnsafeRawBufferPointer($0))
-                })
-        }
-        return bytesWritten
+        return try buffers.transfer { try fd.write(UnsafeRawBufferPointer($0)) }
     }
 
     @inlinable
     func pwrite(vectored buffers: GuestBuffers, offset: WASIAbi.FileSize) throws -> WASIAbi.Size {
         // TODO: Use `pwritev`
         var currentOffset = try WASIAbi.hostOffset(offset)
-        for index in 0..<buffers.count {
-            currentOffset += Int64(
-                try buffers.withHostBuffer(at: index) {
-                    try fd.writeAll(toAbsoluteOffset: currentOffset, $0)
-                })
+        return try buffers.transfer {
+            let nwritten = try fd.writeAll(toAbsoluteOffset: currentOffset, $0)
+            currentOffset += Int64(nwritten)
+            return nwritten
         }
-        let nwritten = WASIAbi.FileSize(currentOffset) - offset
-        return WASIAbi.Size(nwritten)
     }
 
     @inlinable
@@ -73,14 +63,7 @@ extension FdWASIFile {
         guard accessMode.contains(.read) else {
             throw WASIAbi.Errno.EBADF
         }
-        var nread: UInt32 = 0
-        for index in 0..<buffers.count {
-            nread += UInt32(
-                try buffers.withHostBuffer(at: index) {
-                    try fd.read(into: $0)
-                })
-        }
-        return nread
+        return try buffers.transfer { try fd.read(into: $0) }
     }
 
     @inlinable
@@ -90,15 +73,11 @@ extension FdWASIFile {
             throw WASIAbi.Errno.EBADF
         }
         var currentOffset = try WASIAbi.hostOffset(offset)
-        var nread: UInt32 = 0
-        for index in 0..<buffers.count {
-            let count = try buffers.withHostBuffer(at: index) {
-                try fd.read(fromAbsoluteOffset: currentOffset, into: $0)
-            }
+        return try buffers.transfer {
+            let count = try fd.read(fromAbsoluteOffset: currentOffset, into: $0)
             currentOffset += Int64(count)
-            nread += UInt32(count)
+            return count
         }
-        return nread
     }
 }
 

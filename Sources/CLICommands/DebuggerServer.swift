@@ -59,6 +59,9 @@
                 logger.trace("Debugger shut down request received")
             } catch {
                 logger.error("Error in GDB remote protocol connection: \(error)")
+                // The session ended without the guest finishing, so the run failed.
+                try? debuggerHandler.close()
+                throw error
             }
             try debuggerHandler.close()
         }
