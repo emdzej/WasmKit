@@ -1232,8 +1232,9 @@
             context: inout InstantiationContext
         ) throws -> InternalInstance {
             // Convert ExternalValue to InternalExternalValue
-            var internalExports: [String: InternalExternalValue] = [:]
+            var internalExports: [ExternalName: InternalExternalValue] = [:]
             for (name, value) in exports {
+                let name = ExternalName(name)
                 switch value {
                 case .function(let func_):
                     internalExports[name] = .function(func_.handle)

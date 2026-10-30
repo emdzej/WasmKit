@@ -553,11 +553,12 @@ extension StoreAllocator {
             }
         }
 
-        let exports: [String: InternalExternalValue] = try module.exports.reduce(into: [:]) { result, export in
-            guard result[export.name] == nil else {
+        let exports: [ExternalName: InternalExternalValue] = try module.exports.reduce(into: [:]) { result, export in
+            let name = ExternalName(export.name)
+            guard result[name] == nil else {
                 throw WasmKitError(message: .duplicateExportName(name: export.name))
             }
-            result[export.name] = try createExportValue(export)
+            result[name] = try createExportValue(export)
             // An exported function counts as declared for `ref.func`.
             if case .function(let index) = export.descriptor {
                 functionRefs.insert(index)
@@ -698,7 +699,7 @@ extension StoreAllocator {
 
         /// Allocates a synthetic core instance with the given exports.
         /// Used for inline export instances in Component Model.
-        func allocateSyntheticCoreInstance(exports: [String: InternalExternalValue]) -> InternalInstance {
+        func allocateSyntheticCoreInstance(exports: [ExternalName: InternalExternalValue]) -> InternalInstance {
             // Create a minimal InstanceEntity with only the exports
             // All other fields are empty/default since this is purely for aggregating exports
             let entity = InstanceEntity(

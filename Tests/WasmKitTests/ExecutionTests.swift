@@ -56,6 +56,35 @@ struct ExecutionTests {
         #expect(results == [.i32(42)])
     }
 
+    /// Import and export names compare by code points, not by Unicode canonical equivalence:
+    /// "\u{C5}" and "A\u{30A}" are both "Å", but different names.
+    @Test
+    func namesCompareByCodePoints() throws {
+        let module = try parseWasm(
+            bytes: wat2wasm(
+                """
+                (module
+                    (import "m" "\u{C5}" (func $a (result i32)))
+                    (import "m" "A\u{30A}" (func $b (result i32)))
+                    (func (export "\u{C5}") (result i32) (call $a))
+                    (func (export "A\u{30A}") (result i32) (call $b))
+                )
+                """
+            )
+        )
+        let store = Store(engine: Engine())
+        func constant(_ value: Int32) -> Function {
+            Function(store: store, parameters: [], results: [.i32]) { _, _ in [.i32(UInt32(bitPattern: value))] }
+        }
+        var imports = Imports()
+        imports.define(module: "m", name: "\u{C5}", constant(1))
+        imports.define(module: "m", name: "A\u{30A}", constant(2))
+        let instance = try module.instantiate(store: store, imports: imports)
+        #expect(try instance.exports[function: "\u{C5}"]?() == [.i32(1)])
+        #expect(try instance.exports[function: "A\u{30A}"]?() == [.i32(2)])
+        #expect(Array(instance.exports).count == 2)
+    }
+
     /// A tail call to a host function moves the arguments over the caller's
     /// saved slots, and the host function's results have to reach the caller's
     /// caller.

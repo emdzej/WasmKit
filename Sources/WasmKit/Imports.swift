@@ -23,7 +23,7 @@ import struct WasmParser.Import
 /// let instance = try module.instantiate(store: store, imports: imports)
 /// ```
 public struct Imports {
-    private var definitions: [String: [String: ExternalValue]] = [:]
+    private var definitions: [ExternalName: [ExternalName: ExternalValue]] = [:]
 
     /// Initializes a new instance of `Imports`.
     public init() {
@@ -31,7 +31,7 @@ public struct Imports {
 
     /// Define a value to be imported by the given module and name.
     public mutating func define<Extern: ExternalValueConvertible>(module: String, name: String, _ value: Extern) {
-        definitions[module, default: [:]][name] = value.externalValue
+        definitions[ExternalName(module), default: [:]][ExternalName(name)] = value.externalValue
     }
 
     /// Define a set of values to be imported by the given module.
@@ -39,7 +39,7 @@ public struct Imports {
     ///   - module: The module name to be used for resolving the imports.
     ///   - values: The values to be imported keyed by their name.
     public mutating func define(module: String, _ values: Exports) {
-        definitions[module, default: [:]].merge(values.map { ($0, $1) }, uniquingKeysWith: { _, new in new })
+        definitions[ExternalName(module), default: [:]].merge(values.items.lazy.map { ($0, ExternalValue(handle: $1, store: values.store)) }, uniquingKeysWith: { _, new in new })
     }
 
     mutating func define(_ importEntry: Import, _ value: ExternalValue) {
@@ -48,7 +48,7 @@ public struct Imports {
 
     /// Lookup a value to be imported by the given module and name.
     func lookup(module: String, name: String) -> (InternalExternalValue, StoreAllocator)? {
-        definitions[module]?[name]?.internalize()
+        definitions[ExternalName(module)]?[ExternalName(name)]?.internalize()
     }
 }
 
@@ -87,14 +87,14 @@ extension Imports: ExpressibleByDictionaryLiteral {
         public typealias Key = String
         public typealias Value = ExternalValueConvertible
 
-        let definitions: [String: ExternalValue]
+        let definitions: [ExternalName: ExternalValue]
 
         public init(dictionaryLiteral elements: (String, any Value)...) {
-            self.definitions = Dictionary(uniqueKeysWithValues: elements.map { ($0.0, $0.1.externalValue) })
+            self.definitions = Dictionary(uniqueKeysWithValues: elements.map { (ExternalName($0.0), $0.1.externalValue) })
         }
     }
 
     public init(dictionaryLiteral elements: (String, Value)...) {
-        self.definitions = Dictionary(uniqueKeysWithValues: elements.map { ($0.0, $0.1.definitions) })
+        self.definitions = Dictionary(uniqueKeysWithValues: elements.map { (ExternalName($0.0), $0.1.definitions) })
     }
 }

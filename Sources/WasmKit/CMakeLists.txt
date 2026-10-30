@@ -44,6 +44,7 @@ add_wasmkit_library(WasmKit
   Execution/Errors.swift
   Execution/Execution.swift
   Execution/ExecutionStack.swift
+  Execution/ExternalName.swift
   Execution/Function.swift
   Execution/FailableAllocation.swift
   Execution/Instances.swift

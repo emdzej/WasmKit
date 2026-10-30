@@ -19,7 +19,7 @@ public final class Runtime {
     private var hostGlobals: [Global] = []
     /// This property is separate from `registeredModuleInstances`, as host exports
     /// won't have a corresponding module instance.
-    fileprivate var availableExports: [String: [String: ExternalValue]] = [:]
+    fileprivate var availableExports: [ExternalName: [ExternalName: ExternalValue]] = [:]
 
     /// Initializes a new instant of a WebAssembly interpreter runtime.
     /// - Parameter hostModules: Host module names mapped to their corresponding ``HostModule`` definitions.
@@ -54,16 +54,16 @@ public final class Runtime {
 
     /// Legacy compatibility method to register a module instance with a name.
     public func register(_ instance: Instance, as name: String) throws {
-        guard availableExports[name] == nil else {
+        guard availableExports[ExternalName(name)] == nil else {
             throw WasmKitError(message: .moduleInstanceAlreadyRegistered(name))
         }
 
-        availableExports[name] = Dictionary(uniqueKeysWithValues: instance.exports.map { ($0, $1) })
+        availableExports[ExternalName(name)] = instance.exports.items.mapValues { ExternalValue(handle: $0, store: store) }
     }
 
     /// Legacy compatibility method to register a host module with a name.
     public func register(_ hostModule: HostModule, as name: String) throws {
-        guard availableExports[name] == nil else {
+        guard availableExports[ExternalName(name)] == nil else {
             throw WasmKitError(message: .moduleInstanceAlreadyRegistered(name))
         }
 
@@ -72,15 +72,15 @@ public final class Runtime {
 
     /// Register the given host module assuming that the given name is not registered yet.
     func registerUniqueHostModule(_ hostModule: HostModule, as name: String, engine: Engine) {
-        var moduleExports = [String: ExternalValue]()
+        var moduleExports = [ExternalName: ExternalValue]()
 
         for (globalName, global) in hostModule.globals {
-            moduleExports[globalName] = .global(global)
+            moduleExports[ExternalName(globalName)] = .global(global)
             hostGlobals.append(global)
         }
 
         for (functionName, function) in hostModule.functions {
-            moduleExports[functionName] = .function(
+            moduleExports[ExternalName(functionName)] = .function(
                 Function(
                     handle: store.allocator.allocate(type: function.type, implementation: Function.adapting(function.implementation, results: function.type.results), engine: engine),
                     store: store
@@ -90,17 +90,17 @@ public final class Runtime {
         }
 
         for (memoryName, memoryAddr) in hostModule.memories {
-            moduleExports[memoryName] = .memory(memoryAddr)
+            moduleExports[ExternalName(memoryName)] = .memory(memoryAddr)
         }
 
-        availableExports[name] = moduleExports
+        availableExports[ExternalName(name)] = moduleExports
     }
 
     func getExternalValues(_ module: Module, runtime: Runtime) throws -> Imports {
         var result = Imports()
 
         for i in module.imports {
-            guard let moduleExports = availableExports[i.module], let external = moduleExports[i.name] else {
+            guard let moduleExports = availableExports[ExternalName(i.module)], let external = moduleExports[ExternalName(i.name)] else {
                 throw WasmKitError(message: .missing(moduleName: i.module, externalName: i.name))
             }
             result.define(i, external)

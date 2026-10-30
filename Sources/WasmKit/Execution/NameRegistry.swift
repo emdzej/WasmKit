@@ -28,7 +28,7 @@ struct NameRegistry {
                 // Use exported name if the function doesn't have name in name section.
                 guard case .function(let function) = entry else { continue }
                 guard registry.functionNames[function] == nil else { continue }
-                registry.functionNames[function] = name
+                registry.functionNames[function] = name.string
             }
         }
     }

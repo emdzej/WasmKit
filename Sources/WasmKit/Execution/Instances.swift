@@ -82,7 +82,7 @@ package struct InstanceEntity /* : ~Copyable */ {
     var tags: ImmutableArray<InternalTag>
     var elementSegments: ImmutableArray<InternalElementSegment>
     var dataSegments: ImmutableArray<InternalDataSegment>
-    var exports: [String: InternalExternalValue]
+    var exports: [ExternalName: InternalExternalValue]
     var functionRefs: Set<FunctionIndex>
     var features: WasmFeatureSet
     var dataCount: UInt32?
@@ -125,7 +125,7 @@ package typealias InternalInstance = EntityHandle<InstanceEntity>
 /// A map of exported entities by name.
 public struct Exports: Sequence {
     let store: Store
-    let items: [String: InternalExternalValue]
+    let items: [ExternalName: InternalExternalValue]
 
     /// A collection of exported entities without their names.
     public var values: [ExternalValue] {
@@ -134,7 +134,7 @@ public struct Exports: Sequence {
 
     /// Returns the exported entity with the given name.
     public subscript(_ name: String) -> ExternalValue? {
-        guard let entity = items[name] else { return nil }
+        guard let entity = items[ExternalName(name)] else { return nil }
         return ExternalValue(handle: entity, store: store)
     }
 
@@ -164,7 +164,7 @@ public struct Exports: Sequence {
 
     public struct Iterator: IteratorProtocol {
         private let store: Store
-        private var iterator: Dictionary<String, InternalExternalValue>.Iterator
+        private var iterator: Dictionary<ExternalName, InternalExternalValue>.Iterator
 
         init(parent: Exports) {
             self.store = parent.store
@@ -173,7 +173,7 @@ public struct Exports: Sequence {
 
         public mutating func next() -> (name: String, value: ExternalValue)? {
             guard let (name, entity) = iterator.next() else { return nil }
-            return (name, ExternalValue(handle: entity, store: store))
+            return (name.string, ExternalValue(handle: entity, store: store))
         }
     }
 
@@ -200,7 +200,7 @@ public struct Instance {
     /// - Parameter name: The name of the exported entity.
     /// - Returns: The exported entity if found, otherwise `nil`.
     public func export(_ name: String) -> ExternalValue? {
-        guard let entity = handle.exports[name] else { return nil }
+        guard let entity = handle.exports[ExternalName(name)] else { return nil }
         return ExternalValue(handle: entity, store: store)
     }
 
@@ -1383,7 +1383,7 @@ extension InternalInstance {
     var tags: ImmutableArray<InternalTag> { withValue { $0.tags } }
     var elementSegments: ImmutableArray<InternalElementSegment> { withValue { $0.elementSegments } }
     var dataSegments: ImmutableArray<InternalDataSegment> { withValue { $0.dataSegments } }
-    var exports: [String: InternalExternalValue] { withValue { $0.exports } }
+    var exports: [ExternalName: InternalExternalValue] { withValue { $0.exports } }
     var functionRefs: Set<FunctionIndex> { withValue { $0.functionRefs } }
     var features: WasmFeatureSet { withValue { $0.features } }
     var isDebuggable: Bool { withValue { $0.isDebuggable } }

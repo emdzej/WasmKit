@@ -43,11 +43,6 @@ package struct TestCase: CustomStringConvertible {
         }
 
         let matchesPattern: (URL) throws -> Bool = { filePath in
-            let fileName = filePath.lastPathComponent
-            // FIXME: skipped because two escaped export names decode to the same string here ("Å",
-            // spelled by only one export), so the module is rejected and later directives all fail.
-            guard fileName != "names.wast" else { return false }
-
             let patternPredicate = { pattern in filePath.path.hasSuffix(pattern) }
             if !include.isEmpty {
                 return include.contains(where: patternPredicate)
