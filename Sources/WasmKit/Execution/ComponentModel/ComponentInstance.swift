@@ -320,7 +320,7 @@
             let type = handle.type
 
             // 1. Lower the arguments into core values, or into memory if there are too many.
-            let coreArguments = try context.lowerArguments(arguments, of: type)
+            let coreArguments = try instance.withoutLeaving { try context.lowerArguments(arguments, of: type) }
 
             // 2. Call the core function.
             var stack = ExecutionStack(engine: store.engine)
@@ -331,7 +331,7 @@
 
             // 4. Let the callee free what the results pointed to.
             if let postReturn = canonOptions.postReturn {
-                _ = try postReturn.invoke(coreResults, store: store, stack: &stack)
+                _ = try instance.withoutLeaving { try postReturn.invoke(coreResults, store: store, stack: &stack) }
             }
 
             return results

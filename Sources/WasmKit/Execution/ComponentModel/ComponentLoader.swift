@@ -1536,13 +1536,15 @@
             let store = self.store
             let instance = context.state
             let wrappedFunction = Function(store: store, type: coreFuncType) { [componentFunction] _, coreArgs in
+                try instance.checkMayLeave()
                 var abi = CanonicalABIContext(types: types, options: options, store: store, instance: instance)
                 // The borrows lent to the call end with it, however it ends: a trap leaves the
                 // instance usable, and its handles must not stay lent.
                 defer { abi.releaseLenders() }
                 let componentArgs = try abi.liftArguments(coreArgs, of: funcType)
                 let results = try componentFunction.invoke(componentArgs)
-                return try abi.lowerResults(results, of: funcType, arguments: coreArgs)
+                // The results go into the caller's memory, with its `realloc`.
+                return try instance.withoutLeaving { try abi.lowerResults(results, of: funcType, arguments: coreArgs) }
             }
 
             return wrappedFunction.handle

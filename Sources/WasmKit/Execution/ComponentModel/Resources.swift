@@ -243,6 +243,30 @@
     final class ComponentInstanceState {
         var table = HandleTable()
 
+        /// Whether a call into the instance is in progress. The spec traps rather than enter an
+        /// instance already on the stack (`Task.trap_if_on_the_stack`).
+        private(set) var isEntered = false
+
+        /// The spec's `may_leave`: false while the runtime lowers values into the instance's
+        /// memory, with its `realloc`, and while its post-return function runs. Calling out
+        /// of the instance then traps.
+        private(set) var mayLeave = true
+
+        /// Traps if the instance may not call out of itself now.
+        func checkMayLeave() throws {
+            guard mayLeave else {
+                throw CanonicalABIError(description: "cannot leave component instance")
+            }
+        }
+
+        /// Runs `body` with calls out of the instance forbidden.
+        func withoutLeaving<R>(_ body: () throws -> R) throws -> R {
+            let previous = mayLeave
+            mayLeave = false
+            defer { mayLeave = previous }
+            return try body()
+        }
+
         /// The handle at `index`, which must be one to a resource of `type`.
         func handle(_ index: UInt32, of type: ComponentResourceType) throws -> ResourceHandle {
             try Self.check(table.get(index), index: index, type: type)
@@ -319,17 +343,30 @@
 
         /// `resource.new`.
         func resourceNew(_ type: ComponentResourceType, rep: UInt32) throws -> UInt32 {
-            try lowerOwn(rep, of: type)
+            try checkMayLeave()
+            return try lowerOwn(rep, of: type)
         }
 
         /// `resource.drop`: removes the handle, and runs the destructor if it owned the resource.
         func resourceDrop(_ type: ComponentResourceType, index: UInt32) throws {
+            try checkMayLeave()
             let handle = try removeHandle(index, of: type)
             if handle.isOwn {
-                try type.destructor?(handle.rep)
+                try Self.destroy(type, rep: handle.rep, from: self)
             } else {
                 handle.scope?.borrowCount -= 1
             }
+        }
+
+        /// Runs the destructor of a resource of `type` that `caller`, or the host if `nil`,
+        /// dropped the last owning handle to. Another instance's destructor runs as a call into
+        /// it, which traps if that instance is on the stack, even if it has no destructor.
+        static func destroy(_ type: ComponentResourceType, rep: UInt32, from caller: ComponentInstanceState?) throws {
+            guard let implementation = type.implementation as? ComponentInstanceState, implementation !== caller else {
+                try type.destructor?(rep)
+                return
+            }
+            try implementation.enterCall { _ in try type.destructor?(rep) }
         }
 
         /// `resource.rep`.
@@ -343,6 +380,11 @@
         /// in the table for the call's duration and requires every borrow lent to the call to
         /// be dropped by its end.
         func enterCall<R>(_ body: (CallScope) throws -> R) throws -> R {
+            guard !isEntered else {
+                throw CanonicalABIError(description: "cannot enter component instance")
+            }
+            isEntered = true
+            defer { isEntered = false }
             let threadIndex = try table.add(.thread)
             defer { _ = try? table.remove(threadIndex) }
             let scope = CallScope()
@@ -351,6 +393,21 @@
                 throw CanonicalABIError(description: "borrow handles still remain at the end of the call")
             }
             return result
+        }
+    }
+
+    extension ComponentResource {
+        /// Drops a resource the host owns, running its type's destructor.
+        ///
+        /// Call this once for each owned resource the host received from a component and keeps,
+        /// such as a constructor's result: otherwise a guest-defined resource is never destroyed.
+        /// Do not use the resource after, nor drop one the host passed on to a component, as that
+        /// gave the component the ownership.
+        ///
+        /// - Throws: A trap if the destructor traps, or if the component that defines the type is
+        ///   in a call already, such as when a host function it called drops the resource.
+        public func drop() throws {
+            try ComponentInstanceState.destroy(type, rep: rep, from: nil)
         }
     }
 

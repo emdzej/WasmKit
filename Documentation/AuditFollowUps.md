@@ -15,9 +15,6 @@ wabt 1.0.42.
 
 ### 1. Smaller items
 
-- **Resource gaps:** a host that owns a guest-defined resource has no way to drop it, so its
-  destructor never runs. The spec's reentrance checks (`may_enter`/`may_leave`) are not
-  implemented, for resource destructors or otherwise.
 - **Import type checks:** function and value types are checked, by structural equality as
   wasm-tools does (`ComponentTypeMatching.swift`). Parameter names may differ unless the loader
   is created with `importTypeChecking: .strict`, as wasmtime's linker allows. Not checked: the
