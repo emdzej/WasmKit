@@ -36,17 +36,31 @@ struct TypeCanonicalizer {
 
     /// Canonicalizes a module's type section.
     ///
-    /// Throws "unknown type" if a type refers to itself or to a later type.
-    init(typeSection: TypeSection, interner: Interner<FunctionType>) throws(WasmKitError) {
+    /// Throws "unknown type" if a type refers to a later type, or to itself without `gc`.
+    ///
+    /// A function type is canonical by its signature alone. GC types are canonical by the
+    /// recursion group they are defined in, with their finality and supertypes, which this does
+    /// not model yet. So it rejects whatever would make two types with one signature distinct, or
+    /// relate types other than by equality: recursion groups of more than one type, a type
+    /// referring to itself, and a type that is not final or declares supertypes.
+    init(typeSection: TypeSection, features: WasmFeatureSet, interner: Interner<FunctionType>) throws(WasmKitError) {
         var typeIDs: [InternedFuncType] = []
         typeIDs.reserveCapacity(typeSection.count)
-        // A function type is canonical by its signature alone. GC compares types by the recursive
-        // group they are defined in, with their finality and supertypes, so struct and array types,
-        // and function types that use those, will be canonicalized per group here.
         for group in typeSection.recursiveGroups {
+            guard group.types.count <= 1 else {
+                throw WasmKitError("recursion groups of more than one type are not supported yet")
+            }
             for type in group.types {
+                guard type.isFinal, type.supertypes.isEmpty else {
+                    throw WasmKitError("subtype declarations are not supported yet")
+                }
                 guard case .function(let functionType) = type.body else {
                     throw WasmKitError("GC type definitions are not supported yet")
+                }
+                // With GC, a type may refer to the types of its own recursion group.
+                let ownIndex = TypeIndex(typeIDs.count)
+                if features.contains(.gc), (functionType.parameters + functionType.results).contains(where: { $0.concreteTypeIndex == ownIndex }) {
+                    throw WasmKitError("recursive types are not supported yet")
                 }
                 // Only the types defined so far are visible to this one.
                 let canonical = try TypeCanonicalizer(typeIDs: typeIDs).canonicalize(functionType)
@@ -114,7 +128,12 @@ struct TypeCanonicalizer {
 extension ValueType {
     /// Whether the type refers to a type in a type section.
     fileprivate var hasConcreteHeapType: Bool {
-        guard case .ref(let referenceType) = self, case .concrete = referenceType.heapType else { return false }
-        return true
+        concreteTypeIndex != nil
+    }
+
+    /// The index of the type in a type section the type refers to, if any.
+    fileprivate var concreteTypeIndex: TypeIndex? {
+        guard case .ref(let referenceType) = self, case .concrete(let index) = referenceType.heapType else { return nil }
+        return index
     }
 }

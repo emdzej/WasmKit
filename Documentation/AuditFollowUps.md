@@ -13,15 +13,7 @@ wabt 1.0.42.
 
 ## Correctness
 
-### 1. GC type canonicalization ignores recursion groups
-
-- **Where:** `Sources/WasmKit/TypeCanonicalization.swift` and `TypeMatching.swift`.
-- **Problem:** finality and supertypes are ignored too. Types in `(rec (type $a (func)) (type $b (func)))`
-  become identical.
-- **Fix:** implement iso-recursive canonicalization, or reject non-trivial rec groups and `sub`
-  declarations until GC execution exists. Mind the tests in `Tests/WasmKitTests/ExtraSuite/gc`.
-
-### 2. Smaller items
+### 1. Smaller items
 
 - **Shared memory growth:** `SharedMemoryStorage.grow` turns a resource-limiter error into `-1`,
   and calls the limiter while holding `growLock`. The other memory backends propagate the error.
@@ -49,7 +41,7 @@ wabt 1.0.42.
 
 ## Performance
 
-### 3. SIMD still dispatches through one handler
+### 2. SIMD still dispatches through one handler
 
 - **Where:** `Sources/WasmKit/Execution/Instructions/SIMDCore.swift`.
 - **Problem:** every SIMD instruction decodes `SIMDOpcode` and switches on it, then switches again
@@ -57,7 +49,7 @@ wabt 1.0.42.
 - **Fix:** generate one instruction per operation in `Utilities/Sources/VMGen.swift` and
   `VMSpec`, working on `SIMD16<UInt8>`, `SIMD4<Float>` and so on via `V128Storage`.
 
-### 4. WASI I/O
+### 3. WASI I/O
 
 - **Vectored I/O:** `Sources/WASI/Platform/File.swift` makes one syscall per buffer. Use
   `readv`/`writev`/`preadv`/`pwritev` behind `GuestBuffers.transfer`, keeping its semantics:
@@ -68,7 +60,7 @@ wabt 1.0.42.
 - **Opening under the lock:** `path_open` holds the global `fdTable` lock while opening, so
   opening a FIFO blocks every other guest thread. Open outside the lock and reserve the slot first.
 
-### 5. Component calls allocate a stack each
+### 4. Component calls allocate a stack each
 
 - **Where:** `ComponentFunction.invoke` in `ComponentInstance.swift` allocates a 512 KiB
   `ExecutionStack` per call. (`realloc` inside one call already reuses one.)
@@ -76,6 +68,10 @@ wabt 1.0.42.
 
 ## Notes
 
+- **GC types:** `TypeCanonicalizer` (`Sources/WasmKit/TypeCanonicalization.swift`) identifies a
+  type by its function signature, so it rejects recursion groups of several types, types that
+  refer to themselves, and non-final types or declared supertypes. GC execution will need
+  iso-recursive canonicalization and declared subtyping in `TypeMatching.swift` instead.
 - **Nesting limit:** components may nest 32 deep (`maxComponentNestingDepth` in
   `ParsedComponentBuilder.swift`). In a debug build, a 512 KiB test-thread stack overflowed
   somewhere between 40 and 60 levels.
