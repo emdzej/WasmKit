@@ -685,6 +685,10 @@
         /// type an equality bound requires
         case mismatchedResourceTypes(name: String)
 
+        /// An import, or an instance import's export, has a function or value type other than
+        /// the one declared for it
+        case mismatchedImportType(name: String, reason: String)
+
         /// General instantiation failure
         case instantiationFailed(String)
     }
@@ -708,6 +712,7 @@
             case .instanceExportNotFound(let importName, let exportName):
                 return "import \"\(importName)\": instance export \"\(exportName)\" was not found"
             case .mismatchedResourceTypes(let name): return "\"\(name)\": mismatched resource types"
+            case .mismatchedImportType(let name, let reason): return "type mismatch for import `\(name)`: \(reason)"
             case .instantiationFailed(let message): return message
             }
         }
@@ -731,8 +736,8 @@
                     try checkInstance(instance, against: declaration, name: importDef.name, context: context)
                 }
                 context.componentInstances.append(instance)
-            case (.function, .function(let function)):
-                // Function imports add to component functions index space
+            case (.function(let type), .function(let function)):
+                try checkFunction(function, against: type, in: context.types, name: importDef.name)
                 context.componentFunctions.append(function)
             case (.module, .coreModule(let module)):
                 context.coreModules.append(module)
@@ -772,38 +777,56 @@
                         throw ComponentLoaderError.mismatchedResourceTypes(name: name)
                     }
                 }
+                if case .value(let expectedType) = expected, case .type(let type) = value, case .value(let providedType) = type.entry {
+                    do {
+                        try withoutActuallyEscaping(scope) { scope in
+                            try ComponentTypeMatcher(expected: scope, provided: type.space.entry).match(expectedType, providedType)
+                        }
+                    } catch let mismatch as ComponentTypeMismatch {
+                        throw ComponentLoaderError.mismatchedImportType(name: name, reason: mismatch.description)
+                    }
+                }
                 return expected
             }
         }
 
-        /// Checks that `instance` has the exports `declaration` lists, of the right sorts, and
-        /// the resource types its bounds require. Function signatures are not compared yet.
+        /// Checks that `function` has `type`, whose type indices resolve in `space`.
+        private func checkFunction(
+            _ function: InternalComponentFunction, against type: ComponentFuncType, in space: ComponentTypeSpace, name: String
+        ) throws {
+            let matcher = ComponentTypeMatcher(expected: space.entry, provided: function.types.entry)
+            do {
+                try matcher.match(type, function.type)
+            } catch let mismatch as ComponentTypeMismatch {
+                throw ComponentLoaderError.mismatchedImportType(name: name, reason: mismatch.description)
+            }
+        }
+
+        /// Checks that `instance` has the exports `declaration` lists, of the right sorts, with
+        /// the function types it declares and the types its bounds require.
         private func checkInstance(
             _ instance: InternalComponentInstance, against declaration: InstanceTypeDecl, name: String,
             context: InstantiationContext
         ) throws {
             let exports = instance.exports
             // The instance type's own type index space.
-            var local: [ComponentTypeSpace.Entry] = []
-            func localEntry(_ index: ComponentTypeIndex) throws -> ComponentTypeSpace.Entry {
-                guard local.indices.contains(Int(index.rawValue)) else {
-                    throw ComponentLoaderError.instantiationFailed("type index \(index.rawValue) out of bounds in the type of import \"\(name)\"")
-                }
-                return local[Int(index.rawValue)]
-            }
+            let local = ComponentTypeSpace()
             for decl in declaration.declarations {
                 switch decl {
                 case .coreType:
                     break
-                case .type:
-                    // Only resource types matter to the bounds checked here, and an instance
-                    // type cannot define one.
-                    local.append(.opaque)
+                case .type(let type):
+                    switch type {
+                    case .definedValue(let type): local.append(.value(type))
+                    case .function(let type): local.append(.function(type))
+                    // Not checked, and an instance type cannot define a resource type.
+                    case .instance, .component, .resource: local.append(.opaque)
+                    }
                 case .alias(let alias):
                     if case .type = alias.sort, case .outer(let count, let index) = alias.target {
                         // Outer count 1 is the component the instance type is declared in.
                         let space = try context.typeSpace(outerCount: Int(count) - 1)
-                        local.append(try space.entry(ComponentTypeIndex(rawValue: Int(index))))
+                        try local.append(space.entry(ComponentTypeIndex(rawValue: Int(index))), from: space)
                     } else if case .type = alias.sort {
                         local.append(.opaque)
                     }
@@ -812,7 +835,7 @@
                     switch export.externDesc {
                     case .type(let bound):
                         local.append(
-                            try importedType(provided, bound: bound, name: "\(name).\(export.name)", scope: localEntry))
+                            try importedType(provided, bound: bound, name: "\(name).\(export.name)", scope: local.entry))
                         continue
                     default:
                         break
@@ -832,6 +855,11 @@
                     guard provided.sortDescription == expected else {
                         throw ComponentLoaderError.incompatibleImport(
                             name: "\(name).\(export.name)", expected: expected, got: provided.sortDescription)
+                    }
+                    if case .function(let typeIndex) = export.externDesc, case .function(let function) = provided,
+                        case .function(let type) = try local.entry(ComponentTypeIndex(rawValue: Int(typeIndex)))
+                    {
+                        try checkFunction(function, against: type, in: local, name: "\(name).\(export.name)")
                     }
                 }
             }
@@ -1570,7 +1598,8 @@
                 // Validate the kind matches
                 switch (required.kind, provided) {
                 case (.function, .function):
-                    // TODO: Function type compatibility not covered yet in `ComponentLoader.validateImports
+                    // Its type is checked when it is processed, as its type indices resolve
+                    // against the types defined before it.
                     break
 
                 case (.value, .value):
