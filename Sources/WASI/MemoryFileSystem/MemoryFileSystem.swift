@@ -282,11 +282,40 @@ public final class MemoryFileSystem: Sendable {
             throw WASIAbi.Errno.ENOENT
         }
 
+        // The checks `renameat` makes, so the in-memory tree behaves like a host directory.
+        if let destNode = destParentDir.getChild(name: destFileName) {
+            // Renaming onto itself does nothing.
+            if destNode === sourceNode { return }
+            switch (sourceNode.type == .directory, destNode.type == .directory) {
+            case (true, false): throw WASIAbi.Errno.ENOTDIR
+            case (false, true): throw WASIAbi.Errno.EISDIR
+            case (true, true):
+                if let destDir = destNode as? MemoryDirectoryNode, destDir.childCount() > 0 {
+                    throw WASIAbi.Errno.ENOTEMPTY
+                }
+            case (false, false): break
+            }
+        }
+        // Moving a directory into its own subtree would detach that subtree into a cycle.
+        if let sourceDir = sourceNode as? MemoryDirectoryNode, Self.subtree(of: sourceDir, contains: destParentDir) {
+            throw WASIAbi.Errno.EINVAL
+        }
+
         sourceParentDir.removeChild(name: sourceFileName)
         destParentDir.setChild(name: destFileName, node: sourceNode)
     }
 
     // MARK: - Private Helpers
+
+    /// Whether `directory` is `root` or lies anywhere below it.
+    private static func subtree(of root: MemoryDirectoryNode, contains directory: MemoryDirectoryNode) -> Bool {
+        var pending = [root]
+        while let next = pending.popLast() {
+            if next === directory { return true }
+            pending.append(contentsOf: next.listChildren().compactMap { next.getChild(name: $0) as? MemoryDirectoryNode })
+        }
+        return false
+    }
 
     /// Joins a base guest path and a relative component with a single "/".
     /// `relative` must be non-empty and must not start with "/" — callers guarantee this;

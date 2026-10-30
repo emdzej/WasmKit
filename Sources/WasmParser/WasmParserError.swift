@@ -132,6 +132,14 @@ extension WasmParserError.Message {
     }
 
     @usableFromInline
+    static let sharedTableNotSupported = Self("tables cannot be shared")
+
+    @usableFromInline
+    static func malformedElementSegmentFlags(_ flags: UInt32) -> Self {
+        Self("malformed elements segment kind: \(flags)")
+    }
+
+    @usableFromInline
     static func unexpectedElementKind(expected: UInt32, actual: UInt32) -> Self {
         Self("Unexpected element kind: expected \(expected) but got \(actual)")
     }

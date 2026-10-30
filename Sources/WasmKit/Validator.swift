@@ -4,8 +4,10 @@ import WasmParser
 struct InstructionValidator {
     let context: InternalInstance
 
-    func validateMemArg(_ memarg: MemArg, naturalAlignment: Int) throws(WasmKitError) {
-        if memarg.align > naturalAlignment {
+    /// - Parameter isAtomic: Atomic accesses must be naturally aligned exactly, where other
+    ///   accesses may declare a smaller alignment.
+    func validateMemArg(_ memarg: MemArg, naturalAlignment: Int, isAtomic: Bool = false) throws(WasmKitError) {
+        if memarg.align > naturalAlignment || (isAtomic && memarg.align != naturalAlignment) {
             throw WasmKitError(message: .invalidMemArgAlignment(memarg: memarg, naturalAlignment: naturalAlignment))
         }
         // With memory64 enabled the parser reads every offset as u64, so a 32-bit memory's

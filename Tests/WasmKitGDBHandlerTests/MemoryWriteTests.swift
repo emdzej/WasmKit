@@ -115,7 +115,9 @@
                     Issue.record("expected memory contents, got \(response.kind)")
                     return
                 }
-                #expect(bytes.count == 0x1_0000)
+                // Narrowed to the advertised packet size (0x1000), half of it once hex-encoded and
+                // framed, rather than the whole 64 KiB memory.
+                #expect(bytes.count == (0x1000 - 4) / 2)
             }
         }
     }

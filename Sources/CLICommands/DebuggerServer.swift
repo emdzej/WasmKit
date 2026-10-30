@@ -2,6 +2,7 @@
 
     import Foundation
     import GDBRemoteProtocol
+    import WAT
     import WasmKit
     import WasmKitGDBHandler
     import WasmKitWASI
@@ -19,12 +20,19 @@
                 FileHandle.standardError.write(Data("[\(level)] \(message)\n".utf8))
             }
 
-            guard let wasmBinary = FileManager.default.contents(atPath: self.wasmModulePath) else {
+            guard let contents = FileManager.default.contents(atPath: self.wasmModulePath) else {
                 throw CLIFile.Error(description: "Failed to read module: \(self.wasmModulePath)")
+            }
+            // `wasmkit run` takes text modules too; assemble one the same way.
+            let wasmBinary: [UInt8]
+            if URL(fileURLWithPath: wasmModulePath).pathExtension == "wat" {
+                wasmBinary = try wat2wasm(String(decoding: contents, as: UTF8.self), features: engineConfiguration.features)
+            } else {
+                wasmBinary = [UInt8](contents)
             }
 
             let debuggerHandler = try WasmKitGDBHandler(
-                wasmBinary: [UInt8](wasmBinary),
+                wasmBinary: wasmBinary,
                 moduleFilePath: self.wasmModulePath,
                 wasiConfiguration: self.wasiConfiguration,
                 engineConfiguration: self.engineConfiguration,

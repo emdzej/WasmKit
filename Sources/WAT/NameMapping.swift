@@ -14,6 +14,19 @@ struct Name: Equatable, Hashable {
     }
 }
 
+/// The key under which an identifier is looked up.
+///
+/// Text-format identifiers are equal when their code points are, while Swift's `String`
+/// equality also equates canonically equivalent strings: `$"\u{c5}"` and `$"A\u{30a}"` are two
+/// identifiers, though both render as `Å`.
+struct IdentifierKey: Hashable {
+    let utf8: [UInt8]
+
+    init(_ value: String) {
+        self.utf8 = Array(value.utf8)
+    }
+}
+
 /// A module or component field declaration that may have a name identifier.
 /// Otherwise it's identified by an index.
 protocol NamedFieldDecl {
@@ -34,7 +47,7 @@ protocol NameToIndexResolver {
 /// A map of module field declarations indexed by their name
 struct NameMapping<Decl: NamedFieldDecl>: NameToIndexResolver {
     private(set) var decls: [Decl] = []
-    private(set) var nameToIndex: [String: Int] = [:]
+    private(set) var nameToIndex: [IdentifierKey: Int] = [:]
 
     /// Adds a new declaration to the mapping
     /// - Parameter newDecl: The declaration to add
@@ -44,10 +57,10 @@ struct NameMapping<Decl: NamedFieldDecl>: NameToIndexResolver {
         let index = decls.count
         decls.append(newDecl)
         if let name = newDecl.id {
-            guard nameToIndex[name.value] == nil else {
+            guard nameToIndex[IdentifierKey(name.value)] == nil else {
                 throw WatParserError("Duplicate \(name.value) identifier", location: name.location)
             }
-            nameToIndex[name.value] = index
+            nameToIndex[IdentifierKey(name.value)] = index
         }
         return index
     }
@@ -55,7 +68,7 @@ struct NameMapping<Decl: NamedFieldDecl>: NameToIndexResolver {
     func resolveIndex(use: Parser.IndexOrId) throws(WatParserError) -> Int {
         switch use {
         case .id(let id, _):
-            guard let byName = nameToIndex[id.value] else {
+            guard let byName = nameToIndex[IdentifierKey(id.value)] else {
                 throw WatParserError("Unknown \(Decl.self) \(id)", location: use.location)
             }
             return byName
@@ -260,6 +273,9 @@ struct TypesMap {
             guard found.signature == inline.signature else {
                 throw WatParserError("Type mismatch \(found) != \(inline)", location: indexOrId.location)
             }
+            // The inline parameters are what name the function's locals; the declared type's
+            // names, if any, belong to that type.
+            return (inline, Int(index))
         }
         return (found, Int(index))
     }
@@ -307,17 +323,17 @@ extension TypesMap: Collection {
     /// A map for core types that can be either function types or module types
     struct CoreTypesMap {
         private(set) var declarations: [ComponentWatParser.CoreTypeDef] = []
-        private(set) var nameToIndex: [String: Int] = [:]
+        private(set) var nameToIndex: [IdentifierKey: Int] = [:]
 
         @discardableResult
         mutating func add(_ decl: ComponentWatParser.CoreTypeDef) throws(WatParserError) -> Int {
             let index = declarations.count
             declarations.append(decl)
             if let name = decl.id {
-                guard nameToIndex[name.value] == nil else {
+                guard nameToIndex[IdentifierKey(name.value)] == nil else {
                     throw WatParserError("Duplicate \(name.value) identifier", location: name.location)
                 }
-                nameToIndex[name.value] = index
+                nameToIndex[IdentifierKey(name.value)] = index
             }
             return index
         }
@@ -325,7 +341,7 @@ extension TypesMap: Collection {
         func resolveIndex(use: Parser.IndexOrId) throws(WatParserError) -> Int {
             switch use {
             case .id(let id, _):
-                guard let byName = nameToIndex[id.value] else {
+                guard let byName = nameToIndex[IdentifierKey(id.value)] else {
                     throw WatParserError("Unknown core type \(id)", location: use.location)
                 }
                 return byName

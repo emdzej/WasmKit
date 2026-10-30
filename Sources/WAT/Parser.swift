@@ -129,7 +129,13 @@ internal struct Parser {
             value = index
         }
         switch sign {
-        case .plus, nil: return fromBitPattern(value)
+        case nil: return fromBitPattern(value)
+        case .plus:
+            // An explicit `+` makes the literal signed, so `+0xFFFFFFFF` is out of range for i32
+            // where an unsigned `0xFFFFFFFF` is its bit pattern.
+            let casted = fromBitPattern(value)
+            guard casted >= 0 else { throw makeError() }
+            return casted
         case .minus:
             let casted = fromBitPattern(~value &+ 1)
             guard casted <= 0 else { throw makeError() }

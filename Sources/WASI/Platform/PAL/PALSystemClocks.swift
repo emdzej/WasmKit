@@ -13,10 +13,15 @@ public struct SystemMonotonicClock: MonotonicClock {
     public func now() throws -> MonotonicClock.Instant {
         #if os(Windows)
             var counter = LARGE_INTEGER()
-            guard QueryPerformanceCounter(&counter) else {
+            var frequency = LARGE_INTEGER()
+            guard QueryPerformanceCounter(&counter), QueryPerformanceFrequency(&frequency) else {
                 throw _wasiError(fromWin32: GetLastError())
             }
-            return UInt64(counter.QuadPart)
+            // The counter ticks at `frequency` per second; WASI wants nanoseconds. Whole seconds
+            // and the remainder are scaled apart, so the product cannot overflow 64 bits.
+            let ticks = UInt64(counter.QuadPart)
+            let perSecond = UInt64(frequency.QuadPart)
+            return (ticks / perSecond) &* 1_000_000_000 &+ (ticks % perSecond) &* 1_000_000_000 / perSecond
         #else
             let timeSpec = try _preferredMonotonicClock.currentTime()
             return WASIAbi.Timestamp(platformTimeSpec: timeSpec)

@@ -115,6 +115,13 @@
         private let logger: GDBLogger
         private var debugger: Debugger
 
+        /// The largest packet this stub sends or accepts, as advertised in `qSupported`.
+        private static let packetSize = 0x1000
+
+        /// The most bytes one `m` reply carries: hex doubles them, and the framing takes `$`, `#`
+        /// and the checksum. A client asking for more gets this much and asks again for the rest.
+        private static let maxReadLength = UInt((packetSize - 4) / 2)
+
         /// Generic error reply. `QEnableErrorStrings` is unsupported, so a bare code is
         /// the only way to refuse a request the target understands but cannot answer.
         private static let errorReply = GDBTargetResponse.Kind.error(0x45)
@@ -169,7 +176,10 @@
             self.wasi = wasi
 
             do {
-                self.debugger = try Debugger(module: parseWasm(bytes: wasmBinary), store: store, imports: imports)
+                // The engine's features, so a module the run would accept is accepted when debugged.
+                self.debugger = try Debugger(
+                    module: parseWasm(bytes: wasmBinary, features: engineConfiguration.features), store: store,
+                    imports: imports)
                 try self.debugger.stopAtEntrypoint()
                 try self.debugger.run()
                 guard case .stoppedAtBreakpoint = self.debugger.state else {
@@ -251,6 +261,22 @@
             case .big: return HexEncoding.encode(value.bigEndianBytes)
             case .little: return HexEncoding.encode(value.littleEndianBytes)
             }
+        }
+
+        /// `text` as an XML attribute value: a path may hold `&`, `<` or a quote.
+        private static func xmlEscaped(_ text: String) -> String {
+            var escaped = ""
+            for character in text {
+                switch character {
+                case "&": escaped += "&amp;"
+                case "<": escaped += "&lt;"
+                case ">": escaped += "&gt;"
+                case "\"": escaped += "&quot;"
+                case "'": escaped += "&apos;"
+                default: escaped.append(character)
+                }
+            }
+            return escaped
         }
 
         /// The code address a `Z0`/`z0` packet names, or `nil` if it names none.
@@ -368,7 +394,8 @@
                 ])
 
             case .supportedFeatures:
-                responseKind = .string("qXfer:libraries:read+;qWasmInstance+;PacketSize=1000;")
+                responseKind = .string(
+                    "qXfer:libraries:read+;qWasmInstance+;PacketSize=\(String(Self.packetSize, radix: 16));")
 
             case .vContSupportedActions:
                 responseKind = .vContSupportedActions([.continue, .step])
@@ -432,7 +459,7 @@
                     responseKind = .string(
                         """
                         l<library-list>\
-                        <library name="\(self.moduleFilePath)">\
+                        <library name="\(Self.xmlEscaped(self.moduleFilePath))">\
                         <section address="0x\(String(DebuggerMemoryView.executableCodeOffset, radix: 16))"/>\
                         </library>\
                         </library-list>
@@ -456,7 +483,7 @@
                         try self.memoryView.readMemory(
                             debugger: self.debugger,
                             addressInProtocolSpace: addressInProtocolSpace,
-                            length: length
+                            length: min(length, Self.maxReadLength)
                         )
                     )
                 } catch {

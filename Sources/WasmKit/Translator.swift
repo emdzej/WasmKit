@@ -116,8 +116,8 @@ extension InternalInstance {
         return instance == self
     }
     func validateFunctionIndex(_ index: FunctionIndex) throws(WasmKitError) {
-        let function = try self.functions[validating: Int(index)]
-        guard self.functionRefs.contains(function) else {
+        _ = try self.functions[validating: Int(index)]
+        guard self.functionRefs.contains(index) else {
             throw WasmKitError(message: .functionIndexNotDeclared(index: index))
         }
     }
@@ -3135,6 +3135,11 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
         // Check dangling labels
         try iseqBuilder.assertDanglingLabels()
 
+        // Branches to the function's own label land here, past the `return` that `visitEnd`
+        // emitted for falling off the end, so this exit needs its own `onExit`.
+        if isIntercepting {
+            emit(.onExit(functionIndex))
+        }
         let oldPC = iseqBuilder.insertingPC
         iseqBuilder.emit(._return(.init()))
         self.updateInstructionMapping(from: oldPC)
@@ -3884,9 +3889,26 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
     }
 
     mutating func visitBrTable(targets: WasmParser.BrTable) throws(WasmKitError) -> Output {
-        guard let index = try popVRegOperand(.i32) else { return }
-
+        let index = try popVRegOperand(.i32)
         let defaultFrame = try controlStack.branchTarget(relativeDepth: targets.defaultIndex)
+        guard let index else {
+            // Unreachable: nothing to emit, but every label must still exist and agree with the
+            // default on arity, and the operands must match each of them.
+            for labelIndex in targets.labelIndices {
+                let frame = try controlStack.branchTarget(relativeDepth: labelIndex)
+                guard frame.copyTypes.count == defaultFrame.copyTypes.count else {
+                    throw WasmKitError(
+                        message: .expectedSameCopyTypes(
+                            frameCopyTypes: frame.copyTypes, defaultFrameCopyTypes: defaultFrame.copyTypes))
+                }
+                try checkStackTop(frame.copyTypes)
+            }
+            for type in defaultFrame.copyTypes.reversed() {
+                _ = try popOperand(type)
+            }
+            try markUnreachable()
+            return
+        }
 
         // If this instruction is unreachable, copyCount might be greater than the actual stack height
         try preserveOnStack(
@@ -4083,6 +4105,10 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
             // Skip actual code emission if validation-only mode
             return
         }
+        // A tail call leaves this function as a return does; the callee reports its own entry.
+        if isIntercepting {
+            emit(.onExit(functionIndex))
+        }
         // Clean up all exception handlers before the tail call
         let handlersToUnwind = try controlStack.catchHandlersToUnwind(
             relativeDepth: UInt32(controlStack.numberOfFrames - 1)
@@ -4106,6 +4132,10 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
 
         let internType = funcTypeInterner.intern(calleeType)
 
+        // A tail call leaves this function as a return does; the callee reports its own entry.
+        if isIntercepting {
+            emit(.onExit(functionIndex))
+        }
         // Clean up all exception handlers before the tail call
         let handlersToUnwind = try controlStack.catchHandlersToUnwind(
             relativeDepth: UInt32(controlStack.numberOfFrames - 1)
@@ -4527,12 +4557,13 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
     }
     mutating func visitGlobalSet(globalIndex: UInt32) throws(WasmKitError) -> Output {
         let type = try module.globalType(globalIndex)
-        guard let value = try popVRegOperand(type) else { return }
         guard let global = module.resolveGlobal(globalIndex) else {
             // Skip actual code emission if validation-only mode
             return
         }
+        // Checked before popping, which returns no operand in unreachable code.
         try validator.validateGlobalSet(global.globalType)
+        guard let value = try popVRegOperand(type) else { return }
         let operand = Instruction.GlobalAndVRegOperand(reg: LLVReg(value), global: global)
         emit(type == .v128 ? .globalSetV128(operand) : .globalSet(operand))
     }
@@ -4600,10 +4631,12 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
                 _ result: VReg
             ) -> Instruction
     ) throws(WasmKitError) {
-        guard let pop1 = try popVRegOperand(pops.0),
-            let pop2 = try popVRegOperand(pops.1)
-        else { return }
+        // Pop every operand and push the result even when some are missing, as they are in
+        // unreachable code: validation goes on with what follows.
+        let pop1 = try popVRegOperand(pops.0)
+        let pop2 = try popVRegOperand(pops.1)
         let result = valueStack.push(push)
+        guard let pop1, let pop2 else { return }
         emit(
             instruction((pop1, pop2), result),
             resultRelink: { result in
@@ -4616,11 +4649,11 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
         _ push: ValueType,
         _ instruction: @escaping (_ popped: (VReg, VReg, VReg), _ result: VReg) -> Instruction
     ) throws(WasmKitError) {
-        guard let pop1 = try popVRegOperand(pops.0),
-            let pop2 = try popVRegOperand(pops.1),
-            let pop3 = try popVRegOperand(pops.2)
-        else { return }
+        let pop1 = try popVRegOperand(pops.0)
+        let pop2 = try popVRegOperand(pops.1)
+        let pop3 = try popVRegOperand(pops.2)
         let result = valueStack.push(push)
+        guard let pop1, let pop2, let pop3 else { return }
         emit(
             instruction((pop1, pop2, pop3), result),
             resultRelink: { result in
@@ -4663,11 +4696,12 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
         _ memarg: MemArg,
         _ type: ValueType,
         _ naturalAlignment: Int,
+        isAtomic: Bool = false,
         _ instruction: @escaping (Instruction.LoadOperand) -> Instruction
     ) throws(WasmKitError) {
         let isMemory64 = try beginMemoryAccess(memarg.memory)
         defer { endMemoryAccess(memarg.memory) }
-        try validator.validateMemArg(memarg, naturalAlignment: naturalAlignment)
+        try validator.validateMemArg(memarg, naturalAlignment: naturalAlignment, isAtomic: isAtomic)
         try popPushEmit(.address(isMemory64: isMemory64), type) { value, result in
             let loadOperand = Instruction.LoadOperand(
                 offset: memarg.offset,
@@ -4767,11 +4801,12 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
         _ memarg: MemArg,
         _ type: ValueType,
         _ naturalAlignment: Int,
+        isAtomic: Bool = false,
         _ instruction: (Instruction.StoreOperand) -> Instruction
     ) throws(WasmKitError) {
         let isMemory64 = try beginMemoryAccess(memarg.memory)
         defer { endMemoryAccess(memarg.memory) }
-        try validator.validateMemArg(memarg, naturalAlignment: naturalAlignment)
+        try validator.validateMemArg(memarg, naturalAlignment: naturalAlignment, isAtomic: isAtomic)
         let value = try popVRegOperand(type)
         let pointer = try popVRegOperand(.address(isMemory64: isMemory64))
         if let value = value, let pointer = pointer {
@@ -4837,7 +4872,15 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
         case .i64AtomicLoad32U: instruction = Instruction.i64AtomicLoad32U
 
         }
-        try visitLoad(memarg, load.type, load.naturalAlignment, instruction)
+        let isAtomic: Bool
+        switch load {
+        case .i32AtomicLoad, .i64AtomicLoad, .i32AtomicLoad8U, .i32AtomicLoad16U, .i64AtomicLoad8U,
+            .i64AtomicLoad16U, .i64AtomicLoad32U:
+            isAtomic = true
+        default:
+            isAtomic = false
+        }
+        try visitLoad(memarg, load.type, load.naturalAlignment, isAtomic: isAtomic, instruction)
     }
 
     mutating func visitStore(_ store: WasmParser.Instruction.Store, memarg: MemArg) throws(WasmKitError) {
@@ -4888,7 +4931,15 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
         case .i64AtomicStore16: instruction = Instruction.i64AtomicStore16
         case .i64AtomicStore32: instruction = Instruction.i64AtomicStore32
         }
-        try visitStore(memarg, store.type, store.naturalAlignment, instruction)
+        let isAtomic: Bool
+        switch store {
+        case .i32AtomicStore, .i64AtomicStore, .i32AtomicStore8, .i32AtomicStore16, .i64AtomicStore8,
+            .i64AtomicStore16, .i64AtomicStore32:
+            isAtomic = true
+        default:
+            isAtomic = false
+        }
+        try visitStore(memarg, store.type, store.naturalAlignment, isAtomic: isAtomic, instruction)
     }
 
     mutating func visitV128Const(value: V128) throws(WasmKitError) {
@@ -5248,6 +5299,10 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
         // Keep the reference on the stack, above the arguments.
         guard let callee = try popOnStackOperand(try nullableReference(toType: typeIndex)) else { return }
 
+        // A tail call leaves this function as a return does; the callee reports its own entry.
+        if isIntercepting {
+            emit(.onExit(functionIndex))
+        }
         // Clean up all exception handlers before the tail call
         let handlersToUnwind = try controlStack.catchHandlersToUnwind(
             relativeDepth: UInt32(controlStack.numberOfFrames - 1)
@@ -6266,13 +6321,14 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
     ) throws(WasmKitError) {
         let isMemory64 = try beginMemoryAccess(memarg.memory)
         defer { endMemoryAccess(memarg.memory) }
-        try validator.validateMemArg(memarg, naturalAlignment: naturalAlignment)
+        // `naturalAlignment` is in bytes here, `memarg.align` its log2.
+        try validator.validateMemArg(memarg, naturalAlignment: naturalAlignment.trailingZeroBitCount, isAtomic: true)
         let value = try popVRegOperand(type)
         let pointer = try popVRegOperand(.address(isMemory64: isMemory64))
-        guard let value = value, let pointer = pointer else {
-            throw WasmKitError("missing rmw operands")
-        }
         let result = valueStack.push(type)
+        // Operands missing in unreachable code leave nothing to emit, but the result is
+        // still pushed for validating what follows.
+        guard let value = value, let pointer = pointer else { return }
         let rmwOperand = Instruction.RmwOperand(
             offset: memarg.offset,
             pointer: pointer,
@@ -6290,13 +6346,14 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
     ) throws(WasmKitError) {
         let isMemory64 = try beginMemoryAccess(memarg.memory)
         defer { endMemoryAccess(memarg.memory) }
-        try validator.validateMemArg(memarg, naturalAlignment: naturalAlignment)
+        // `naturalAlignment` is in bytes here, `memarg.align` its log2.
+        try validator.validateMemArg(memarg, naturalAlignment: naturalAlignment.trailingZeroBitCount, isAtomic: true)
         let value = try popVRegOperand(resultType)
         let pointer = try popVRegOperand(.address(isMemory64: isMemory64))
-        guard let value = value, let pointer = pointer else {
-            throw WasmKitError("missing rmw operands")
-        }
         let result = valueStack.push(resultType)
+        // Operands missing in unreachable code leave nothing to emit, but the result is
+        // still pushed for validating what follows.
+        guard let value = value, let pointer = pointer else { return }
         let rmwOperand = Instruction.RmwOperand(
             offset: memarg.offset,
             pointer: pointer,
@@ -6314,13 +6371,14 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
     ) throws(WasmKitError) {
         let isMemory64 = try beginMemoryAccess(memarg.memory)
         defer { endMemoryAccess(memarg.memory) }
-        try validator.validateMemArg(memarg, naturalAlignment: naturalAlignment)
+        // `naturalAlignment` is in bytes here, `memarg.align` its log2.
+        try validator.validateMemArg(memarg, naturalAlignment: naturalAlignment.trailingZeroBitCount, isAtomic: true)
         let value = try popVRegOperand(resultType)
         let pointer = try popVRegOperand(.address(isMemory64: isMemory64))
-        guard let value = value, let pointer = pointer else {
-            throw WasmKitError("missing rmw operands")
-        }
         let result = valueStack.push(resultType)
+        // Operands missing in unreachable code leave nothing to emit, but the result is
+        // still pushed for validating what follows.
+        guard let value = value, let pointer = pointer else { return }
         let rmwOperand = Instruction.RmwOperand(
             offset: memarg.offset,
             pointer: pointer,
@@ -6338,13 +6396,14 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
     ) throws(WasmKitError) {
         let isMemory64 = try beginMemoryAccess(memarg.memory)
         defer { endMemoryAccess(memarg.memory) }
-        try validator.validateMemArg(memarg, naturalAlignment: naturalAlignment)
+        // `naturalAlignment` is in bytes here, `memarg.align` its log2.
+        try validator.validateMemArg(memarg, naturalAlignment: naturalAlignment.trailingZeroBitCount, isAtomic: true)
         let value = try popVRegOperand(resultType)
         let pointer = try popVRegOperand(.address(isMemory64: isMemory64))
-        guard let value = value, let pointer = pointer else {
-            throw WasmKitError("missing rmw operands")
-        }
         let result = valueStack.push(resultType)
+        // Operands missing in unreachable code leave nothing to emit, but the result is
+        // still pushed for validating what follows.
+        guard let value = value, let pointer = pointer else { return }
         let rmwOperand = Instruction.RmwOperand(
             offset: memarg.offset,
             pointer: pointer,
@@ -6494,14 +6553,15 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
     ) throws(WasmKitError) {
         let isMemory64 = try beginMemoryAccess(memarg.memory)
         defer { endMemoryAccess(memarg.memory) }
-        try validator.validateMemArg(memarg, naturalAlignment: naturalAlignment)
+        // `naturalAlignment` is in bytes here, `memarg.align` its log2.
+        try validator.validateMemArg(memarg, naturalAlignment: naturalAlignment.trailingZeroBitCount, isAtomic: true)
         let replacement = try popVRegOperand(type)
         let expected = try popVRegOperand(type)
         let pointer = try popVRegOperand(.address(isMemory64: isMemory64))
-        guard let replacement = replacement, let expected = expected, let pointer = pointer else {
-            throw WasmKitError("missing cmpxchg operands")
-        }
         let result = valueStack.push(type)
+        // Operands missing in unreachable code leave nothing to emit, but the result is
+        // still pushed for validating what follows.
+        guard let replacement = replacement, let expected = expected, let pointer = pointer else { return }
         let cmpxchgOperand = Instruction.CmpxchgOperand(
             offset: memarg.offset,
             pointer: pointer,
@@ -6520,14 +6580,15 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
     ) throws(WasmKitError) {
         let isMemory64 = try beginMemoryAccess(memarg.memory)
         defer { endMemoryAccess(memarg.memory) }
-        try validator.validateMemArg(memarg, naturalAlignment: naturalAlignment)
+        // `naturalAlignment` is in bytes here, `memarg.align` its log2.
+        try validator.validateMemArg(memarg, naturalAlignment: naturalAlignment.trailingZeroBitCount, isAtomic: true)
         let replacement = try popVRegOperand(resultType)
         let expected = try popVRegOperand(resultType)
         let pointer = try popVRegOperand(.address(isMemory64: isMemory64))
-        guard let replacement = replacement, let expected = expected, let pointer = pointer else {
-            throw WasmKitError("missing cmpxchg operands")
-        }
         let result = valueStack.push(resultType)
+        // Operands missing in unreachable code leave nothing to emit, but the result is
+        // still pushed for validating what follows.
+        guard let replacement = replacement, let expected = expected, let pointer = pointer else { return }
         let cmpxchgOperand = Instruction.CmpxchgOperand(
             offset: memarg.offset,
             pointer: pointer,
@@ -6546,14 +6607,15 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
     ) throws(WasmKitError) {
         let isMemory64 = try beginMemoryAccess(memarg.memory)
         defer { endMemoryAccess(memarg.memory) }
-        try validator.validateMemArg(memarg, naturalAlignment: naturalAlignment)
+        // `naturalAlignment` is in bytes here, `memarg.align` its log2.
+        try validator.validateMemArg(memarg, naturalAlignment: naturalAlignment.trailingZeroBitCount, isAtomic: true)
         let replacement = try popVRegOperand(resultType)
         let expected = try popVRegOperand(resultType)
         let pointer = try popVRegOperand(.address(isMemory64: isMemory64))
-        guard let replacement = replacement, let expected = expected, let pointer = pointer else {
-            throw WasmKitError("missing cmpxchg operands")
-        }
         let result = valueStack.push(resultType)
+        // Operands missing in unreachable code leave nothing to emit, but the result is
+        // still pushed for validating what follows.
+        guard let replacement = replacement, let expected = expected, let pointer = pointer else { return }
         let cmpxchgOperand = Instruction.CmpxchgOperand(
             offset: memarg.offset,
             pointer: pointer,
@@ -6572,14 +6634,15 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
     ) throws(WasmKitError) {
         let isMemory64 = try beginMemoryAccess(memarg.memory)
         defer { endMemoryAccess(memarg.memory) }
-        try validator.validateMemArg(memarg, naturalAlignment: naturalAlignment)
+        // `naturalAlignment` is in bytes here, `memarg.align` its log2.
+        try validator.validateMemArg(memarg, naturalAlignment: naturalAlignment.trailingZeroBitCount, isAtomic: true)
         let replacement = try popVRegOperand(resultType)
         let expected = try popVRegOperand(resultType)
         let pointer = try popVRegOperand(.address(isMemory64: isMemory64))
-        guard let replacement = replacement, let expected = expected, let pointer = pointer else {
-            throw WasmKitError("missing cmpxchg operands")
-        }
         let result = valueStack.push(resultType)
+        // Operands missing in unreachable code leave nothing to emit, but the result is
+        // still pushed for validating what follows.
+        guard let replacement = replacement, let expected = expected, let pointer = pointer else { return }
         let cmpxchgOperand = Instruction.CmpxchgOperand(
             offset: memarg.offset,
             pointer: pointer,
@@ -6615,14 +6678,14 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
     mutating func visitMemoryAtomicWait32(memarg: MemArg) throws(WasmKitError) -> Output {
         let isMemory64 = try beginMemoryAccess(memarg.memory)
         defer { endMemoryAccess(memarg.memory) }
-        try validator.validateMemArg(memarg, naturalAlignment: 4)
+        try validator.validateMemArg(memarg, naturalAlignment: 2, isAtomic: true)
         let timeout = try popVRegOperand(.i64)
         let expected = try popVRegOperand(.i32)
         let pointer = try popVRegOperand(.address(isMemory64: isMemory64))
-        guard let timeout = timeout, let expected = expected, let pointer = pointer else {
-            throw WasmKitError("missing wait operands")
-        }
         let result = valueStack.push(.i32)
+        // Operands missing in unreachable code leave nothing to emit, but the result is
+        // still pushed for validating what follows.
+        guard let timeout = timeout, let expected = expected, let pointer = pointer else { return }
         let waitOperand = Instruction.AtomicWaitOperand(
             offset: memarg.offset,
             pointer: pointer,
@@ -6636,14 +6699,14 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
     mutating func visitMemoryAtomicWait64(memarg: MemArg) throws(WasmKitError) -> Output {
         let isMemory64 = try beginMemoryAccess(memarg.memory)
         defer { endMemoryAccess(memarg.memory) }
-        try validator.validateMemArg(memarg, naturalAlignment: 8)
+        try validator.validateMemArg(memarg, naturalAlignment: 3, isAtomic: true)
         let timeout = try popVRegOperand(.i64)
         let expected = try popVRegOperand(.i64)
         let pointer = try popVRegOperand(.address(isMemory64: isMemory64))
-        guard let timeout = timeout, let expected = expected, let pointer = pointer else {
-            throw WasmKitError("missing wait operands")
-        }
         let result = valueStack.push(.i32)
+        // Operands missing in unreachable code leave nothing to emit, but the result is
+        // still pushed for validating what follows.
+        guard let timeout = timeout, let expected = expected, let pointer = pointer else { return }
         let waitOperand = Instruction.AtomicWaitOperand(
             offset: memarg.offset,
             pointer: pointer,
@@ -6657,13 +6720,13 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
     mutating func visitMemoryAtomicNotify(memarg: MemArg) throws(WasmKitError) -> Output {
         let isMemory64 = try beginMemoryAccess(memarg.memory)
         defer { endMemoryAccess(memarg.memory) }
-        try validator.validateMemArg(memarg, naturalAlignment: 4)
+        try validator.validateMemArg(memarg, naturalAlignment: 2, isAtomic: true)
         let count = try popVRegOperand(.i32)
         let pointer = try popVRegOperand(.address(isMemory64: isMemory64))
-        guard let count = count, let pointer = pointer else {
-            throw WasmKitError("missing notify operands")
-        }
         let result = valueStack.push(.i32)
+        // Operands missing in unreachable code leave nothing to emit, but the result is
+        // still pushed for validating what follows.
+        guard let count = count, let pointer = pointer else { return }
         let notifyOperand = Instruction.AtomicNotifyOperand(
             offset: memarg.offset,
             pointer: pointer,

@@ -310,7 +310,11 @@ extension WASTRunContext {
             }
 
             do {
-                currentInstance = try instantiate(module: module, name: moduleDirective.id)
+                let instance = try instantiate(module: module, name: moduleDirective.id)
+                // Translate every function, not only the ones the script calls: under lazy
+                // compilation a valid function the translator wrongly rejects would go unnoticed.
+                try instance.handle.withValue { try $0.compileAllFunctions(store: store) }
+                currentInstance = instance
             } catch {
                 return .failed("module could not be instantiated: \(error)")
             }

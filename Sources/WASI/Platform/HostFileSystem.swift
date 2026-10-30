@@ -58,9 +58,16 @@ final class HostFileSystem: FileSystemImplementation, Sendable {
             fdflags: fdflags
         )
 
-        let actualFileType = try hostFd.attributes().fileType
-        if oflags.contains(.DIRECTORY), !actualFileType.isDirectory {
-            throw WASIAbi.Errno.ENOTDIR
+        let actualFileType: FileDescriptor.FileType
+        do {
+            actualFileType = try hostFd.attributes().fileType
+            if oflags.contains(.DIRECTORY), !actualFileType.isDirectory {
+                throw WASIAbi.Errno.ENOTDIR
+            }
+        } catch {
+            // Nothing owns the descriptor yet, so it would leak.
+            try? hostFd.close()
+            throw error
         }
 
         if actualFileType.isDirectory {

@@ -83,7 +83,7 @@ package struct InstanceEntity /* : ~Copyable */ {
     var elementSegments: ImmutableArray<InternalElementSegment>
     var dataSegments: ImmutableArray<InternalDataSegment>
     var exports: [String: InternalExternalValue]
-    var functionRefs: Set<InternalFunction>
+    var functionRefs: Set<FunctionIndex>
     var features: WasmFeatureSet
     var dataCount: UInt32?
     var isDebuggable: Bool
@@ -1384,7 +1384,7 @@ extension InternalInstance {
     var elementSegments: ImmutableArray<InternalElementSegment> { withValue { $0.elementSegments } }
     var dataSegments: ImmutableArray<InternalDataSegment> { withValue { $0.dataSegments } }
     var exports: [String: InternalExternalValue] { withValue { $0.exports } }
-    var functionRefs: Set<InternalFunction> { withValue { $0.functionRefs } }
+    var functionRefs: Set<FunctionIndex> { withValue { $0.functionRefs } }
     var features: WasmFeatureSet { withValue { $0.features } }
     var isDebuggable: Bool { withValue { $0.isDebuggable } }
 }

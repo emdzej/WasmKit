@@ -1008,11 +1008,9 @@ private func encodeNameSection(
         if let inline = function.typeUse.inline {
             paramCount = try inline.resolve(module.types).signature.parameters.count
         } else if let typeIndex = function.typeUse.index {
-            let resolvedIndex: Int
-            switch typeIndex {
-            case .index(let idx, _): resolvedIndex = Int(idx)
-            case .id: resolvedIndex = 0  // Approximate; full resolution not needed for name count
-            }
+            // Local indices start after the parameters, so a `$id` must be resolved to the
+            // right type to number them.
+            let resolvedIndex = try module.types.nameMapping.resolveIndex(use: typeIndex)
             if resolvedIndex < module.types.count {
                 paramCount = module.types[resolvedIndex].type.signature.parameters.count
             } else {

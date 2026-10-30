@@ -9,12 +9,12 @@ struct ConstEvaluationContext: ConstEvaluationContextProtocol {
     let functions: ImmutableArray<InternalFunction>
     /// The globals a constant expression may read, which depends on where it appears.
     var globals: [InternalGlobal]
-    let onFunctionReferenced: ((InternalFunction) -> Void)?
+    let onFunctionReferenced: ((FunctionIndex) -> Void)?
 
     init(
         functions: ImmutableArray<InternalFunction>,
         globals: [InternalGlobal],
-        onFunctionReferenced: ((InternalFunction) -> Void)? = nil
+        onFunctionReferenced: ((FunctionIndex) -> Void)? = nil
     ) {
         self.functions = functions
         self.globals = globals
@@ -28,7 +28,7 @@ struct ConstEvaluationContext: ConstEvaluationContextProtocol {
 
     func functionRef(_ index: FunctionIndex) throws -> Reference {
         let function = try self.functions[validating: Int(index)]
-        self.onFunctionReferenced?(function)
+        self.onFunctionReferenced?(index)
         return .function(from: function)
     }
     func globalValue(_ index: GlobalIndex) throws -> Value {
@@ -152,13 +152,12 @@ extension WasmParser.ElementSegment {
         case .refNull(.exnRef):
             return .exception(nil)
         case .globalGet(let index):
-            let value = try context.globalValue(index)
-            switch value {
-            case .ref(.function(let addr)):
-                return .function(addr)
-            default:
+            // Any reference type: an `externref` or `exnref` table takes items from such
+            // globals too. Validation has already matched the global's type to the segment's.
+            guard case .ref(let reference) = try context.globalValue(index) else {
                 throw WasmKitError(message: .unexpectedGlobalValueType)
             }
+            return reference
         default:
             throw WasmKitError(message: .unexpectedElementInitializer(expression: "\(expression)"))
         }

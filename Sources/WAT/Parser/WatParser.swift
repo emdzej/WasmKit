@@ -526,6 +526,10 @@ struct WatParser {
                         try parser.consume()  // consume (
                         try parser.skipParenBlock()  // skip offset expr
                     } else {
+                        // A table use makes the segment active, which needs an offset.
+                        guard table == nil else {
+                            throw WatParserError("expected an offset for an active element segment", location: parser.lexer.location())
+                        }
                         mode = .passive
                     }
                 }

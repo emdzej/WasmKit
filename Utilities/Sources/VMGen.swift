@@ -692,6 +692,15 @@ enum VMGen {
                 """
             }
             let call = "\(tryKwd)self.\(inst.name)(\(args))"
+            if inst.isTrapPseudoInstruction && !inst.isControl {
+                // The memory handler that dispatched here stepped `pc` past its successor's head
+                // slot. Step back onto that slot, which still belongs to the trapping instruction
+                // when a trap site is mapped back to it, so the trap is not reported at the next one.
+                output += """
+                        pc.pointee = pc.pointee.advanced(by: -1)
+
+                """
+            }
             if inst.mayUpdatePc {
                 output += """
                         let next: CodeSlot

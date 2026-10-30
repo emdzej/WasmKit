@@ -448,6 +448,10 @@ package struct Run: AsyncParsableCommand {
                     "Signpost logging and profiling are not supported while debugging Wasm modules."
                 )
             }
+            // The debugger builds its own store, so a budget would be silently ignored.
+            if debuggerPort != nil, fuel != nil {
+                throw ValidationError("--fuel is not supported while debugging Wasm modules.")
+            }
         #endif
     }
 

@@ -25,7 +25,13 @@ func _wasiError(fromErrno value: CInt) -> any Error {
     if let mapped = _mapErrno(value) {
         return mapped
     }
-    return WASIError(description: "Unknown underlying OS error: \(_palStrerror(value))")
+    return UnmappedPlatformError(description: "Unknown underlying OS error: \(_palStrerror(value))")
+}
+
+/// A host error with no WASI errno. A guest sees it as `EIO`, rather than trapping on a
+/// failure that is the host's, not the guest's; host callers keep the description.
+struct UnmappedPlatformError: Error, CustomStringConvertible {
+    let description: String
 }
 
 /// Translates a Win32 `GetLastError()` code into the error the PAL reports.
@@ -33,7 +39,7 @@ func _wasiError(fromWin32 code: UInt32) -> any Error {
     if let mapped = _mapWindowsError(code) {
         return mapped
     }
-    return WASIError(description: "Unknown underlying OS error: Win32 error \(code)")
+    return UnmappedPlatformError(description: "Unknown underlying OS error: Win32 error \(code)")
 }
 
 private func _mapErrno(_ errno: CInt) -> WASIAbi.Errno? {

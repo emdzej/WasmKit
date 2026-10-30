@@ -123,23 +123,20 @@ final class MemoryFileEntry: WASIFile {
         try position.withLock { pos -> WASIAbi.FileSize in
             let prep = fileNode.seekPrep()
 
-            if let handle = prep.handle {
-                let platformWhence: FileDescriptor.SeekOrigin
-                switch whence {
-                case .SET: platformWhence = .start
-                case .CUR: platformWhence = .current
-                case .END: platformWhence = .end
-                }
-                let result = try handle.seek(offset: offset, from: platformWhence)
-                pos = Int(result)
-                return WASIAbi.FileSize(result)
-            }
-
+            // Reads and writes use `pos` with `pread`/`pwrite`, even on a host handle, and never
+            // move the handle's own offset, which other entries share. So seeking is computed
+            // from `pos` here as well; only `END` asks the host for the size.
             let base: Int
             switch whence {
             case .SET: base = 0
             case .CUR: base = pos
-            case .END: base = prep.byteCount
+            case .END:
+                if let handle = prep.handle {
+                    guard let size = Int(exactly: try handle.attributes().size) else { throw WASIAbi.Errno.EOVERFLOW }
+                    base = size
+                } else {
+                    base = prep.byteCount
+                }
             }
             // The delta is signed and guest-chosen, so the sum can run off
             // either end of the range a position is expressed in.

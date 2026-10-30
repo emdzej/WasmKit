@@ -104,4 +104,11 @@ struct StdioFileEntry: FdWASIFile {
             nlink: 0, size: 0, atim: 0, mtim: 0, ctim: 0
         )
     }
+
+    /// The descriptor is the embedder's own stdio, whose status flags it shares with the parent
+    /// process: setting `O_NONBLOCK` here would outlive the guest and break the shell. Refused
+    /// instead of applied.
+    func setFdStatFlags(_ flags: WASIAbi.Fdflags) throws {
+        throw WASIAbi.Errno.ENOTSUP
+    }
 }

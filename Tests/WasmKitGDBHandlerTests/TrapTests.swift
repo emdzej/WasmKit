@@ -3,6 +3,7 @@
     import GDBRemoteProtocol
     import Testing
     import WAT
+    import WasmKitWASI
 
     @testable import WasmKit
     @testable import WasmKitGDBHandler
@@ -63,6 +64,43 @@
                 #expect(!bytes.isEmpty)
                 #expect(bytes.count % 8 == 0)
             }
+        }
+
+        /// A memory trap is reported at the access that trapped, not at the instruction after it.
+        ///
+        /// Software bounds checking, where the load handler dispatches to a trap
+        /// pseudo-instruction, under each threading model.
+        @Test(arguments: [EngineConfiguration.ThreadingModel.direct, .token])
+        func aMemoryTrapIsReportedAtTheAccess(threadingModel: EngineConfiguration.ThreadingModel) throws {
+            let wat = """
+                (module
+                  (memory 1)
+                  (func (export "_start") (result i32)
+                    (local $a i32)
+                    (local.set $a (i32.const 65536))
+                    (i32.load (local.get $a))
+                    (local.get $a)
+                    (i32.add)))
+                """
+            let binary = try wat2wasm(wat)
+            // `i32.load` is the only 0x28 byte in the code section's single body.
+            let loadOffset = try #require(binary.lastIndex(of: 0x28))
+            let handler = try WasmKitGDBHandler(
+                wasmBinary: binary,
+                moduleFilePath: "/tmp/test.wasm",
+                wasiConfiguration: WASIConfiguration(arguments: [], environment: [:], preopens: []),
+                engineConfiguration: EngineConfiguration(threadingModel: threadingModel, memoryBoundsChecking: .software),
+                logger: .disabled
+            )
+            defer { try? handler.close() }
+            _ = try handler.handle(command: .init(kind: .continue, arguments: ""))
+            let response = try handler.handle(command: .init(kind: .wasmCallStack, arguments: "1"))
+            guard case .hexEncodedBinary(let bytes) = response.kind else {
+                Issue.record("expected a call stack, got \(response.kind)")
+                return
+            }
+            let pc = try #require(UInt64(littleEndianBytes: bytes.prefix(8)))
+            #expect(pc == DebuggerMemoryView.executableCodeOffset + UInt64(loadOffset))
         }
 
         static let localWat = """

@@ -34,7 +34,13 @@ func wasiFunction<M: GuestMemory & SendableMetatype>(
             // TODO: This restriction should be only applied to strings that can be interpreted as platform-string, which is expected to be null-terminated
             throw WASIAbi.Errno.EILSEQ
         }
-        return String(decoding: hostBuffer, as: UTF8.self)
+        // Decoding replaces invalid UTF-8 with U+FFFD, which would let different byte strings
+        // name the same host file. Such a path is refused instead.
+        let string = String(decoding: hostBuffer, as: UTF8.self)
+        guard string.utf8.elementsEqual(hostBuffer) else {
+            throw WASIAbi.Errno.EILSEQ
+        }
+        return string
     }
 }
 

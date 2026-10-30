@@ -79,8 +79,13 @@
             // Preserve negative zero
             return value.sign == .minus ? "-0" : "0"
         } else {
-            // f32 has ~7-8 significant decimal digits
-            return formatFloatWithSignificantDigits(Double(value), significantDigits: 8)
+            // The fewest digits, from 8 up to the 9 that always suffice, that read back as the
+            // same value: fewer would print e.g. two different values as the same text.
+            for digits in 8...9 {
+                let text = formatFloatWithSignificantDigits(Double(value), significantDigits: digits)
+                if Float(text) == value || digits == 9 { return text }
+            }
+            preconditionFailure("unreachable")
         }
     }
 
@@ -93,8 +98,13 @@
             // Preserve negative zero
             return value.sign == .minus ? "-0" : "0"
         } else {
-            // f64 has ~15-17 significant decimal digits
-            return formatFloatWithSignificantDigits(value, significantDigits: 15)
+            // As for f32, from 15 up to the 17 digits that always round-trip: 15 alone prints
+            // 0.30000000000000004 as 0.3.
+            for digits in 15...17 {
+                let text = formatFloatWithSignificantDigits(value, significantDigits: digits)
+                if Double(text) == value || digits == 17 { return text }
+            }
+            preconditionFailure("unreachable")
         }
     }
 

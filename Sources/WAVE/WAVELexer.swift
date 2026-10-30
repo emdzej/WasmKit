@@ -172,9 +172,10 @@
         /// Call this after consuming the opening paren.
         /// Returns the byte offset of the closing paren.
         public mutating func scanToCloseParen() throws(WAVEParserError) -> Int {
-            var depth = 1
+            // The brackets still open, innermost last, so a closer must match its opener.
+            var open: [Unicode.Scalar] = ["("]
 
-            while depth > 0 {
+            while !open.isEmpty {
                 guard let ch = cursor.peek() else {
                     throw WAVEParserError(
                         "unexpected end of input",
@@ -184,16 +185,19 @@
 
                 switch ch {
                 case "(", "[", "{":
-                    depth += 1
+                    open.append(ch)
                     _ = cursor.next()
-                case ")":
-                    depth -= 1
-                    if depth == 0 {
+                case ")", "]", "}":
+                    let opener: Unicode.Scalar = ch == ")" ? "(" : ch == "]" ? "[" : "{"
+                    guard open.removeLast() == opener else {
+                        throw WAVEParserError(
+                            "mismatched '\(ch)'",
+                            span: SourceSpan(start: cursor.byteOffset, end: cursor.byteOffset + 1)
+                        )
+                    }
+                    if open.isEmpty {
                         return cursor.byteOffset
                     }
-                    _ = cursor.next()
-                case "]", "}":
-                    depth -= 1
                     _ = cursor.next()
                 case "\"":
                     skipStringLiteral()
@@ -517,8 +521,9 @@
             var currentLine = ""
 
             while !cursor.isEOF {
-                // Check for closing delimiter (spaces + """)
-                if let closingIndent = checkMultilineClosing() {
+                // Check for closing delimiter (spaces + """), which stands on a line of its own:
+                // `"""` after other text on the line does not close the string.
+                if currentLine.isEmpty, let closingIndent = checkMultilineClosing() {
                     // Dedent all lines
                     let result = dedentMultilineString(lines: lines, indent: closingIndent, start: start)
                     return .string(result, SourceSpan(start: start, end: cursor.byteOffset))
@@ -706,8 +711,11 @@
             }
             result.append(Character(cursor.next()!))
 
-            // Continue with alphanumeric of same case
-            while let ch = cursor.peek(), ch.isASCIIAlphanumeric {
+            // Continue with digits and letters of the same case: `fooBar` is not one word.
+            let isUppercase = first.properties.isUppercase
+            while let ch = cursor.peek(), ch.isASCIIAlphanumeric,
+                !ch.isASCIILetter || ch.properties.isUppercase == isUppercase
+            {
                 result.append(Character(cursor.next()!))
             }
 

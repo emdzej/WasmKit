@@ -403,6 +403,10 @@
                     throw WAVEParserError("unknown field '\(fieldName)'", span: labelToken.span)
                 }
 
+                // Like flags, a field may be given once; a second value would silently win.
+                guard parsedFields[fieldName] == nil else {
+                    throw WAVEParserError("duplicate field '\(fieldName)'", span: labelToken.span)
+                }
                 let fieldType = try fieldDef.type.resolve(resolver)
                 let value = try parse(type: fieldType, resolver: resolver)
                 parsedFields[fieldName] = value
@@ -629,7 +633,8 @@
                         }
                         return .result(ok: payload, error: nil)
                     }
-                    // No payload - ok type might be unit
+                    // The ok type has a payload, so `ok` alone is not a value of it.
+                    throw WAVEParserError("expected '(' and an ok payload", span: token.span)
                 }
                 return .result(ok: nil, error: nil)
             case .err:
@@ -645,6 +650,7 @@
                         }
                         return .result(ok: nil, error: payload)
                     }
+                    throw WAVEParserError("expected '(' and an err payload", span: token.span)
                 }
                 // Use empty tuple as marker for err case with no payload
                 return .result(ok: nil, error: .tuple([]))

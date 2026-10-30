@@ -212,9 +212,18 @@ public struct Module: Sendable {
         }
 
         let constEvalContext = ConstEvaluationContext(instance: instance)
-        // Step 12-13.
 
-        // Steps 14-15.
+        // Everything that can reject the module runs before the first write into a table or
+        // memory, which may be imported and so outlive a failed instantiation, and before the
+        // start function. In eager mode that includes validating every function body.
+        try validateActiveSegments(instance: instance, constEvalContext: constEvalContext)
+        if store.engine.configuration.compilationMode == .eager {
+            try instance.withValue {
+                try $0.compileAllFunctions(store: store)
+            }
+        }
+
+        // Steps 12-15.
         try initializeActiveElementSegments(instance: instance, constEvalContext: constEvalContext)
 
         // Step 16.
@@ -227,13 +236,6 @@ public struct Module: Sendable {
             _ = try startFunction.invoke([], store: store, stack: &stack)
         }
 
-        // Compile all functions eagerly if the engine is in eager compilation mode
-        if store.engine.configuration.compilationMode == .eager {
-            try instance.withValue {
-                try $0.compileAllFunctions(store: store)
-            }
-        }
-
         return instance
     }
 
@@ -242,6 +244,39 @@ public struct Module: Sendable {
     public mutating func materializeAll() throws {}
 
     // MARK: - Segment Initialization Helpers
+
+    /// Checks that every active segment names an existing table or memory with a matching type,
+    /// and that its offset evaluates to that table's or memory's address type.
+    ///
+    /// A failure here is a validation error, so it must surface before any segment is written:
+    /// only a trap from an out-of-bounds segment may leave earlier segments applied.
+    private func validateActiveSegments(
+        instance: InternalInstance, constEvalContext: ConstEvaluationContext
+    ) throws {
+        func checkOffset(_ offset: ConstExpression, isMemory64: Bool) throws {
+            let value = try offset.evaluate(context: constEvalContext, expectedType: .addressType(isMemory64: isMemory64))
+            guard value.maybeAddressOffset(isMemory64) != nil else {
+                throw WasmKitError(
+                    kind: .message(.unexpectedOffsetInitializer(expected: .addressType(isMemory64: isMemory64), got: value)))
+            }
+        }
+        for element in elements {
+            guard case .active(let tableIndex, let offset) = element.mode else { continue }
+            let table = try instance.tables[validating: Int(tableIndex)]
+            let tableType = table.tableType
+            let elementType = try instance.typeCanonicalizer.canonicalize(element.type)
+            guard elementType.isSubtype(of: tableType.elementType) else {
+                throw WasmKitError(
+                    kind: .message(
+                        .elementSegmentTypeMismatch(elementType: elementType, tableElementType: tableType.elementType)))
+            }
+            try checkOffset(offset, isMemory64: tableType.limits.isMemory64)
+        }
+        for case .active(let data) in self.data {
+            let memory = try instance.memories[validating: Int(data.index), MemoryEntity.createOutOfBoundsError]
+            try checkOffset(data.offset, isMemory64: memory.withValue { $0.limit.isMemory64 })
+        }
+    }
 
     /// Initialize active element segments into instance tables.
     private func initializeActiveElementSegments(

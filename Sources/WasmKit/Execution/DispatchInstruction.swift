@@ -3599,6 +3599,7 @@ extension Execution {
     }
     @_silgen_name("wasmkit_execute_memoryOutOfBoundsTrap") @inline(__always)
     mutating func execute_memoryOutOfBoundsTrap(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        pc.pointee = pc.pointee.advanced(by: -1)
         try self.memoryOutOfBoundsTrap(sp: sp.pointee)
         let next = pc.pointee.pointee
         pc.pointee = pc.pointee.advanced(by: 1)
@@ -3606,6 +3607,7 @@ extension Execution {
     }
     @_silgen_name("wasmkit_execute_unalignedAtomicTrap") @inline(__always)
     mutating func execute_unalignedAtomicTrap(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        pc.pointee = pc.pointee.advanced(by: -1)
         try self.unalignedAtomicTrap(sp: sp.pointee)
         let next = pc.pointee.pointee
         pc.pointee = pc.pointee.advanced(by: 1)

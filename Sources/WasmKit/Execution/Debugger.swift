@@ -341,6 +341,7 @@
                     frames.append(Frame(wasmPc: wasmPc, sp: i + 1 < frameSps.count ? frameSps[i + 1] : nil))
                 }
                 self.state = .trapped(.init(description: "Trap: \(trap.reason)", frames: frames))
+                self.refreshMemoryView(instance: self.instance.handle)
             }
         }
 
@@ -370,13 +371,21 @@
             guard let currentFunction = breakpoint.sp.currentFunction else {
                 throw Error.unknownCurrentFunctionAtBreakpoint(breakpoint.sp)
             }
+            self.refreshMemoryView(instance: currentFunction.instance)
+        }
+
+        /// Reloads the cached base and size of `instance`'s memory after the guest ran.
+        ///
+        /// Growing a memory can move it, freeing the old buffer, so the cache is reloaded at every
+        /// stop: a later read through a stale base would read freed memory.
+        private mutating func refreshMemoryView(instance: InternalInstance) {
             Execution.CurrentMemory.mayUpdateCurrentInstance(
-                instance: currentFunction.instance,
+                instance: instance,
                 md: &self.md,
                 ms: &self.ms
             )
             // ms may include uncommitted guard pages that fault outside the trap guard.
-            self.linearMemoryByteCount = currentFunction.instance.memories.first?.byteCount ?? 0
+            self.linearMemoryByteCount = instance.memories.first?.byteCount ?? 0
         }
 
         /// Runs the guest from the head slot `pc` with the threading model's own run loop until it
@@ -388,6 +397,7 @@
 
         /// Records the entrypoint's results, which it left in the root frame.
         private mutating func recordEntrypointReturn() {
+            self.refreshMemoryView(instance: self.instance.handle)
             let rootSp = self.stack.slots.advanced(by: StackLayout.numberOfSavingSlots)
             self.state = .entrypointReturned(Execution.readRootResults(sp: rootSp, type: self.entrypointFunction.type))
         }

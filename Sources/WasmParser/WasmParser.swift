@@ -581,6 +581,10 @@ extension ByteStream {
         }
 
         let limits = try parseLimits(features: features)
+        // The threads proposal shares memories only; shared tables need a later proposal.
+        guard !limits.shared else {
+            throw WasmParserError(message: .sharedTableNotSupported, offset: currentIndex)
+        }
         return TableType(elementType: elementType, limits: limits)
     }
 
@@ -622,7 +626,8 @@ extension ByteStream {
         case 0x02: return try .memory(parseMemoryType(features: features))
         case 0x03: return try .global(parseGlobalType(features: features))
         case 0x04 where features.contains(.exceptionHandling):
-            let attribute: UInt8 = try parseUnsigned()
+            // A single byte, not a LEB128 number: a padded `80 00` is malformed.
+            let attribute = try consumeAny()
             guard attribute == 0 else { throw makeError(.invalidTagAttribute(attribute)) }
             return try .tag(parseUnsigned())
         default:
@@ -744,7 +749,8 @@ extension Parser: BinaryInstructionDecoder {
     @inlinable mutating func visitTryTable() throws(WasmParserError) -> (blockType: BlockType, tryCatch: TryCatch) {
         let blockType = try parseResultType()
         let catches: [CatchClause] = try parseVector { (s) throws(WasmParserError) in
-            let clauseId: UInt8 = try s.parseUnsigned()
+            // A single byte, not a LEB128 number.
+            let clauseId = try s.consumeAny()
             switch clauseId {
             case 0x00:
                 let tagIndex: UInt32 = try s.parseUnsigned()
@@ -1171,7 +1177,8 @@ extension Parser {
     @usableFromInline
     mutating func parseTagSection() throws(WasmParserError) -> [Tag] {
         return try parseVector { (s) throws(WasmParserError) in
-            let attribute: UInt8 = try s.parseUnsigned()
+            // A single byte, not a LEB128 number: a padded `80 00` is malformed.
+            let attribute = try s.consumeAny()
             guard attribute == 0 else { throw s.makeError(.invalidTagAttribute(attribute)) }
             let typeIndex: TypeIndex = try s.parseUnsigned()
             return Tag(type: typeIndex)
@@ -1204,7 +1211,12 @@ extension Parser {
         let count: UInt32 = try parseUnsigned()
         var segments: [ElementSegment] = []
         for _ in 0..<count {
-            let flag = try ElementSegment.Flag(rawValue: parseUnsigned())
+            let rawFlag: UInt32 = try parseUnsigned()
+            // Only the three low bits mean anything; the option set would ignore the rest.
+            guard rawFlag <= 7 else {
+                throw makeError(.malformedElementSegmentFlags(rawFlag))
+            }
+            let flag = ElementSegment.Flag(rawValue: rawFlag)
 
             let type: ReferenceType
             let initializer: [ConstExpression]
@@ -1246,9 +1258,10 @@ extension Parser {
 
             if flag.segmentHasElemKind {
                 // `elemkind` parsing as defined in the spec
-                let elemKind = try parseUnsigned() as UInt32
+                // A single byte, not a LEB128 number.
+                let elemKind = try stream.consumeAny()
                 guard elemKind == 0x00 else {
-                    throw makeError(.unexpectedElementKind(expected: 0x00, actual: elemKind))
+                    throw makeError(.unexpectedElementKind(expected: 0x00, actual: UInt32(elemKind)))
                 }
             }
 
@@ -1587,6 +1600,19 @@ public struct NameSectionParser<Source: ByteStreamSource> {
 
     static func parseNameSubsection(type: UInt8, stream: inout ByteStream<Source>) throws(WasmParserError) -> ParsedNames? {
         let size = try stream.parseUnsigned(UInt32.self)
+        let end = stream.currentIndex + Int(size)
+        let names = try parseNameSubsectionContent(type: type, size: size, stream: &stream)
+        // The content must fill the subsection exactly; trailing bytes would otherwise be read
+        // as the next subsection.
+        guard stream.currentIndex == end else {
+            throw stream.makeError(.sectionSizeMismatch(sectionID: 0, expected: end, actual: stream.currentIndex))
+        }
+        return names
+    }
+
+    private static func parseNameSubsectionContent(
+        type: UInt8, size: UInt32, stream: inout ByteStream<Source>
+    ) throws(WasmParserError) -> ParsedNames? {
         switch type {
         case 0: return .moduleName(try stream.parseName())
         case 1: return .functions(try parseNameMap(stream: &stream))

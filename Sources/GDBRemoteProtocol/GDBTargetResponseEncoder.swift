@@ -45,13 +45,13 @@ package final class GDBTargetResponseEncoder {
             out.append(contentsOf: "OK#9a".utf8)
 
         case .keyValuePairs(let info):
-            out.append(contentsOf: info.map { (key, value) in "\(key):\(value);" }.joined().appendedChecksum.utf8)
+            out.append(contentsOf: info.map { (key, value) in "\(key):\(value);" }.joined().escapedForPacket.appendedChecksum.utf8)
 
         case .vContSupportedActions(let actions):
             out.append(contentsOf: "vCont;\(actions.map { "\($0.rawValue);" }.joined())".appendedChecksum.utf8)
 
         case .string(let str):
-            out.append(contentsOf: str.appendedChecksum.utf8)
+            out.append(contentsOf: str.escapedForPacket.appendedChecksum.utf8)
 
         case .hexEncodedBinary(let binary):
             let hexDumpResponse = HexEncoding.encode(binary).appendedChecksum
@@ -65,5 +65,27 @@ package final class GDBTargetResponseEncoder {
             out.append(contentsOf: "".appendedChecksum.utf8)
         }
         return out
+    }
+}
+
+extension String {
+    /// The string with the bytes that frame a packet escaped, as `}` followed by the byte XOR
+    /// 0x20. Unescaped, a `#` in a file path would end the packet early.
+    var escapedForPacket: String {
+        guard utf8.contains(where: { $0 == UInt8(ascii: "#") || $0 == UInt8(ascii: "$") || $0 == UInt8(ascii: "}") || $0 == UInt8(ascii: "*") }) else {
+            return self
+        }
+        var escaped: [UInt8] = []
+        escaped.reserveCapacity(utf8.count)
+        for byte in utf8 {
+            switch byte {
+            case UInt8(ascii: "#"), UInt8(ascii: "$"), UInt8(ascii: "}"), UInt8(ascii: "*"):
+                escaped.append(UInt8(ascii: "}"))
+                escaped.append(byte ^ 0x20)
+            default:
+                escaped.append(byte)
+            }
+        }
+        return String(decoding: escaped, as: UTF8.self)
     }
 }

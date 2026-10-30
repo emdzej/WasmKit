@@ -257,7 +257,10 @@ struct Lexer {
                         return .float(sign, .nan(hexPattern: nil))
                     }
                     if numberSource.eat("nan:0x") {
-                        return .float(sign, .nan(hexPattern: try numberSource.parseHexNumber()))
+                        let payload = try numberSource.parseHexNumber()
+                        // The payload is the whole rest of the token: `nan:0x1zz` is no literal.
+                        guard numberSource.isEOF else { return .unknown }
+                        return .float(sign, .nan(hexPattern: payload))
                     }
                     var pattern: String
                     let parseFraction: () throws(WatParserError) -> String
@@ -341,7 +344,9 @@ struct Lexer {
             switch char {
             case "(":
                 if cursor.peek() == ";" {
-                    // Nested comment block
+                    // Nested comment block. Take the `;` with it, or `(;)` would both open a
+                    // level and close it.
+                    _ = cursor.next()
                     level += 1
                 }
             case ";":

@@ -426,15 +426,17 @@ extension StoreAllocator {
             }
         )
 
-        var functionRefs: Set<InternalFunction> = []
+        // Function indices `ref.func` may name. Indices rather than functions: the same host
+        // function imported twice is two indices, and only a declared one may be referenced.
+        var functionRefs: Set<FunctionIndex> = []
         // Table initializers can only read imported globals, a global initializer can also read
         // the globals defined before it, and element segments can read every global. Both
         // contexts gain each global as it is allocated.
         var constEvalContext = ConstEvaluationContext(
             functions: functions,
             globals: importedGlobals,
-            onFunctionReferenced: { function in
-                functionRefs.insert(function)
+            onFunctionReferenced: { index in
+                functionRefs.insert(index)
             }
         )
         var constTypeContext = ConstExpressionTypeContext(
@@ -556,6 +558,10 @@ extension StoreAllocator {
                 throw WasmKitError(message: .duplicateExportName(name: export.name))
             }
             result[export.name] = try createExportValue(export)
+            // An exported function counts as declared for `ref.func`.
+            if case .function(let index) = export.descriptor {
+                functionRefs.insert(index)
+            }
         }
 
         // Steps 20-21.

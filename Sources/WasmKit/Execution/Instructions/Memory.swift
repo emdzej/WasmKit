@@ -130,8 +130,7 @@ extension Execution {
             return .outOfBounds
         }
         let toStore = castFromValue(value)
-        md.unsafelyUnwrapped.advanced(by: Execution.checkedByteOffset(address))
-            .bindMemory(to: T.self, capacity: 1).pointee = toStore.littleEndian
+        md.unsafelyUnwrapped.storeBytes(of: toStore.littleEndian, toByteOffset: Execution.checkedByteOffset(address), as: T.self)
         return nil
     }
     // Accumulator forms of the loads and stores, for a 32-bit memory. A guest
@@ -235,8 +234,7 @@ extension Execution {
             return .outOfBounds
         }
         let toStore = castFromValue(UntypedValue(storage: ireg))
-        md.unsafelyUnwrapped.advanced(by: Execution.checkedByteOffset(address))
-            .bindMemory(to: T.self, capacity: 1).pointee = toStore.littleEndian
+        md.unsafelyUnwrapped.storeBytes(of: toStore.littleEndian, toByteOffset: Execution.checkedByteOffset(address), as: T.self)
         return nil
     }
 
@@ -253,8 +251,7 @@ extension Execution {
             return .outOfBounds
         }
         let toStore = castFromValue(value)
-        md.unsafelyUnwrapped.advanced(by: Execution.checkedByteOffset(address))
-            .bindMemory(to: T.self, capacity: 1).pointee = toStore.littleEndian
+        md.unsafelyUnwrapped.storeBytes(of: toStore.littleEndian, toByteOffset: Execution.checkedByteOffset(address), as: T.self)
         return nil
     }
 
@@ -293,8 +290,7 @@ extension Execution {
         if _slowPath(!Execution.isInBounds(address: address, offset: offset, length: 8, ms: ms)) {
             return .outOfBounds
         }
-        md.unsafelyUnwrapped.advanced(by: Execution.checkedByteOffset(address))
-            .bindMemory(to: UInt64.self, capacity: 1).pointee = freg.bitPattern.littleEndian
+        md.unsafelyUnwrapped.storeBytes(of: freg.bitPattern.littleEndian, toByteOffset: Execution.checkedByteOffset(address), as: UInt64.self)
         return nil
     }
 
@@ -557,6 +553,17 @@ extension Execution {
         return nil
     }
 
+    /// The committed byte size of the current memory, the one whose base address `md` holds.
+    func currentMemoryByteCount(sp: Sp, md: Md) -> Int? {
+        for memory in currentInstance(sp: sp).memories {
+            let (baseAddress, byteCount) = memory.withValue { ($0.baseAddress, $0.byteCount) }
+            if baseAddress == md {
+                return byteCount
+            }
+        }
+        return nil
+    }
+
     /// Atomic wait32 - wait for a value to change at an address
     mutating func atomicWait32(sp: Sp, md: Md, ms: Ms, waitOperand: Instruction.AtomicWaitOperand) throws {
         let i = sp[waitOperand.pointer].asAddressOffset()
@@ -671,7 +678,14 @@ extension Execution {
     mutating func atomicNotify(sp: Sp, md: Md, ms: Ms, notifyOperand: Instruction.AtomicNotifyOperand) throws {
         let i = sp[notifyOperand.pointer].asAddressOffset()
         let address = Execution.memoryAddress(offset: notifyOperand.offset, index: i)
-        if _fastPath(Execution.isInBounds(address: address, offset: notifyOperand.offset, length: 4, ms: ms)) {
+        // Like the other atomics, notify must be naturally aligned (4 bytes).
+        if address % 4 != 0 {
+            try throwUnalignedAtomicAccess()
+        }
+        // Notify reads no memory, so no guard page catches an address past the committed size,
+        // which `ms` can exceed for a memory reserved up front: check the size itself.
+        let byteCount = currentMemoryByteCount(sp: sp, md: md).map { Ms($0) } ?? ms
+        if _fastPath(Execution.isInBounds(address: address, offset: notifyOperand.offset, length: 4, ms: min(ms, byteCount))) {
             // A non-shared memory can have no waiters, so nothing is woken.
             guard let parkingLot = atomicParkingLot(sp: sp, md: md) else {
                 sp[notifyOperand.result] = .i32(0)

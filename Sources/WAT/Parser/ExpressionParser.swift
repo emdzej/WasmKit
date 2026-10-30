@@ -9,7 +9,10 @@ struct ExpressionParser<Visitor: InstructionVisitor> where Visitor.VisitorError 
         /// - Returns: The depth of the label of the given name in the stack.
         /// e.g. `(block $A (block $B (br $A)))`, then `["A"]` at `br $A` will return 1.
         subscript(name: String) -> Int? {
-            guard let found = stack.lastIndex(of: name) else { return nil }
+            // By code points, as identifiers compare; see `IdentifierKey`.
+            guard let found = stack.lastIndex(where: { $0?.utf8.elementsEqual(name.utf8) ?? false }) else {
+                return nil
+            }
             return stack.count - found - 1
         }
 
@@ -354,13 +357,17 @@ struct ExpressionParser<Visitor: InstructionVisitor> where Visitor.VisitorError 
                 // Condition may be absent
                 if try !parser.takeParenBlockStart("then") {
                     // Visit condition instructions
-                    while true {
-                        guard try foldedInstruction(visitor: &visitor, wat: &wat) else {
-                            break
-                        }
+                    var tookThen = false
+                    while try foldedInstruction(visitor: &visitor, wat: &wat) {
                         if try parser.takeParenBlockStart("then") {
+                            tookThen = true
                             break
                         }
+                    }
+                    // `(then ...)` is required. Without this check the `if`'s own `)` was
+                    // taken for the end of `then`, and the next sibling became the body.
+                    guard tookThen else {
+                        throw WatParserError("expected `(then ...)` in folded `if`", location: parser.lexer.location())
                     }
                 }
                 // Visit "if"
@@ -639,31 +646,29 @@ struct ExpressionParser<Visitor: InstructionVisitor> where Visitor.VisitorError 
 }
 
 extension ExpressionParser {
-    mutating func visitBlock(wat: inout Wat) throws(WatParserError) -> BlockType {
-        let label = try parser.takeId()
+    /// Opens a block-like instruction's label, numbering it for the name section in the order
+    /// blocks begin.
+    private mutating func pushLabel(_ label: Name?) {
         self.labelStack.push(label)
         if let label {
             collectedLabelNames.append((nextLabelIndex, label.value))
         }
         nextLabelIndex += 1
+    }
+
+    mutating func visitBlock(wat: inout Wat) throws(WatParserError) -> BlockType {
+        let label = try parser.takeId()
+        pushLabel(label)
         return try blockType(wat: &wat)
     }
     mutating func visitLoop(wat: inout Wat) throws(WatParserError) -> BlockType {
         let label = try parser.takeId()
-        self.labelStack.push(label)
-        if let label {
-            collectedLabelNames.append((nextLabelIndex, label.value))
-        }
-        nextLabelIndex += 1
+        pushLabel(label)
         return try blockType(wat: &wat)
     }
     mutating func visitIf(wat: inout Wat) throws(WatParserError) -> BlockType {
         let label = try parser.takeId()
-        self.labelStack.push(label)
-        if let label {
-            collectedLabelNames.append((nextLabelIndex, label.value))
-        }
-        nextLabelIndex += 1
+        pushLabel(label)
         return try blockType(wat: &wat)
     }
     mutating func visitBr(wat: inout Wat) throws(WatParserError) -> UInt32 {
@@ -728,7 +733,7 @@ extension ExpressionParser {
         // Push the try_table's label AFTER parsing catch clauses, since catch clause
         // labels are resolved from the enclosing scope (the try_table's own label
         // is only in scope for the body instructions).
-        self.labelStack.push(label)
+        pushLabel(label)
         return (bt, TryCatch(catches: catches))
     }
     mutating func visitBrOnNull(wat: inout Wat) throws(WatParserError) -> UInt32 {

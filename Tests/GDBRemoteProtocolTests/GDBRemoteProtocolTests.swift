@@ -69,6 +69,15 @@ struct GDBRemoteProtocolTests {
         #expect(try decoder.next() == nil)
     }
 
+    /// Bytes that frame a packet are escaped in a reply, so a `#` in a path does not end it.
+    @Test
+    func framingBytesInAReplyAreEscaped() {
+        let encoder = GDBTargetResponseEncoder(logger: .disabled)
+        let bytes = encoder.encode(data: GDBTargetResponse(kind: .string("a#b$c}d*e"), isNoAckModeActive: true))
+        let packet = String(decoding: bytes, as: UTF8.self)
+        #expect(packet.hasPrefix("+$a}\u{03}b}\u{04}c}]d}\ne#"))
+    }
+
     @Test
     func decodingWasmGlobal() throws {
         var decoder = self.decoder

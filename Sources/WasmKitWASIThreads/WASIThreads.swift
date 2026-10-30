@@ -210,7 +210,10 @@ public final class WASIThreads: @unchecked Sendable {
             return -1
         }
         guard let tid = reserveThread() else { return -1 }
-        guard let startup = Startup() else { return -1 }
+        guard let startup = Startup() else {
+            releaseThread()
+            return -1
+        }
         let result = PlatformThread.start(stackSize: configuration.nativeStackSize) { [self] in
             runWorker(tid: tid, argument: argument, startup: startup, fuel: fuel)
         }

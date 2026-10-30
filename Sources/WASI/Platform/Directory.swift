@@ -79,9 +79,12 @@ extension DirEntry: WASIDir, FdWASIEntry {
         atim: WASIAbi.Timestamp, mtim: WASIAbi.Timestamp,
         fstFlags: WASIAbi.FstFlags, symlinkFollow: Bool
     ) throws {
+        // `futimens` needs ownership, not write access: opening for writing would fail on
+        // directories (EISDIR) and on read-only files the guest may still retime. With no
+        // access mode, `openFile` opens read-only.
         let fd = try openFile(
             symlinkFollow: symlinkFollow, path: path,
-            oflags: [], accessMode: .write, fdflags: []
+            oflags: [], accessMode: [], fdflags: []
         )
         try withThrowing {
             let (access, modification) = try WASIAbi.Timestamp.platformTimeSpec(

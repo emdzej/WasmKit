@@ -8,6 +8,15 @@ extension Execution {
         try throwOutOfBoundsMemoryAccess()
     }
 
+    /// The address of an access, trapping when `index + offset` overflows: a 64-bit memory's
+    /// index is arbitrary, and the wrapped sum could pass the bounds check at a low address.
+    @inline(__always)
+    private func effectiveAddress(_ index: UInt64, offset: UInt64) throws -> UInt64 {
+        let (address, overflow) = index.addingReportingOverflow(offset)
+        if _fastPath(!overflow) { return address }
+        try throwOutOfBoundsMemoryAccess()
+    }
+
     @inline(__always)
     private func loadU8(md: Md, address: UInt64) -> UInt8 {
         md.unsafelyUnwrapped.load(fromByteOffset: Int(address), as: UInt8.self)
@@ -46,7 +55,7 @@ extension Execution {
 
         switch opcode {
         case .v128Load:
-            let addr = sp[immediate.input0].asAddressOffset() &+ immediate.offset
+            let addr = try effectiveAddress(sp[immediate.input0].asAddressOffset(), offset: immediate.offset)
             try boundsCheck(addr, length: 16, ms: ms)
             let lo = loadU64(md: md, address: addr)
             let hi = loadU64(md: md, address: addr &+ 8)
@@ -54,15 +63,15 @@ extension Execution {
             return true
 
         case .v128Store:
-            let addr = sp[immediate.input0].asAddressOffset() &+ immediate.offset
+            let addr = try effectiveAddress(sp[immediate.input0].asAddressOffset(), offset: immediate.offset)
             try boundsCheck(addr, length: 16, ms: ms)
             let v = sp.loadV128(at: immediate.input1)
-            md.unsafelyUnwrapped.advanced(by: Int(addr)).bindMemory(to: UInt64.self, capacity: 1).pointee = v.lo.littleEndian
-            md.unsafelyUnwrapped.advanced(by: Int(addr &+ 8)).bindMemory(to: UInt64.self, capacity: 1).pointee = v.hi.littleEndian
+            md.unsafelyUnwrapped.storeBytes(of: v.lo.littleEndian, toByteOffset: Int(addr), as: UInt64.self)
+            md.unsafelyUnwrapped.storeBytes(of: v.hi.littleEndian, toByteOffset: Int(addr &+ 8), as: UInt64.self)
             return true
 
         case .v128Load8X8S, .v128Load8X8U:
-            let addr = sp[immediate.input0].asAddressOffset() &+ immediate.offset
+            let addr = try effectiveAddress(sp[immediate.input0].asAddressOffset(), offset: immediate.offset)
             try boundsCheck(addr, length: 8, ms: ms)
             var lanes: [UInt64] = []
             lanes.reserveCapacity(8)
@@ -79,7 +88,7 @@ extension Execution {
             return true
 
         case .v128Load16X4S, .v128Load16X4U:
-            let addr = sp[immediate.input0].asAddressOffset() &+ immediate.offset
+            let addr = try effectiveAddress(sp[immediate.input0].asAddressOffset(), offset: immediate.offset)
             try boundsCheck(addr, length: 8, ms: ms)
             var lanes: [UInt64] = []
             lanes.reserveCapacity(4)
@@ -96,7 +105,7 @@ extension Execution {
             return true
 
         case .v128Load32X2S, .v128Load32X2U:
-            let addr = sp[immediate.input0].asAddressOffset() &+ immediate.offset
+            let addr = try effectiveAddress(sp[immediate.input0].asAddressOffset(), offset: immediate.offset)
             try boundsCheck(addr, length: 8, ms: ms)
             var lanes: [UInt64] = []
             lanes.reserveCapacity(2)
@@ -113,7 +122,7 @@ extension Execution {
             return true
 
         case .v128Load8Splat:
-            let addr = sp[immediate.input0].asAddressOffset() &+ immediate.offset
+            let addr = try effectiveAddress(sp[immediate.input0].asAddressOffset(), offset: immediate.offset)
             try boundsCheck(addr, length: 1, ms: ms)
             let b = loadU8(md: md, address: addr)
             let v = V128Lanes.pack([UInt64](repeating: UInt64(b), count: 16), widthBits: 8, laneCount: 16)
@@ -121,7 +130,7 @@ extension Execution {
             return true
 
         case .v128Load16Splat:
-            let addr = sp[immediate.input0].asAddressOffset() &+ immediate.offset
+            let addr = try effectiveAddress(sp[immediate.input0].asAddressOffset(), offset: immediate.offset)
             try boundsCheck(addr, length: 2, ms: ms)
             let w = loadU16(md: md, address: addr)
             let v = V128Lanes.pack([UInt64](repeating: UInt64(w), count: 8), widthBits: 16, laneCount: 8)
@@ -129,7 +138,7 @@ extension Execution {
             return true
 
         case .v128Load32Splat:
-            let addr = sp[immediate.input0].asAddressOffset() &+ immediate.offset
+            let addr = try effectiveAddress(sp[immediate.input0].asAddressOffset(), offset: immediate.offset)
             try boundsCheck(addr, length: 4, ms: ms)
             let d = loadU32(md: md, address: addr)
             let v = V128Lanes.pack([UInt64](repeating: UInt64(d), count: 4), widthBits: 32, laneCount: 4)
@@ -137,14 +146,14 @@ extension Execution {
             return true
 
         case .v128Load64Splat:
-            let addr = sp[immediate.input0].asAddressOffset() &+ immediate.offset
+            let addr = try effectiveAddress(sp[immediate.input0].asAddressOffset(), offset: immediate.offset)
             try boundsCheck(addr, length: 8, ms: ms)
             let q = loadU64(md: md, address: addr)
             sp.storeV128(V128Storage(lo: q, hi: q), at: immediate.result)
             return true
 
         case .v128Load32Zero:
-            let addr = sp[immediate.input0].asAddressOffset() &+ immediate.offset
+            let addr = try effectiveAddress(sp[immediate.input0].asAddressOffset(), offset: immediate.offset)
             try boundsCheck(addr, length: 4, ms: ms)
             let d = loadU32(md: md, address: addr)
             var lanes = [UInt64](repeating: 0, count: 4)
@@ -153,14 +162,14 @@ extension Execution {
             return true
 
         case .v128Load64Zero:
-            let addr = sp[immediate.input0].asAddressOffset() &+ immediate.offset
+            let addr = try effectiveAddress(sp[immediate.input0].asAddressOffset(), offset: immediate.offset)
             try boundsCheck(addr, length: 8, ms: ms)
             let q = loadU64(md: md, address: addr)
             sp.storeV128(V128Storage(lo: q, hi: 0), at: immediate.result)
             return true
 
         case .v128Load8Lane, .v128Load16Lane, .v128Load32Lane, .v128Load64Lane:
-            let addr = sp[immediate.input0].asAddressOffset() &+ immediate.offset
+            let addr = try effectiveAddress(sp[immediate.input0].asAddressOffset(), offset: immediate.offset)
             var vec = sp.loadV128(at: immediate.input1)
             let lane = Int(immediate.lane)
             switch opcode {
@@ -191,7 +200,7 @@ extension Execution {
             return true
 
         case .v128Store8Lane, .v128Store16Lane, .v128Store32Lane, .v128Store64Lane:
-            let addr = sp[immediate.input0].asAddressOffset() &+ immediate.offset
+            let addr = try effectiveAddress(sp[immediate.input0].asAddressOffset(), offset: immediate.offset)
             let vec = sp.loadV128(at: immediate.input1)
             let lane = Int(immediate.lane)
             switch opcode {
@@ -203,17 +212,17 @@ extension Execution {
                 try boundsCheck(addr, length: 2, ms: ms)
                 let lanes = V128Lanes.extract(vec, widthBits: 16, laneCount: 8)
                 let v = UInt16(truncatingIfNeeded: lanes[lane]).littleEndian
-                md.unsafelyUnwrapped.advanced(by: Int(addr)).bindMemory(to: UInt16.self, capacity: 1).pointee = v
+                md.unsafelyUnwrapped.storeBytes(of: v, toByteOffset: Int(addr), as: UInt16.self)
             case .v128Store32Lane:
                 try boundsCheck(addr, length: 4, ms: ms)
                 let lanes = V128Lanes.extract(vec, widthBits: 32, laneCount: 4)
                 let v = UInt32(truncatingIfNeeded: lanes[lane]).littleEndian
-                md.unsafelyUnwrapped.advanced(by: Int(addr)).bindMemory(to: UInt32.self, capacity: 1).pointee = v
+                md.unsafelyUnwrapped.storeBytes(of: v, toByteOffset: Int(addr), as: UInt32.self)
             case .v128Store64Lane:
                 try boundsCheck(addr, length: 8, ms: ms)
                 let lanes = V128Lanes.extract(vec, widthBits: 64, laneCount: 2)
                 let v = lanes[lane].littleEndian
-                md.unsafelyUnwrapped.advanced(by: Int(addr)).bindMemory(to: UInt64.self, capacity: 1).pointee = v
+                md.unsafelyUnwrapped.storeBytes(of: v, toByteOffset: Int(addr), as: UInt64.self)
             default:
                 break
             }

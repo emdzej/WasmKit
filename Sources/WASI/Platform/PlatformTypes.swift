@@ -116,6 +116,7 @@ extension WASIAbi.Errno {
         case let failure as CleanupFailure: return reportable(for: failure.underlying)
         // A guest pointer outside its memory is the guest's mistake, not the host's.
         case is GuestMemoryError: return .EFAULT
+        case is UnmappedPlatformError: return .EIO
         default: return nil
         }
     }

@@ -36,7 +36,9 @@ extension Execution {
             try reserveElementsCopied(growthSize, sp: sp, pc: pc, for: Instruction.TableGrowOperand.self)
         }
         guard try table.withValue({ try $0.grow(by: growthSize, value: growthValue, resourceLimiter: store.value.resourceLimiter) }) else {
-            sp[immediate.result] = UntypedValue(.i32(Int32(-1).unsigned))
+            // -1 in the table's address type: as an i32 it would read back as 0xFFFFFFFF from an
+            // i64-indexed table.
+            sp[immediate.result] = UntypedValue(table.limits.isMemory64 ? .i64(.max) : .i32(.max))
             return
         }
         try chargeElementsCopied(growthSize)
