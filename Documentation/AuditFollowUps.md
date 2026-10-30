@@ -11,22 +11,9 @@ suites come from `./Vendor/checkout-dependency <name>` (`testsuite`, `wasi-tests
 `wasi-threads`, and `--category component-model`). The encoder comparison needs `wast2json` from
 wabt 1.0.42.
 
-## Security
-
-### 1. WASI descriptor used after another thread closes it
-
-- **Where:** `Sources/WASI/WASI.swift`. Most functions run `fdTable.withLock { $0[fd] }`, then do
-  I/O outside the lock. Also `Sources/WASI/Poll.swift` and `WASIImplementation.close`.
-- **Problem:** with wasi-threads, thread B can `fd_close` or `fd_renumber` while thread A is in
-  `fd_write`. The host can reuse the fd number, even for one of the embedder's own files, and A
-  then writes to an unrelated host file.
-- **Fix:** make table entries reference-counted, so the host fd closes on the last release, or
-  drain in-flight users before closing.
-- **Test:** add a concurrent test in the style of `Tests/WASITests/WASIMemoryFileSystemConcurrencyTests.swift`.
-
 ## Correctness
 
-### 2. Component Model resources are unsupported
+### 1. Component Model resources are unsupported
 
 - **Where:** `Sources/WasmParser/ComponentParser.swift` (rejects `own`/`borrow`) and the
   `.unsupportedCoreFunction` placeholders in
@@ -35,14 +22,14 @@ wabt 1.0.42.
   `Lift+Lower.swift`, and `resource.new`/`drop`/`rep` with destructors.
 - **Tests:** `Vendor/component-model/test/{wasmtime,wasm-tools}/resources.wast`.
 
-### 3. Component import function types are not checked
+### 2. Component import function types are not checked
 
 - **Where:** `ComponentLoader.validateImports`.
 - **Problem:** only the kind of import is compared, not the function signature.
 - **Fix:** check the provided component function type against the declared one, using
   component-type subtyping.
 
-### 4. Runtime export names compare by Unicode equivalence
+### 3. Runtime export names compare by Unicode equivalence
 
 - **Where:** `InstanceEntity.exports` (`[String: InternalExternalValue]`) and the public export
   lookups.
@@ -51,7 +38,7 @@ wabt 1.0.42.
 - **Fix:** the WAT parser already keys names by code points (`IdentifierKey` in
   `Sources/WAT/NameMapping.swift`). Do the same in the runtime, then re-enable `names.wast`.
 
-### 5. WIT overlay generator misses some Swift keywords
+### 4. WIT overlay generator misses some Swift keywords
 
 - **Where:** `Sources/WITOverlayGenerator`. `SwiftName.makeName` is used for most names, but not
   for:
@@ -64,7 +51,7 @@ wabt 1.0.42.
 - **Fix:** escape after case conversion everywhere. Test by type-checking the generated Swift.
 - **Also:** WIT names are not validated as kebab-case, so `%--` yields an empty Swift identifier.
 
-### 6. GC type canonicalization ignores recursion groups
+### 5. GC type canonicalization ignores recursion groups
 
 - **Where:** `Sources/WasmKit/TypeCanonicalization.swift` and `TypeMatching.swift`.
 - **Problem:** finality and supertypes are ignored too. Types in `(rec (type $a (func)) (type $b (func)))`
@@ -72,7 +59,7 @@ wabt 1.0.42.
 - **Fix:** implement iso-recursive canonicalization, or reject non-trivial rec groups and `sub`
   declarations until GC execution exists. Mind the tests in `Tests/WasmKitTests/ExtraSuite/gc`.
 
-### 7. Smaller items
+### 6. Smaller items
 
 - **Shared memory growth:** `SharedMemoryStorage.grow` turns a resource-limiter error into `-1`,
   and calls the limiter while holding `growLock`. The other memory backends propagate the error.
@@ -92,7 +79,7 @@ wabt 1.0.42.
 
 ## Performance
 
-### 8. SIMD still dispatches through one handler
+### 7. SIMD still dispatches through one handler
 
 - **Where:** `Sources/WasmKit/Execution/Instructions/SIMDCore.swift`.
 - **Problem:** every SIMD instruction decodes `SIMDOpcode` and switches on it, then switches again
@@ -100,7 +87,7 @@ wabt 1.0.42.
 - **Fix:** generate one instruction per operation in `Utilities/Sources/VMGen.swift` and
   `VMSpec`, working on `SIMD16<UInt8>`, `SIMD4<Float>` and so on via `V128Storage`.
 
-### 9. WASI I/O
+### 8. WASI I/O
 
 - **Vectored I/O:** `Sources/WASI/Platform/File.swift` makes one syscall per buffer. Use
   `readv`/`writev`/`preadv`/`pwritev` behind `GuestBuffers.transfer`, keeping its semantics:
@@ -111,7 +98,7 @@ wabt 1.0.42.
 - **Opening under the lock:** `path_open` holds the global `fdTable` lock while opening, so
   opening a FIFO blocks every other guest thread. Open outside the lock and reserve the slot first.
 
-### 10. Component calls allocate a stack each
+### 9. Component calls allocate a stack each
 
 - **Where:** `ComponentFunction.invoke` in `ComponentInstance.swift` allocates a 512 KiB
   `ExecutionStack` per call. (`realloc` inside one call already reuses one.)

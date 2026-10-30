@@ -862,16 +862,43 @@ final class WASIImplementation: Sendable {
         try fdTable.withLock { try $0.closeAll() }
     }
 
-    /// Look up a directory entry by WASI fd, throwing EBADF if the fd doesn't
-    /// exist or ENOTDIR if it exists but isn't a directory.
-    private func directoryEntry(fd: WASIAbi.Fd) throws -> any WASIDir {
-        guard let entry = fdTable.withLock({ $0[fd] }) else {
+    /// Runs `body` with the entry at `fd`, throwing EBADF if there is none.
+    ///
+    /// The entry's resource stays open until `body` returns, even if another
+    /// guest thread closes or renumbers `fd` meanwhile; see ``FdSlot``.
+    private func withEntry<R>(_ fd: WASIAbi.Fd, _ body: (FdEntry) throws -> R) throws -> R {
+        guard let slot = fdTable.withLock({ $0.acquire(fd) }) else {
             throw WASIAbi.Errno.EBADF
         }
-        guard case .directory(let dirEntry) = entry else {
-            throw WASIAbi.Errno.ENOTDIR
+        defer {
+            // The guest already got `fd_close`'s result, and this call reports
+            // its own, so a failure closing the resource has nowhere to go.
+            if let toClose = fdTable.withLock({ $0.release(slot) }) {
+                try? toClose.asEntry().close()
+            }
         }
-        return dirEntry
+        return try body(slot.entry)
+    }
+
+    /// Runs `body` with the file at `fd`, throwing EBADF if there is none.
+    private func withFile<R>(_ fd: WASIAbi.Fd, _ body: (any WASIFile) throws -> R) throws -> R {
+        try withEntry(fd) { entry in
+            guard case .file(let fileEntry) = entry else {
+                throw WASIAbi.Errno.EBADF
+            }
+            return try body(fileEntry)
+        }
+    }
+
+    /// Runs `body` with the directory at `fd`, throwing EBADF if the fd doesn't
+    /// exist or ENOTDIR if it exists but isn't a directory.
+    private func withDirectory<R>(_ fd: WASIAbi.Fd, _ body: (any WASIDir) throws -> R) throws -> R {
+        try withEntry(fd) { entry in
+            guard case .directory(let dirEntry) = entry else {
+                throw WASIAbi.Errno.ENOTDIR
+            }
+            return try body(dirEntry)
+        }
     }
 
     /// Reads command-line argument data.
@@ -965,13 +992,9 @@ final class WASIImplementation: Sendable {
 
     /// Provide file advisory information on a file descriptor.
     func fd_advise(fd: WASIAbi.Fd, offset: WASIAbi.FileSize, length: WASIAbi.FileSize, advice: WASIAbi.Advice) throws {
-        let fileEntry = try fdTable.withLock { table -> any WASIFile in
-            guard case .file(let fileEntry) = table[fd] else {
-                throw WASIAbi.Errno.EBADF
-            }
-            return fileEntry
+        try withFile(fd) { fileEntry in
+            try fileEntry.advise(offset: offset, length: length, advice: advice)
         }
-        try fileEntry.advise(offset: offset, length: length, advice: advice)
     }
 
     /// Force the allocation of space in a file.
@@ -988,60 +1011,43 @@ final class WASIImplementation: Sendable {
 
     /// Close a file descriptor.
     func fd_close(fd: WASIAbi.Fd) throws {
-        let entry = try fdTable.withLock { table -> FdEntry in
-            guard let entry = table[fd] else {
-                throw WASIAbi.Errno.EBADF
-            }
-            table[fd] = nil
-            return entry
-        }
-        // A borrowed entry (e.g. process stdio) wraps a resource the embedder
-        // owns and outlives the guest: the descriptor leaves the guest's table,
-        // but the resource behind it stays open.
-        let closingEntry = entry.asEntry()
-        guard !closingEntry.isBorrowed else { return }
-        try closingEntry.close()
+        // A borrowed entry (e.g. process stdio) leaves the guest's table, but
+        // the resource behind it stays open. An entry still in use by another
+        // thread is closed by that thread once its call returns.
+        let toClose = try fdTable.withLock { table throws(WASIAbi.Errno) in try table.remove(fd) }
+        try toClose?.asEntry().close()
     }
 
     /// Synchronize the data of a file to disk.
     func fd_datasync(fd: WASIAbi.Fd) throws {
-        let fileEntry = try fdTable.withLock { table -> any WASIFile in
-            guard case .file(let fileEntry) = table[fd] else {
-                throw WASIAbi.Errno.EBADF
-            }
-            return fileEntry
+        try withFile(fd) { fileEntry in
+            try fileEntry.datasync()
         }
-        try fileEntry.datasync()
     }
 
     /// Get the attributes of a file descriptor.
     /// - Parameter fileDescriptor: File descriptor to get attribute.
     func fd_fdstat_get(fileDescriptor: UInt32) throws -> WASIAbi.FdStat {
-        let entry = fdTable.withLock { table in table[fileDescriptor] }
-        switch entry {
-        case .file(let entry):
-            return try entry.fdStat()
-        case .directory:
-            return WASIAbi.FdStat(
-                fsFileType: .DIRECTORY,
-                fsFlags: [],
-                fsRightsBase: .DIRECTORY_BASE_RIGHTS,
-                fsRightsInheriting: .DIRECTORY_INHERITING_RIGHTS
-            )
-        case .none:
-            throw WASIAbi.Errno.EBADF
+        try withEntry(fileDescriptor) { entry in
+            switch entry {
+            case .file(let entry):
+                return try entry.fdStat()
+            case .directory:
+                return WASIAbi.FdStat(
+                    fsFileType: .DIRECTORY,
+                    fsFlags: [],
+                    fsRightsBase: .DIRECTORY_BASE_RIGHTS,
+                    fsRightsInheriting: .DIRECTORY_INHERITING_RIGHTS
+                )
+            }
         }
     }
 
     /// Adjust the flags associated with a file descriptor.
     func fd_fdstat_set_flags(fd: WASIAbi.Fd, flags: WASIAbi.Fdflags) throws {
-        let fileEntry = try fdTable.withLock { table -> any WASIFile in
-            guard case .file(let fileEntry) = table[fd] else {
-                throw WASIAbi.Errno.EBADF
-            }
-            return fileEntry
+        try withFile(fd) { fileEntry in
+            try fileEntry.setFdStatFlags(flags)
         }
-        try fileEntry.setFdStatFlags(flags)
     }
 
     /// Adjust the rights associated with a file descriptor.
@@ -1055,24 +1061,16 @@ final class WASIImplementation: Sendable {
 
     /// Return the attributes of an open file.
     func fd_filestat_get(fd: WASIAbi.Fd) throws -> WASIAbi.Filestat {
-        let entry = try fdTable.withLock { table -> FdEntry in
-            guard let entry = table[fd] else {
-                throw WASIAbi.Errno.EBADF
-            }
-            return entry
+        return try withEntry(fd) { entry in
+            try entry.asEntry().attributes()
         }
-        return try entry.asEntry().attributes()
     }
 
     /// Adjust the size of an open file. If this increases the file's size, the extra bytes are filled with zeros.
     func fd_filestat_set_size(fd: WASIAbi.Fd, size: WASIAbi.FileSize) throws {
-        let entry = try fdTable.withLock { table -> any WASIFile in
-            guard case .file(let entry) = table[fd] else {
-                throw WASIAbi.Errno.EBADF
-            }
-            return entry
+        try withFile(fd) { entry in
+            try entry.setFilestatSize(size)
         }
-        try entry.setFilestatSize(size)
     }
 
     /// Adjust the timestamps of an open file or directory.
@@ -1080,13 +1078,9 @@ final class WASIImplementation: Sendable {
         fd: WASIAbi.Fd, atim: WASIAbi.Timestamp, mtim: WASIAbi.Timestamp,
         fstFlags: WASIAbi.FstFlags
     ) throws {
-        let entry = try fdTable.withLock { table -> FdEntry in
-            guard let entry = table[fd] else {
-                throw WASIAbi.Errno.EBADF
-            }
-            return entry
+        try withEntry(fd) { entry in
+            try entry.asEntry().setTimes(atim: atim, mtim: mtim, fstFlags: fstFlags)
         }
-        try entry.asEntry().setTimes(atim: atim, mtim: mtim, fstFlags: fstFlags)
     }
 
     /// Read from a file descriptor, without using and updating the file descriptor's offset.
@@ -1095,13 +1089,9 @@ final class WASIImplementation: Sendable {
         offset: WASIAbi.FileSize,
         memory: M
     ) throws -> WASIAbi.Size {
-        let fileEntry = try fdTable.withLock { table -> any WASIFile in
-            guard case .file(let fileEntry) = table[fd] else {
-                throw WASIAbi.Errno.EBADF
-            }
-            return fileEntry
+        return try withFile(fd) { fileEntry in
+            try fileEntry.pread(into: GuestBuffers(iovs: iovs, memory: memory), offset: offset)
         }
-        return try fileEntry.pread(into: GuestBuffers(iovs: iovs, memory: memory), offset: offset)
     }
 
     /// Return a description of the given preopened file descriptor.
@@ -1146,13 +1136,9 @@ final class WASIImplementation: Sendable {
         offset: WASIAbi.FileSize,
         memory: M
     ) throws -> WASIAbi.Size {
-        let fileEntry = try fdTable.withLock { table -> any WASIFile in
-            guard case .file(let fileEntry) = table[fd] else {
-                throw WASIAbi.Errno.EBADF
-            }
-            return fileEntry
+        return try withFile(fd) { fileEntry in
+            try fileEntry.pwrite(vectored: GuestBuffers(iovs: iovs, memory: memory), offset: offset)
         }
-        return try fileEntry.pwrite(vectored: GuestBuffers(iovs: iovs, memory: memory), offset: offset)
     }
 
     /// Read from a file descriptor.
@@ -1161,13 +1147,9 @@ final class WASIImplementation: Sendable {
         iovs: UnsafeGuestBufferPointer<WASIAbi.IOVec>,
         memory: M
     ) throws -> WASIAbi.Size {
-        let fileEntry = try fdTable.withLock { table -> any WASIFile in
-            guard case .file(let fileEntry) = table[fd] else {
-                throw WASIAbi.Errno.EBADF
-            }
-            return fileEntry
+        return try withFile(fd) { fileEntry in
+            try fileEntry.read(into: GuestBuffers(iovs: iovs, memory: memory))
         }
-        return try fileEntry.read(into: GuestBuffers(iovs: iovs, memory: memory))
     }
 
     /// Read directory entries from a directory.
@@ -1224,68 +1206,40 @@ final class WASIImplementation: Sendable {
             return bufferUsed
         }
 
-        let dirEntry = try fdTable.withLock { table -> any WASIDir in
-            guard case .directory(let dirEntry) = table[fd] else {
+        return try withEntry(fd) { entry in
+            guard case .directory(let dirEntry) = entry else {
                 throw WASIAbi.Errno.EBADF
             }
-            return dirEntry
+            return try readDirectoryEntries(from: dirEntry)
         }
-        return try readDirectoryEntries(from: dirEntry)
     }
 
     /// Atomically replace a file descriptor by renumbering another file descriptor.
     func fd_renumber(fd: WASIAbi.Fd, to toFd: WASIAbi.Fd) throws {
-        let toClose = try fdTable.withLock { table -> FdEntry? in
-            guard let entry = table[fd] else {
-                throw WASIAbi.Errno.EBADF
-            }
-            guard let toEntry = table[toFd] else {
-                throw WASIAbi.Errno.EBADF
-            }
-            // Renumbering a descriptor onto itself leaves it in place; clearing
-            // the source would otherwise destroy the entry it just installed.
-            guard fd != toFd else { return nil }
-            table[toFd] = entry
-            table[fd] = nil
-            return toEntry
-        }
-        // The displaced entry may be borrowed, in which case it is dropped from
-        // the table but its resource is left open, as in `fd_close`.
-        guard let closingEntry = toClose?.asEntry(), !closingEntry.isBorrowed else { return }
-        try closingEntry.close()
+        // The displaced entry is closed as in `fd_close`.
+        let toClose = try fdTable.withLock { table throws(WASIAbi.Errno) in try table.renumber(fd, to: toFd) }
+        try toClose?.asEntry().close()
     }
 
     /// Move the offset of a file descriptor.
     func fd_seek(fd: WASIAbi.Fd, offset: WASIAbi.FileDelta, whence: WASIAbi.Whence) throws -> WASIAbi.FileSize {
-        let fileEntry = try fdTable.withLock { table -> any WASIFile in
-            guard case .file(let fileEntry) = table[fd] else {
-                throw WASIAbi.Errno.EBADF
-            }
-            return fileEntry
+        return try withFile(fd) { fileEntry in
+            try fileEntry.seek(offset: offset, whence: whence)
         }
-        return try fileEntry.seek(offset: offset, whence: whence)
     }
 
     /// Synchronize the data and metadata of a file to disk.
     func fd_sync(fd: WASIAbi.Fd) throws {
-        let fileEntry = try fdTable.withLock { table -> any WASIFile in
-            guard case .file(let fileEntry) = table[fd] else {
-                throw WASIAbi.Errno.EBADF
-            }
-            return fileEntry
+        try withFile(fd) { fileEntry in
+            try fileEntry.sync()
         }
-        try fileEntry.sync()
     }
 
     /// Return the current offset of a file descriptor.
     func fd_tell(fd: WASIAbi.Fd) throws -> WASIAbi.FileSize {
-        let fileEntry = try fdTable.withLock { table -> any WASIFile in
-            guard case .file(let fileEntry) = table[fd] else {
-                throw WASIAbi.Errno.EBADF
-            }
-            return fileEntry
+        return try withFile(fd) { fileEntry in
+            try fileEntry.tell()
         }
-        return try fileEntry.tell()
     }
 
     /// POSIX `writev` equivalent.
@@ -1298,29 +1252,27 @@ final class WASIImplementation: Sendable {
         ioVectors: UnsafeGuestBufferPointer<WASIAbi.IOVec>,
         memory: M
     ) throws -> UInt32 {
-        let entry = try fdTable.withLock { table -> any WASIFile in
-            guard case .file(let entry) = table[fileDescriptor] else {
-                throw WASIAbi.Errno.EBADF
-            }
-            return entry
+        return try withFile(fileDescriptor) { entry in
+            try entry.write(vectored: GuestBuffers(iovs: ioVectors, memory: memory))
         }
-        return try entry.write(vectored: GuestBuffers(iovs: ioVectors, memory: memory))
     }
 
     /// Create a directory.
     func path_create_directory(dirFd: WASIAbi.Fd, path: String) throws {
-        let dirEntry = try directoryEntry(fd: dirFd)
-        try dirEntry.createDirectory(atPath: path)
+        try withDirectory(dirFd) { dirEntry in
+            try dirEntry.createDirectory(atPath: path)
+        }
     }
 
     /// Return the attributes of a file or directory.
     func path_filestat_get(
         dirFd: WASIAbi.Fd, flags: WASIAbi.LookupFlags, path: String
     ) throws -> WASIAbi.Filestat {
-        let dirEntry = try directoryEntry(fd: dirFd)
-        return try dirEntry.attributes(
-            path: path, symlinkFollow: flags.contains(.SYMLINK_FOLLOW)
-        )
+        return try withDirectory(dirFd) { dirEntry in
+            try dirEntry.attributes(
+                path: path, symlinkFollow: flags.contains(.SYMLINK_FOLLOW)
+            )
+        }
     }
 
     /// Adjust the timestamps of a file or directory.
@@ -1329,12 +1281,13 @@ final class WASIImplementation: Sendable {
         path: String, atim: WASIAbi.Timestamp, mtim: WASIAbi.Timestamp,
         fstFlags: WASIAbi.FstFlags
     ) throws {
-        let dirEntry = try directoryEntry(fd: dirFd)
-        try dirEntry.setFilestatTimes(
-            path: path, atim: atim, mtim: mtim,
-            fstFlags: fstFlags,
-            symlinkFollow: flags.contains(.SYMLINK_FOLLOW)
-        )
+        try withDirectory(dirFd) { dirEntry in
+            try dirEntry.setFilestatTimes(
+                path: path, atim: atim, mtim: mtim,
+                fstFlags: fstFlags,
+                symlinkFollow: flags.contains(.SYMLINK_FOLLOW)
+            )
+        }
     }
 
     /// Create a hard link.
@@ -1382,9 +1335,9 @@ final class WASIImplementation: Sendable {
 
     /// Read the contents of a symbolic link.
     func path_readlink<M: GuestMemory>(fd: WASIAbi.Fd, path: String, buffer: UnsafeGuestBufferPointer<UInt8>, memory: M) throws -> WASIAbi.Size {
-        let dirEntry = try directoryEntry(fd: fd)
-
-        let linkBytes = try dirEntry.readlink(atPath: path)
+        let linkBytes = try withDirectory(fd) { dirEntry in
+            try dirEntry.readlink(atPath: path)
+        }
         let bytesWritten = min(Int(buffer.count), linkBytes.count)
         if bytesWritten > 0 {
             // Map the prefix the link fills, not the whole buffer the guest
@@ -1401,8 +1354,9 @@ final class WASIImplementation: Sendable {
 
     /// Remove a directory.
     func path_remove_directory(dirFd: WASIAbi.Fd, path: String) throws {
-        let dirEntry = try directoryEntry(fd: dirFd)
-        try dirEntry.removeDirectory(atPath: path)
+        try withDirectory(dirFd) { dirEntry in
+            try dirEntry.removeDirectory(atPath: path)
+        }
     }
 
     /// Rename a file or directory.
@@ -1410,21 +1364,25 @@ final class WASIImplementation: Sendable {
         oldFd: WASIAbi.Fd, oldPath: String,
         newFd: WASIAbi.Fd, newPath: String
     ) throws {
-        let oldDirEntry = try directoryEntry(fd: oldFd)
-        let newDirEntry = try directoryEntry(fd: newFd)
-        try oldDirEntry.rename(from: oldPath, toDir: newDirEntry, to: newPath)
+        try withDirectory(oldFd) { oldDirEntry in
+            try withDirectory(newFd) { newDirEntry in
+                try oldDirEntry.rename(from: oldPath, toDir: newDirEntry, to: newPath)
+            }
+        }
     }
 
     /// Create a symbolic link.
     func path_symlink(oldPath: String, dirFd: WASIAbi.Fd, newPath: String) throws {
-        let dirEntry = try directoryEntry(fd: dirFd)
-        try dirEntry.symlink(from: oldPath, to: newPath)
+        try withDirectory(dirFd) { dirEntry in
+            try dirEntry.symlink(from: oldPath, to: newPath)
+        }
     }
 
     /// Unlink a file.
     func path_unlink_file(dirFd: WASIAbi.Fd, path: String) throws {
-        let dirEntry = try directoryEntry(fd: dirFd)
-        try dirEntry.removeFile(atPath: path)
+        try withDirectory(dirFd) { dirEntry in
+            try dirEntry.removeFile(atPath: path)
+        }
     }
 
     /// Concurrently poll for the occurrence of a set of events.
@@ -1435,7 +1393,22 @@ final class WASIImplementation: Sendable {
     ) throws -> WASIAbi.Size {
         guard !subscriptions.isEmpty else { throw WASIAbi.Errno.EINVAL }
         let materializedSubscriptions = try (0..<subscriptions.count).map { try subscriptions.read(at: $0, in: memory) }
-        let table = fdTable.withLock { $0 }
+        // Hold every polled descriptor for the wait, as `withEntry` does. An
+        // fd missing here is left for `poll` to reject, after the
+        // subscriptions before it have been validated.
+        let (table, slots) = fdTable.withLock { table in
+            let slots = materializedSubscriptions.compactMap { subscription -> FdSlot? in
+                switch subscription.union {
+                case .fdRead(let fd), .fdWrite(let fd): return table.acquire(fd)
+                case .clock, .unknown: return nil
+                }
+            }
+            return (table, slots)
+        }
+        defer {
+            let toClose = fdTable.withLock { table in slots.compactMap { table.release($0) } }
+            for entry in toClose { try? entry.asEntry().close() }
+        }
         return try poll(subscriptions: materializedSubscriptions, events: events, table, memory: memory, now: { try self.clock_time_get(id: $0, precision: 0) })
     }
 

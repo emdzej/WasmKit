@@ -148,9 +148,32 @@ extension WASIEntry {
     }
 }
 
+/// A file descriptor table slot: an entry and the WASI calls still using it.
+///
+/// A call holds its slot from lookup until its I/O returns, so a concurrent
+/// `fd_close` or `fd_renumber` from another guest thread cannot close the
+/// resource underneath it. Closing a host descriptor mid-call would let the
+/// host reuse its number, and the in-flight call would then act on whatever
+/// the host opened next. Instead, removal from the table only retires the
+/// slot, and the resource is closed when its last user releases it.
+final class FdSlot: Sendable {
+    let entry: FdEntry
+    // Guarded by the `FdTable` lock; see `WASIImplementation.fdTable` for why
+    // this is `nonisolated(unsafe)`.
+    nonisolated(unsafe) fileprivate var users = 0
+    nonisolated(unsafe) fileprivate var isRetired = false
+
+    fileprivate init(_ entry: FdEntry) {
+        self.entry = entry
+    }
+}
+
 /// A table that maps file descriptor to actual resource in host environment
+///
+/// Every method must be called with the table's lock held, including those
+/// that only touch an ``FdSlot``.
 struct FdTable {
-    private var map: [WASIAbi.Fd: FdEntry]
+    private var map: [WASIAbi.Fd: FdSlot]
     private var nextFd: WASIAbi.Fd
 
     init() {
@@ -161,8 +184,8 @@ struct FdTable {
 
     /// Inserts a resource as the given file descriptor
     subscript(_ fd: WASIAbi.Fd) -> FdEntry? {
-        get { self.map[fd] }
-        set { self.map[fd] = newValue }
+        get { self.map[fd]?.entry }
+        set { self.map[fd] = newValue.map(FdSlot.init) }
     }
 
     /// Whether another descriptor can be installed, i.e. the table is below capacity.
@@ -183,24 +206,72 @@ struct FdTable {
             if self.map[fd] != nil {
                 continue
             }
-            self.map[fd] = entry
+            self.map[fd] = FdSlot(entry)
             return fd
         }
     }
 
+    /// Marks the slot at `fd` as in use until a matching ``release(_:)``.
+    func acquire(_ fd: WASIAbi.Fd) -> FdSlot? {
+        guard let slot = map[fd] else { return nil }
+        slot.users += 1
+        return slot
+    }
+
+    /// Ends a use begun by ``acquire(_:)``. Returns the entry to close when
+    /// this was the last use of a slot already removed from the table.
+    func release(_ slot: FdSlot) -> FdEntry? {
+        slot.users -= 1
+        return slot.users == 0 && slot.isRetired ? slot.entry : nil
+    }
+
+    /// Removes `fd` from the table. Returns the entry to close now, or `nil`
+    /// when it is borrowed or still in use, in which case the last
+    /// ``release(_:)`` returns it instead.
+    mutating func remove(_ fd: WASIAbi.Fd) throws(WASIAbi.Errno) -> FdEntry? {
+        guard let slot = map.removeValue(forKey: fd) else {
+            throw WASIAbi.Errno.EBADF
+        }
+        return retire(slot)
+    }
+
+    /// Moves the slot at `fd` to `toFd`, removing the slot `toFd` held.
+    /// Returns the displaced entry to close now, as ``remove(_:)`` does.
+    mutating func renumber(_ fd: WASIAbi.Fd, to toFd: WASIAbi.Fd) throws(WASIAbi.Errno) -> FdEntry? {
+        guard let slot = map[fd], let displaced = map[toFd] else {
+            throw WASIAbi.Errno.EBADF
+        }
+        // Renumbering a descriptor onto itself leaves it in place; clearing
+        // the source would otherwise destroy the entry it just installed.
+        guard fd != toFd else { return nil }
+        // In-flight calls that looked up `fd` keep using the same slot, which
+        // stays open under its new number.
+        map[toFd] = slot
+        map[fd] = nil
+        return retire(displaced)
+    }
+
+    /// A borrowed entry (e.g. process stdio) wraps a resource the embedder
+    /// owns and outlives the guest, so it is never closed.
+    private func retire(_ slot: FdSlot) -> FdEntry? {
+        guard !slot.entry.asEntry().isBorrowed else { return nil }
+        slot.isRetired = true
+        return slot.users == 0 ? slot.entry : nil
+    }
+
     /// Closes all owned file descriptors, skipping borrowed ones (e.g. stdio).
+    /// One still in use by a call is closed when that call releases it.
     mutating func closeAll() throws {
         var firstError: (any Error)?
-        for (_, entry) in map {
-            let wasiEntry = entry.asEntry()
-            guard !wasiEntry.isBorrowed else { continue }
+        for (_, slot) in map {
+            guard let entry = retire(slot) else { continue }
             do {
-                try wasiEntry.close()
+                try entry.asEntry().close()
             } catch {
                 if firstError == nil { firstError = error }
             }
         }
-        map = map.filter { $0.value.asEntry().isBorrowed }
+        map = map.filter { $0.value.entry.asEntry().isBorrowed }
         if let firstError { throw firstError }
     }
 }
