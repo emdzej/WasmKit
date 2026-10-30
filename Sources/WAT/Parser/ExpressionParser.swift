@@ -168,8 +168,18 @@ struct ExpressionParser<Visitor: InstructionVisitor> where Visitor.VisitorError 
         // Relaxed-SIMD `(either <result>...)`: a non-deterministic expectation matching any candidate.
         if try parser.takeParenBlockStart("either") {
             var candidates: [WASTExpectValue] = []
-            while let candidate = try parseWastExpectValue() {
-                candidates.append(candidate)
+            while true {
+                if let candidate = try parseWastExpectValue() {
+                    candidates.append(candidate)
+                    continue
+                }
+                // A candidate can also be a plain constant such as `(i32.const 1)`.
+                var constant: WASTExpectValue?
+                var collector = WASTParser.ConstExpressionCollector(addValue: { constant = WASTExpectValue($0) })
+                var constParser = ExpressionParser<WASTParser.ConstExpressionCollector>(lexer: parser.lexer, features: features)
+                guard try constParser.parseWastConstInstruction(visitor: &collector), let constant else { break }
+                parser = constParser.parser
+                candidates.append(constant)
             }
             try parser.expect(.rightParen)
             return .either(candidates)
@@ -188,6 +198,7 @@ struct ExpressionParser<Visitor: InstructionVisitor> where Visitor.VisitorError 
             var bytes: [UInt8] = []
             bytes.reserveCapacity(V128.byteCount)
             var nanLaneMask: UInt8 = 0
+            var canonicalNaNLaneMask: UInt8 = 0
             var floatShape: V128Expectation.Shape?
 
             switch shape {
@@ -216,7 +227,7 @@ struct ExpressionParser<Visitor: InstructionVisitor> where Visitor.VisitorError 
                 for i in 0..<4 {
                     let lane: IEEE754.Float32
                     if try parser.takeKeyword("nan:canonical") {
-                        nanLaneMask |= (1 << UInt8(i))
+                        canonicalNaNLaneMask |= (1 << UInt8(i))
                         lane = IEEE754.Float32(bitPattern: 0x7FC0_0000)
                     } else if try parser.takeKeyword("nan:arithmetic") {
                         nanLaneMask |= (1 << UInt8(i))
@@ -231,7 +242,7 @@ struct ExpressionParser<Visitor: InstructionVisitor> where Visitor.VisitorError 
                 for i in 0..<2 {
                     let lane: IEEE754.Float64
                     if try parser.takeKeyword("nan:canonical") {
-                        nanLaneMask |= (1 << UInt8(i))
+                        canonicalNaNLaneMask |= (1 << UInt8(i))
                         lane = IEEE754.Float64(bitPattern: 0x7FF8_0000_0000_0000)
                     } else if try parser.takeKeyword("nan:arithmetic") {
                         nanLaneMask |= (1 << UInt8(i))
@@ -246,7 +257,8 @@ struct ExpressionParser<Visitor: InstructionVisitor> where Visitor.VisitorError 
             }
 
             try parser.expect(.rightParen)
-            let expectation = V128Expectation(shape: floatShape, bytes: bytes, nanLaneMask: nanLaneMask)
+            let expectation = V128Expectation(
+                shape: floatShape, bytes: bytes, nanLaneMask: nanLaneMask, canonicalNaNLaneMask: canonicalNaNLaneMask)
             return floatShape == nil ? .v128(V128(bytes: bytes)) : .v128Pattern(expectation)
         }
         if try parser.takeParenBlockStart("f64.const"),

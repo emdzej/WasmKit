@@ -370,6 +370,7 @@ extension WASTRunContext {
 
             do {
                 _ = try instantiate(module: module)
+                return .failed("trap expected: \(message)")
             } catch let error as Trap {
                 guard error.reason.description.contains(message) else {
                     return .failed("assertion mismatch: expected: \(message), actual: \(error.reason.description)")
@@ -465,6 +466,7 @@ extension WASTRunContext {
 
             do {
                 _ = try instantiate(module: module)
+                return .failed("module should not link: expected \"\(message)\"")
             } catch let error as WasmKitError {
                 guard error.description.contains(message) else {
                     return .failed("assertion mismatch: expected: \(message), actual: \(error.description)")
@@ -599,6 +601,21 @@ extension WASTRunContext {
 }
 
 extension Value {
+    /// A canonical NaN has only the payload's most significant bit set; the sign is free.
+    static func isCanonicalNaN(f32 bits: UInt32) -> Bool {
+        bits & 0x7FFF_FFFF == 0x7FC0_0000
+    }
+    static func isCanonicalNaN(f64 bits: UInt64) -> Bool {
+        bits & 0x7FFF_FFFF_FFFF_FFFF == 0x7FF8_0000_0000_0000
+    }
+    /// An arithmetic NaN has the payload's most significant bit set; the rest is free.
+    static func isArithmeticNaN(f32 bits: UInt32) -> Bool {
+        bits & 0x7FC0_0000 == 0x7FC0_0000
+    }
+    static func isArithmeticNaN(f64 bits: UInt64) -> Bool {
+        bits & 0x7FF8_0000_0000_0000 == 0x7FF8_0000_0000_0000
+    }
+
     func isTestEquivalent(to value: WASTExpectValue) -> Bool {
         switch (self, value) {
         case (.i32(let lhs), .i32(let rhs)):
@@ -606,13 +623,10 @@ extension Value {
         case (.i64(let lhs), .i64(let rhs)):
             return lhs == rhs
         case (.f32(let lhs), .f32(let rhs)):
-            let lhs = Float32(bitPattern: lhs)
-            let rhs = Float32(bitPattern: rhs)
-            return lhs.isNaN && rhs.isNaN || lhs == rhs
+            // Bit patterns, so that -0 differs from +0 and a NaN's payload is checked.
+            return lhs == rhs
         case (.f64(let lhs), .f64(let rhs)):
-            let lhs = Float64(bitPattern: lhs)
-            let rhs = Float64(bitPattern: rhs)
-            return lhs.isNaN && rhs.isNaN || lhs == rhs
+            return lhs == rhs
         case (.v128(let lhs), .v128(let rhs)):
             return lhs == rhs
         case (.v128(let actual), .v128Pattern(let expected)):
@@ -640,8 +654,10 @@ extension Value {
                 for i in 0..<4 {
                     let a = u32LE(i * 4, actualBytes)
                     let e = u32LE(i * 4, expectedBytes)
-                    if expected.nanLaneMask & (1 << UInt8(i)) != 0 {
-                        guard Float32(bitPattern: a).isNaN else { return false }
+                    if expected.canonicalNaNLaneMask & (1 << UInt8(i)) != 0 {
+                        guard Self.isCanonicalNaN(f32: a) else { return false }
+                    } else if expected.nanLaneMask & (1 << UInt8(i)) != 0 {
+                        guard Self.isArithmeticNaN(f32: a) else { return false }
                     } else if a != e {
                         return false
                     }
@@ -651,20 +667,24 @@ extension Value {
                 for i in 0..<2 {
                     let a = u64LE(i * 8, actualBytes)
                     let e = u64LE(i * 8, expectedBytes)
-                    if expected.nanLaneMask & (1 << UInt8(i)) != 0 {
-                        guard Float64(bitPattern: a).isNaN else { return false }
+                    if expected.canonicalNaNLaneMask & (1 << UInt8(i)) != 0 {
+                        guard Self.isCanonicalNaN(f64: a) else { return false }
+                    } else if expected.nanLaneMask & (1 << UInt8(i)) != 0 {
+                        guard Self.isArithmeticNaN(f64: a) else { return false }
                     } else if a != e {
                         return false
                     }
                 }
                 return true
             }
-        case (.f64(let lhs), .f64ArithmeticNaN),
-            (.f64(let lhs), .f64CanonicalNaN):
-            return Float64(bitPattern: lhs).isNaN
-        case (.f32(let lhs), .f32ArithmeticNaN),
-            (.f32(let lhs), .f32CanonicalNaN):
-            return Float32(bitPattern: lhs).isNaN
+        case (.f64(let lhs), .f64ArithmeticNaN):
+            return Self.isArithmeticNaN(f64: lhs)
+        case (.f64(let lhs), .f64CanonicalNaN):
+            return Self.isCanonicalNaN(f64: lhs)
+        case (.f32(let lhs), .f32ArithmeticNaN):
+            return Self.isArithmeticNaN(f32: lhs)
+        case (.f32(let lhs), .f32CanonicalNaN):
+            return Self.isCanonicalNaN(f32: lhs)
         case (.ref(.extern(let lhs?)), .refExtern(let rhs)):
             return rhs.map { lhs == $0 } ?? true
         case (.ref(.function(let lhs?)), .refFunc(let rhs)):

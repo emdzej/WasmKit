@@ -90,21 +90,7 @@ struct WASTParser {
 
     mutating func expectationValues() throws(WatParserError) -> [WASTExpectValue] {
         var values: [WASTExpectValue] = []
-        var collector = ConstExpressionCollector(addValue: {
-            let value: WASTExpectValue
-            switch $0 {
-            case .i32(let v): value = .i32(v)
-            case .i64(let v): value = .i64(v)
-            case .f32(let v): value = .f32(v)
-            case .f64(let v): value = .f64(v)
-            case .v128(let v): value = .v128(v)
-            case .refNull(let heapTy): value = .refNull(heapTy)
-            case .refFunc(let index): value = .refFunc(functionIndex: index)
-            case .refExtern(let v): value = .refExtern(value: v)
-            case .refHost(let v): value = .refHost(value: v)
-            }
-            values.append(value)
-        })
+        var collector = ConstExpressionCollector(addValue: { values.append(WASTExpectValue($0)) })
         var exprParser = ExpressionParser<ConstExpressionCollector>(lexer: parser.lexer, features: features)
         while true {
             if let expectValue = try exprParser.parseWastExpectValue() {
@@ -190,14 +176,18 @@ public struct V128Expectation: Equatable {
 
     public let shape: Shape?
     public let bytes: [UInt8]
-    /// Bit i indicates the i-th float lane expects any NaN.
+    /// Bit i indicates the i-th float lane expects a NaN: an arithmetic one, unless the same bit
+    /// is set in `canonicalNaNLaneMask`.
     public let nanLaneMask: UInt8
+    /// Bit i indicates the i-th float lane expects a canonical NaN.
+    public let canonicalNaNLaneMask: UInt8
 
-    public init(shape: Shape?, bytes: [UInt8], nanLaneMask: UInt8) {
+    public init(shape: Shape?, bytes: [UInt8], nanLaneMask: UInt8, canonicalNaNLaneMask: UInt8 = 0) {
         precondition(bytes.count == V128.byteCount, "V128Expectation must be exactly \(V128.byteCount) bytes")
         self.shape = shape
         self.bytes = bytes
-        self.nanLaneMask = nanLaneMask
+        self.nanLaneMask = nanLaneMask | canonicalNaNLaneMask
+        self.canonicalNaNLaneMask = canonicalNaNLaneMask
     }
 }
 
@@ -243,6 +233,23 @@ public enum WASTExpectValue {
     /// A relaxed-SIMD non-deterministic expectation: the result matches if it equals any candidate.
     /// Corresponds to `(either <result>…)` in WAST.
     indirect case either([WASTExpectValue])
+}
+
+extension WASTExpectValue {
+    /// The expectation that a result is exactly `value`.
+    init(_ value: WASTConstValue) {
+        switch value {
+        case .i32(let v): self = .i32(v)
+        case .i64(let v): self = .i64(v)
+        case .f32(let v): self = .f32(v)
+        case .f64(let v): self = .f64(v)
+        case .v128(let v): self = .v128(v)
+        case .refNull(let heapTy): self = .refNull(heapTy)
+        case .refFunc(let index): self = .refFunc(functionIndex: index)
+        case .refExtern(let v): self = .refExtern(value: v)
+        case .refHost(let v): self = .refHost(value: v)
+        }
+    }
 }
 
 /// A directive in a WAST script.

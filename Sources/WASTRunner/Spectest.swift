@@ -183,7 +183,7 @@ package struct SpectestRunner {
                       (global (export "global_f64") f64 (f64.const 666.6))
 
                       (table (export "table") 10 20 funcref)
-                      (table (export "table64") 10 20 funcref)
+                      (table (export "table64") i64 10 20 funcref)
 
                       (memory (export "memory") 1 2)
 
@@ -197,7 +197,7 @@ package struct SpectestRunner {
                     )
                 """
             ),
-            features: [.referenceTypes]
+            features: [.referenceTypes, .memory64]
         )
     }
 

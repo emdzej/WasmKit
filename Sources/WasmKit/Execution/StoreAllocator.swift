@@ -315,13 +315,17 @@ extension StoreAllocator {
 
             case (.table(let tableType), .table(let table)):
                 let tableType = try canonicalizer.canonicalize(tableType)
-                if let max = table.limits.max, max < tableType.limits.min {
-                    throw WasmKitError(message: .incompatibleTableType(importEntry, actual: tableType, expected: table.tableType))
+                let provided = table.tableType
+                let incompatible = WasmKitError(
+                    message: .incompatibleTableType(importEntry, actual: provided, expected: tableType))
+                guard tableType.limits.isMemory64 == provided.limits.isMemory64 else { throw incompatible }
+                // The table may have grown already, so compare against its current size.
+                guard UInt64(table.elementCount) >= tableType.limits.min else { throw incompatible }
+                if let importedMax = tableType.limits.max {
+                    guard let providedMax = provided.limits.max, providedMax <= importedMax else { throw incompatible }
                 }
                 // Element types must be equivalent: a table can be both read and written.
-                guard tableType.elementType == table.tableType.elementType else {
-                    throw WasmKitError(message: .incompatibleTableType(importEntry, actual: tableType, expected: table.tableType))
-                }
+                guard tableType.elementType == provided.elementType else { throw incompatible }
                 importedTables.append(table)
 
             case (.memory(let memoryType), .memory(let memory)):

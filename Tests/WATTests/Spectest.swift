@@ -81,7 +81,6 @@ enum Spectest {
                 guard filePath.pathExtension == "wast" else {
                     return nil
                 }
-                guard !filePath.lastPathComponent.starts(with: "simd_") else { return nil }
 
                 if !include.isEmpty {
                     guard include.contains(filePath.lastPathComponent) else { return nil }
@@ -150,18 +149,20 @@ enum Spectest {
             case i64
             case f32
             case f64
+            case v128
             case externref
             case funcref
+            case exnref
         }
 
+        /// Only the type is decoded: a `v128` value is an array of lanes rather than a string,
+        /// and no test reads the values.
         struct Value: Decodable {
             let type: ValueType
-            let value: String
         }
 
         struct Expectation: Decodable {
             let type: ValueType
-            let value: String?
         }
 
         struct Action: Decodable {

@@ -96,6 +96,60 @@ import WasmKit
         }
     }
 
+    /// Assertions about a module must fail when the module links and instantiates fine.
+    @Test func moduleAssertionsFailWhenNothingFails() throws {
+        let script = """
+            (assert_unlinkable (module (func)) "unknown import")
+            (assert_trap (module (func $s) (start $s)) "unreachable")
+            """
+        try withScript(script) { script in
+            let outcome = try SpectestRunner(configuration: EngineConfiguration())
+                .evaluate(test: script, reporter: NullSpectestProgressReporter())
+            #expect(outcome.passed == 0)
+            #expect(outcome.failures.count == 2)
+        }
+    }
+
+    @Test func floatResultsAreComparedByBitPattern() throws {
+        let script = """
+            (module
+              (func (export "pos_zero") (result f32) (f32.const 0))
+              (func (export "nan_payload") (result f32) (f32.const nan:0x1))
+              (func (export "nan_payload_f64") (result f64) (f64.const nan:0x1))
+              (func (export "v_nan_payload") (result v128) (v128.const f32x4 nan:0x1 0 0 0))
+              (func (export "v_arith") (result v128) (v128.const f32x4 nan:0x400001 0 0 0)))
+            (assert_return (invoke "pos_zero") (f32.const -0))
+            (assert_return (invoke "nan_payload") (f32.const nan:0x200000))
+            (assert_return (invoke "nan_payload") (f32.const nan:canonical))
+            (assert_return (invoke "nan_payload") (f32.const nan:arithmetic))
+            (assert_return (invoke "nan_payload_f64") (f64.const nan:arithmetic))
+            (assert_return (invoke "v_nan_payload") (v128.const f32x4 nan:arithmetic 0 0 0))
+            (assert_return (invoke "v_arith") (v128.const f32x4 nan:canonical 0 0 0))
+            (assert_return (invoke "v_arith") (v128.const f32x4 nan:arithmetic 0 0 0))
+            """
+        try withScript(script) { script in
+            let outcome = try SpectestRunner(configuration: EngineConfiguration())
+                .evaluate(test: script, reporter: NullSpectestProgressReporter())
+            // Only the module and the final arithmetic-NaN lane match.
+            #expect(outcome.passed == 2)
+            #expect(outcome.failures.map { $0.0.computeLineAndColumn().line } == Array(7...13))
+        }
+    }
+
+    @Test func eitherAcceptsPlainConstants() throws {
+        let script = """
+            (module (func (export "two") (result i32) (i32.const 2)))
+            (assert_return (invoke "two") (either (i32.const 1) (i32.const 2)))
+            (assert_return (invoke "two") (either (i32.const 1) (i32.const 3)))
+            """
+        try withScript(script) { script in
+            let outcome = try SpectestRunner(configuration: EngineConfiguration())
+                .evaluate(test: script, reporter: NullSpectestProgressReporter())
+            #expect(outcome.passed == 2)
+            #expect(outcome.failures.map { $0.0.computeLineAndColumn().line } == [3])
+        }
+    }
+
     /// Keeps the script out of `ExtraSuite`, which `SpectestTests` scans and would fail on it.
     private func withScript(_ text: String, _ body: (TestCase) throws -> Void) throws {
         let url = FileManager.default.temporaryDirectory
