@@ -56,6 +56,39 @@ struct ExecutionTests {
         #expect(results == [.i32(42)])
     }
 
+    /// A raw host function that leaves a result unwritten, or writes one of another type, traps
+    /// when called from Wasm as when called from the host, rather than crashing or storing
+    /// placeholder bits as a reference.
+    @Test(arguments: [ValueType.v128, .ref(.funcRef), .i64])
+    func rawHostFunctionLeavingAResultUnwritten(_ type: ValueType) throws {
+        let module = try parseWasm(
+            bytes: wat2wasm(
+                """
+                (module
+                    (import "host" "f" (func $f (result \(type))))
+                    (func (export "call") (drop (call $f)))
+                )
+                """,
+                features: [.simd, .referenceTypes]
+            ),
+            features: [.simd, .referenceTypes]
+        )
+        let store = Store(engine: Engine())
+        // Writes nothing, except `.i32(1)` for an `i64` result.
+        let host = Function(store: store, parameters: [], results: [type]) { _, _, results in
+            if type == .i64 { results[0] = .i32(1) }
+        }
+        let instance = try module.instantiate(store: store, imports: ["host": ["f": host]])
+        for call in [{ try instance.exports[function: "call"]!() }, { try host() }] {
+            do {
+                _ = try call()
+                Issue.record("expected a trap")
+            } catch let trap as Trap {
+                #expect("\(trap.reason)".contains("result"), "\(trap.reason)")
+            }
+        }
+    }
+
     /// Import and export names compare by code points, not by Unicode canonical equivalence:
     /// "\u{C5}" and "A\u{30A}" are both "Å", but different names.
     @Test

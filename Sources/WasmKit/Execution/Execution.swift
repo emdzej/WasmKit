@@ -20,7 +20,6 @@ struct Execution: ~Copyable {
     /// The stack of active exception handlers for `try_table` blocks.
     var exceptionHandlers: [ExceptionHandler] = []
 
-
     /// An active exception handler entry registered by a `try_table` block.
     struct ExceptionHandler {
         /// The tag to match, `nil` for `catch_all`/`catch_all_ref`.
@@ -1130,6 +1129,11 @@ extension Execution {
                 }
                 defer { results.deinitialize() }
                 try implementation(caller, UnsafeBufferPointer(parameters), results)
+                // A raw host function may leave a result unwritten, as the placeholder `.i32(0)`,
+                // or write one of another type, which could not be stored as its type.
+                for index in 0..<resultTypes.count where !results[index].matches(resultTypes[index]) {
+                    throw Trap(.resultTypesMismatch(expected: resultTypes, got: Array(results)))
+                }
                 for index in 0..<resultTypes.count {
                     parameterArea.storeValue(
                         results[index], at: layout.resultReg(index),

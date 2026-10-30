@@ -15,13 +15,6 @@ wabt 1.0.42.
 
 ### 1. Smaller items
 
-- **Shared memory growth:** `SharedMemoryStorage.grow` turns a resource-limiter error into `-1`,
-  and calls the limiter while holding `growLock`. The other memory backends propagate the error.
-- **Unwritten host results:** a raw host function that leaves a reference or `v128` result
-  unwritten. Result slots start as `.i32(0)` (`Execution.swift`, `Function.swift`).
-- **Embedded randomness:** `random_get` under Embedded Swift deliberately calls `fatalError` when
-  no `RandomBufferGenerator` was injected (`Sources/WASI/RandomBufferGenerator.swift`). Consider
-  `ENOSYS` instead, which means changing the protocol to throw.
 - **memfs exclusive create:** `MemoryFileSystem` checks `CREAT|EXCL` and creates in separate steps,
   so two threads can race. memfs also ignores `APPEND`, lists no `.`/`..` in readdir, and opens
   `"file/"` as a regular file.
@@ -33,9 +26,9 @@ wabt 1.0.42.
   implemented, for resource destructors or otherwise.
 - **Import type checks:** function and value types are checked, by structural equality as
   wasm-tools does (`ComponentTypeMatching.swift`). Parameter names may differ unless the loader
-  is created with `importTypeChecking: .strict`, as wasmtime's linker allows. Not checked: the types of imported values,
-  components and core modules, and instance or component exports nested inside an instance
-  import's type.
+  is created with `importTypeChecking: .strict`, as wasmtime's linker allows. Not checked: the
+  types of imported values, components and core modules, and instance or component exports
+  nested inside an instance import's type.
 - **Possible dead code:** `WasmFunctionEntity.ensureCompiled` in `Function.swift` may duplicate
   the `EntityHandle` version. Confirm which overload each call site resolves to before removing it.
 

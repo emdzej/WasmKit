@@ -97,34 +97,35 @@
         }
 
         /// Grow by `deltaPages`. Returns the old page count, or -1 on failure.
-        /// Thread-safe: mutation is serialized by `growLock`.
-        func grow(by deltaPages: Int, resourceLimiter: any ResourceLimiter) throws(Trap) -> Int {
+        ///
+        /// Thread-safe: mutation is serialized by `growLock`. The resource limiter is asked
+        /// outside the lock, as it is host code that may block or grow this memory itself, and
+        /// an error it throws propagates, as for the other memory backings. If another grow
+        /// lands while it is asked, it is asked again about the new target size.
+        func grow(by deltaPages: Int, resourceLimiter: any ResourceLimiter) throws -> Int {
             guard deltaPages >= 0 else { return -1 }
-            return growLock.withLock { _ in
+            let (deltaBytes, mulOverflow) = deltaPages.multipliedReportingOverflow(by: MemoryEntity.pageSize)
+            guard !mulOverflow else { return -1 }
+
+            while true {
                 let oldBytes = currentByteCount.load(ordering: .acquiring)
-                let oldPages = oldBytes / MemoryEntity.pageSize
-
-                let (deltaBytes, mulOverflow) = deltaPages.multipliedReportingOverflow(by: MemoryEntity.pageSize)
-                guard !mulOverflow else { return -1 }
                 let (newBytes, addOverflow) = oldBytes.addingReportingOverflow(deltaBytes)
-                guard !addOverflow else { return -1 }
-                guard newBytes <= maxByteCount else { return -1 }
+                guard !addOverflow, newBytes <= maxByteCount else { return -1 }
 
-                do {
-                    guard try resourceLimiter.limitMemoryGrowth(to: newBytes) else { return -1 }
-                } catch {
-                    return -1
+                guard try resourceLimiter.limitMemoryGrowth(to: newBytes) else { return -1 }
+
+                let oldPages: Int? = growLock.withLock { _ in
+                    // The limiter allowed a size based on `oldBytes`; try again if it changed.
+                    guard currentByteCount.load(ordering: .acquiring) == oldBytes else { return nil }
+                    if deltaBytes > 0 {
+                        guard vm.commit(offset: oldBytes, byteCount: deltaBytes) else { return -1 }
+                    }
+                    // Publish the size only after committing pages, so a concurrent reader that
+                    // observes it (acquire) sees pages that are already accessible.
+                    currentByteCount.store(newBytes, ordering: .releasing)
+                    return oldBytes / MemoryEntity.pageSize
                 }
-
-                if deltaBytes > 0 {
-                    guard vm.commit(offset: oldBytes, byteCount: deltaBytes) else { return -1 }
-                }
-
-                // Publish the size only after committing pages, so a concurrent reader that
-                // observes it (acquire) sees pages that are already accessible.
-                currentByteCount.store(newBytes, ordering: .releasing)
-
-                return oldPages
+                if let oldPages { return oldPages }
             }
         }
     }

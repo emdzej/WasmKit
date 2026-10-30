@@ -136,6 +136,56 @@ import WAT
             }
         }
 
+        struct LimiterError: Error {}
+
+        /// Throws, or grows `storage` itself by a page the first time it is asked.
+        final class TestLimiter: ResourceLimiter, @unchecked Sendable {
+            enum Behavior { case throwError, growFirst }
+            let behavior: Behavior
+            weak var storage: SharedMemoryStorage?
+            var requests: [Int] = []
+
+            init(_ behavior: Behavior) { self.behavior = behavior }
+
+            func limitMemoryGrowth(to desired: Int) throws -> Bool {
+                requests.append(desired)
+                switch behavior {
+                case .throwError:
+                    throw LimiterError()
+                case .growFirst:
+                    if requests.count == 1, let storage {
+                        #expect(try storage.grow(by: 1, resourceLimiter: DefaultResourceLimiterForTests()) == 1)
+                    }
+                    return true
+                }
+            }
+        }
+
+        final class DefaultResourceLimiterForTests: ResourceLimiter {}
+
+        @Test func growSharedMemory_propagatesLimiterErrors() throws {
+            let storage = try SharedMemoryStorage(
+                memoryType: MemoryType(min: 1, max: 4, shared: true),
+                engineConfiguration: Engine(configuration: .init(features: [.threads])).configuration)
+            #expect(throws: LimiterError.self) {
+                _ = try storage.grow(by: 1, resourceLimiter: TestLimiter(.throwError))
+            }
+            #expect(storage.currentByteCount.load(ordering: .acquiring) == 1 * 65536)
+        }
+
+        /// The limiter is not called under the grow lock, so it may grow the memory itself. The
+        /// grow it was asked about then asks again, about the size it will really reach.
+        @Test func growSharedMemory_limiterMayGrowTheMemory() throws {
+            let storage = try SharedMemoryStorage(
+                memoryType: MemoryType(min: 1, max: 4, shared: true),
+                engineConfiguration: Engine(configuration: .init(features: [.threads])).configuration)
+            let limiter = TestLimiter(.growFirst)
+            limiter.storage = storage
+            #expect(try storage.grow(by: 1, resourceLimiter: limiter) == 2)
+            #expect(limiter.requests == [2 * 65536, 3 * 65536])
+            #expect(storage.currentByteCount.load(ordering: .acquiring) == 3 * 65536)
+        }
+
         // MARK: - WAT-based integration tests
 
         @Test func sharedMemory_growAndAccess() throws {

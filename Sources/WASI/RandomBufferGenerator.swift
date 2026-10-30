@@ -10,7 +10,9 @@ public protocol RandomBufferGenerator: Sendable {
     /// Fills the buffer with random bytes.
     ///
     /// - Parameter buffer: The destination buffer to fill with random bytes.
-    mutating func fill(buffer: UnsafeMutableBufferPointer<UInt8>)
+    /// - Throws: A `WASIAbi.Errno` to return to the guest from `random_get`, such as `ENOSYS`
+    ///   when there is no source of entropy. Any other error traps.
+    mutating func fill(buffer: UnsafeMutableBufferPointer<UInt8>) throws
 }
 
 extension RandomBufferGenerator where Self: RandomNumberGenerator {
@@ -42,18 +44,18 @@ extension RandomBufferGenerator where Self: RandomNumberGenerator {
 }
 
 extension SystemRandomNumberGenerator: RandomBufferGenerator {
-    public mutating func fill(buffer: UnsafeMutableBufferPointer<UInt8>) {
+    public mutating func fill(buffer: UnsafeMutableBufferPointer<UInt8>) throws {
         guard let baseAddress = buffer.baseAddress else { return }
         #if $Embedded
             // Bare-metal targets have no `swift_stdlib_random`, and
             // `SystemRandomNumberGenerator.next()` bottoms out in the same
-            // symbol, so there is nothing to fall back to. Refuse loudly rather
-            // than hand a guest predictable bytes it believes are random.
+            // symbol, so there is nothing to fall back to. Refuse rather than
+            // hand a guest predictable bytes it believes are random: the guest
+            // gets `ENOSYS` from `random_get`.
             //
-            // This is only reached if a guest actually calls `random_get`
-            // without a generator having been injected; supply one backed by
-            // the SoC's hardware RNG via `WASIBridgeToHost.init`.
-            fatalError("WASI: no system entropy source on this platform; inject a RandomBufferGenerator")
+            // Supply a generator backed by the SoC's hardware RNG via
+            // `WASIBridgeToHost.init` to give guests randomness.
+            throw WASIAbi.Errno.ENOSYS
         #else
             // Directly call underlying C function of SystemRandomNumberGenerator
             swift_stdlib_random(baseAddress, Int(buffer.count))

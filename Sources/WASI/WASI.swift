@@ -1432,8 +1432,8 @@ final class WASIImplementation: Sendable {
     func random_get<M: GuestMemory>(buffer: UnsafeGuestPointer<UInt8>, length: WASIAbi.Size, memory: M) throws {
         guard length > 0 else { return }
         try buffer.withHostPointer(in: memory, count: Int(length)) { hostBuffer in
-            self.randomGenerator.withLock { rng in
-                rng.fill(buffer: hostBuffer)
+            try self.randomGenerator.withLock { rng in
+                try rng.fill(buffer: hostBuffer)
             }
         }
     }

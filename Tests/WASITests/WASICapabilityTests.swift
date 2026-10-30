@@ -48,6 +48,23 @@ import WasmTypes
         #expect(result == [.i32(UInt32(WASIAbi.Errno.ENOSYS.rawValue))])
     }
 
+    /// A generator with no entropy to give, as on a bare-metal target without one injected.
+    struct NoEntropy: RandomBufferGenerator {
+        func fill(buffer: UnsafeMutableBufferPointer<UInt8>) throws {
+            throw WASIAbi.Errno.ENOSYS
+        }
+    }
+
+    @Test func randomGetReturnsTheGeneratorsErrno() throws {
+        let bridge = try WASIBridgeToHost(fileSystem: .memory(MemoryFileSystem()), randomGenerator: NoEntropy())
+        defer { try? bridge.close() }
+        let functions: [String: WASIHostFunction<TestSupport.TestGuestMemory>] = bridge.hostFunctions(
+            capabilities: [Capability.random], stubUnlinked: false)
+        let randomGet = try #require(functions["random_get"])
+        let result = try randomGet.implementation(TestSupport.TestGuestMemory(), [.i32(0x100), .i32(4)])
+        #expect(result == [.i32(UInt32(WASIAbi.Errno.ENOSYS.rawValue))])
+    }
+
     /// `all` must stay in sync with the capabilities that exist.
     @Test func allCoversEveryImplementedFunction() throws {
         let all = try functions(Capability.all, stubUnlinked: false)
