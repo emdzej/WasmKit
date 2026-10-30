@@ -172,6 +172,117 @@ struct FileDescriptor: Sendable, Hashable {
         #endif
     }
 
+    // MARK: Vectored IO
+
+    /// `readv`: reads into `buffers` in order, and returns the total read.
+    func read(into buffers: [UnsafeMutableRawBufferPointer]) throws -> Int {
+        #if canImport(Darwin) || canImport(Glibc) || canImport(Musl) || canImport(Android) || os(WASI)
+            return try Self.withIOVecs(buffers) { iovecs, count in
+                try valueOrErrno { readv(rawValue, iovecs, count) }
+            }
+        #else
+            return try Self.eachBuffer(buffers) { try read(into: $0) }
+        #endif
+    }
+
+    /// `writev`: writes `buffers` in order, and returns the total written.
+    func write(_ buffers: [UnsafeMutableRawBufferPointer]) throws -> Int {
+        #if canImport(Darwin) || canImport(Glibc) || canImport(Musl) || canImport(Android) || os(WASI)
+            return try Self.withIOVecs(buffers) { iovecs, count in
+                try valueOrErrno { writev(rawValue, iovecs, count) }
+            }
+        #else
+            return try Self.eachBuffer(buffers) { try write(UnsafeRawBufferPointer($0)) }
+        #endif
+    }
+
+    /// `preadv`: reads into `buffers` at the given absolute offset without changing the current
+    /// offset, and returns the total read.
+    func read(fromAbsoluteOffset offset: Int64, into buffers: [UnsafeMutableRawBufferPointer]) throws -> Int {
+        #if canImport(Darwin) || canImport(Glibc) || canImport(Musl) || canImport(Android) || os(WASI)
+            if Self.hasPositionalVectoredIO {
+                return try Self.withIOVecs(buffers) { iovecs, count in
+                    try valueOrErrno { preadv(rawValue, iovecs, count, off_t(offset)) }
+                }
+            }
+        #endif
+        var position = offset
+        return try Self.eachBuffer(buffers) { buffer in
+            let count = try read(fromAbsoluteOffset: position, into: buffer)
+            position += Int64(count)
+            return count
+        }
+    }
+
+    /// Writes all of `buffers` at the given absolute offset, with `pwritev`, and returns the
+    /// total written.
+    func writeAll(toAbsoluteOffset offset: Int64, _ buffers: [UnsafeMutableRawBufferPointer]) throws -> Int {
+        #if canImport(Darwin) || canImport(Glibc) || canImport(Musl) || canImport(Android) || os(WASI)
+            if Self.hasPositionalVectoredIO {
+                var remaining = buffers.filter { $0.count > 0 }
+                var written = 0
+                while !remaining.isEmpty {
+                    let count = try Self.withIOVecs(remaining) { iovecs, count in
+                        try valueOrErrno { pwritev(rawValue, iovecs, count, off_t(offset) + off_t(written)) }
+                    }
+                    guard count > 0 else { break }
+                    written += count
+                    // Drop what was written, so the next call writes the rest.
+                    var advance = count
+                    while advance > 0, let first = remaining.first {
+                        if advance >= first.count {
+                            advance -= first.count
+                            remaining.removeFirst()
+                        } else {
+                            remaining[0] = UnsafeMutableRawBufferPointer(rebasing: first[advance...])
+                            advance = 0
+                        }
+                    }
+                }
+                return written
+            }
+        #endif
+        var position = offset
+        return try Self.eachBuffer(buffers) { buffer in
+            let count = try writeAll(toAbsoluteOffset: position, buffer)
+            position += Int64(count)
+            return count
+        }
+    }
+
+    /// Runs `body` on each buffer in turn, stopping after one it did not fill, as a vectored
+    /// call would.
+    private static func eachBuffer(
+        _ buffers: [UnsafeMutableRawBufferPointer], _ body: (UnsafeMutableRawBufferPointer) throws -> Int
+    ) throws -> Int {
+        var total = 0
+        for buffer in buffers {
+            let count = try body(buffer)
+            total += count
+            guard count == buffer.count else { break }
+        }
+        return total
+    }
+
+    #if canImport(Darwin) || canImport(Glibc) || canImport(Musl) || canImport(Android) || os(WASI)
+        /// Whether `preadv` and `pwritev` exist: Darwin has them since macOS 11 and iOS 14.
+        private static var hasPositionalVectoredIO: Bool {
+            #if canImport(Darwin)
+                if #available(macOS 11.0, iOS 14.0, watchOS 7.0, tvOS 14.0, *) { return true }
+                return false
+            #else
+                return true
+            #endif
+        }
+
+        private static func withIOVecs<R>(
+            _ buffers: [UnsafeMutableRawBufferPointer], _ body: (UnsafePointer<iovec>, CInt) throws -> R
+        ) throws -> R {
+            let iovecs = buffers.map { iovec(iov_base: $0.baseAddress, iov_len: $0.count) }
+            return try iovecs.withUnsafeBufferPointer { try body($0.baseAddress!, CInt(iovecs.count)) }
+        }
+    #endif
+
     /// Reads at the given absolute offset without changing the current offset
     /// (except on Windows, where the CRT offers no `pread` and the offset moves).
     func read(fromAbsoluteOffset offset: Int64, into buffer: UnsafeMutableRawBufferPointer) throws -> Int {

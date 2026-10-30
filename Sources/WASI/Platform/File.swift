@@ -41,15 +41,13 @@ extension FdWASIFile {
         guard accessMode.contains(.write) else {
             throw WASIAbi.Errno.EBADF
         }
-        // TODO: Use `writev`
-        return try buffers.transfer { try fd.write(UnsafeRawBufferPointer($0)) }
+        return try buffers.transferBatches { try fd.write($0) }
     }
 
     @inlinable
     func pwrite(vectored buffers: GuestBuffers, offset: WASIAbi.FileSize) throws -> WASIAbi.Size {
-        // TODO: Use `pwritev`
         var currentOffset = try WASIAbi.hostOffset(offset)
-        return try buffers.transfer {
+        return try buffers.transferBatches {
             let nwritten = try fd.writeAll(toAbsoluteOffset: currentOffset, $0)
             currentOffset += Int64(nwritten)
             return nwritten
@@ -63,17 +61,16 @@ extension FdWASIFile {
         guard accessMode.contains(.read) else {
             throw WASIAbi.Errno.EBADF
         }
-        return try buffers.transfer { try fd.read(into: $0) }
+        return try buffers.transferBatches { try fd.read(into: $0) }
     }
 
     @inlinable
     func pread(into buffers: GuestBuffers, offset: WASIAbi.FileSize) throws -> WASIAbi.Size {
-        // TODO: Use `preadv`
         guard accessMode.contains(.read) else {
             throw WASIAbi.Errno.EBADF
         }
         var currentOffset = try WASIAbi.hostOffset(offset)
-        return try buffers.transfer {
+        return try buffers.transferBatches {
             let count = try fd.read(fromAbsoluteOffset: currentOffset, into: $0)
             currentOffset += Int64(count)
             return count

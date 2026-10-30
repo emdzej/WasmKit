@@ -31,17 +31,6 @@ wabt 1.0.42.
 - **Fix:** generate one instruction per operation in `Utilities/Sources/VMGen.swift` and
   `VMSpec`, working on `SIMD16<UInt8>`, `SIMD4<Float>` and so on via `V128Storage`.
 
-### 3. WASI I/O
-
-- **Vectored I/O:** `Sources/WASI/Platform/File.swift` makes one syscall per buffer. Use
-  `readv`/`writev`/`preadv`/`pwritev` behind `GuestBuffers.transfer`, keeping its semantics:
-  stop after a short transfer, and report the bytes already moved rather than a later error.
-- **readdir:** `Directory.swift`'s `HostDirectoryIterator` reopens the directory and skips
-  `cookie` entries on every `fd_readdir`, which is quadratic. Cache the open stream per fd, keyed
-  by cookie.
-- **Opening under the lock:** `path_open` holds the global `fdTable` lock while opening, so
-  opening a FIFO blocks every other guest thread. Open outside the lock and reserve the slot first.
-
 ## Notes
 
 - **GC types:** `TypeCanonicalizer` (`Sources/WasmKit/TypeCanonicalization.swift`) identifies a

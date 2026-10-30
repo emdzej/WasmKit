@@ -3,6 +3,61 @@ import WasmTypes
 struct DirEntry {
     let preopenPath: String?
     let fd: FileDescriptor
+    /// The stream the last `fd_readdir` left off in, for the next one to continue.
+    let readdirCache = ReaddirCache()
+}
+
+/// The directory stream an `fd_readdir` call stopped in, kept so that the call continuing from
+/// the cookie it returned does not reopen the directory and skip every entry before it, which
+/// makes listing a directory quadratic in its size.
+final class ReaddirCache: Sendable {
+    struct Position: @unchecked Sendable {
+        /// The stream, and the descriptor it owns. Only one call uses it at a time: it is taken
+        /// out of the cache while a call reads it.
+        let stream: FileDescriptor.DirectoryStream
+        /// The index of the entry the stream reads next.
+        let nextIndex: Int
+        /// The last entry read, at `nextIndex - 1`. A call whose buffer it did not fit in returns
+        /// a cookie that asks for it again.
+        let last: Result<WASIReaddirElement, any Error>?
+    }
+
+    private let position = PlatformMutex<Position?>(nil)
+
+    /// The stream to continue at `cookie` from, if the last call left off there.
+    func take(cookie: WASIAbi.DirCookie) -> (Position, replaying: Result<WASIReaddirElement, any Error>?)? {
+        let cached = position.withLock { position -> Position? in
+            defer { position = nil }
+            return position
+        }
+        guard let cached else { return nil }
+        if cookie == WASIAbi.DirCookie(cached.nextIndex) {
+            return (cached, nil)
+        }
+        if let last = cached.last, cookie == WASIAbi.DirCookie(cached.nextIndex - 1) {
+            return (cached, last)
+        }
+        cached.stream.close()
+        return nil
+    }
+
+    /// Keeps `newPosition` for the next call, closing any stream kept already.
+    func keep(_ newPosition: Position) {
+        let replaced = position.withLock { position -> Position? in
+            defer { position = newPosition }
+            return position
+        }
+        replaced?.stream.close()
+    }
+
+    /// Closes the kept stream, if any.
+    func close() {
+        let cached = position.withLock { position -> Position? in
+            defer { position = nil }
+            return position
+        }
+        cached?.stream.close()
+    }
 }
 
 extension DirEntry: WASIDir, FdWASIEntry {
@@ -161,18 +216,33 @@ extension DirEntry: WASIDir, FdWASIEntry {
     struct HostDirectoryIterator: WASIReaddirIterator {
         let fd: FileDescriptor
         let stream: FileDescriptor.DirectoryStream
+        let cache: ReaddirCache
         var entryIndex: Int
+        /// An entry the previous call read but did not return all of, to return first.
+        var replaying: Result<ReaddirElement, any Error>?
+        var last: Result<ReaddirElement, any Error>?
 
         init(
             fd: FileDescriptor,
-            cookie: WASIAbi.DirCookie
+            cookie: WASIAbi.DirCookie,
+            cache: ReaddirCache
         ) throws {
+            self.fd = fd
+            self.cache = cache
+            if let (position, replaying) = cache.take(cookie: cookie) {
+                self.stream = position.stream
+                self.entryIndex = position.nextIndex
+                self.replaying = replaying
+                self.last = position.last
+                if replaying != nil { entryIndex -= 1 }
+                return
+            }
+
             // Duplicate fd because readdir takes the ownership of
             // the given fd and closedir also close the underlying fd
             let newFd = try fd.open(at: ".", .readOnly)
             let stream = try newFd.contentsOfDirectory()
 
-            self.fd = fd
             self.entryIndex = 0
             self.stream = stream
 
@@ -186,11 +256,16 @@ extension DirEntry: WASIDir, FdWASIEntry {
         }
 
         mutating func next() -> Result<ReaddirElement, any Error>? {
+            if let replaying {
+                self.replaying = nil
+                entryIndex += 1
+                return replaying
+            }
             guard let entry = stream.next() else {
                 return nil
             }
             defer { entryIndex += 1 }
-            return Result(catching: { () -> ReaddirElement in
+            let element = Result(catching: { () -> ReaddirElement in
                 let entry = try entry.get()
                 let name = entry.name
                 let stat = try fd.attributes(at: name, options: [.noFollow])
@@ -205,16 +280,28 @@ extension DirEntry: WASIDir, FdWASIEntry {
                 )
                 return (dirent, name)
             })
+            last = element
+            return element
         }
 
         mutating func close() {
-            stream.close()
+            // An entry to replay was not returned again, so the guest moved elsewhere: start over.
+            guard replaying == nil else {
+                stream.close()
+                return
+            }
+            cache.keep(.init(stream: stream, nextIndex: entryIndex, last: last))
         }
     }
     func readEntries(
         cookie: WASIAbi.DirCookie
     ) throws -> WASIReaddirEntries {
-        return WASIReaddirEntries(try HostDirectoryIterator(fd: fd, cookie: cookie))
+        return WASIReaddirEntries(try HostDirectoryIterator(fd: fd, cookie: cookie, cache: readdirCache))
+    }
+
+    func close() throws {
+        readdirCache.close()
+        try fd.close()
     }
 
     func createDirectory(atPath path: String) throws {

@@ -1313,11 +1313,11 @@ final class WASIImplementation: Sendable {
         fsRightsInheriting: WASIAbi.Rights,
         fdflags: WASIAbi.Fdflags
     ) throws -> WASIAbi.Fd {
-        try fdTable.withLock { table in
-            guard case .directory(let dirEntry) = table[dirFd] else {
-                throw WASIAbi.Errno.ENOTDIR
-            }
-            guard table.hasCapacity else {
+        // Opened without holding the table's lock, as opening can block, such as on a FIFO with
+        // no writer, and every other descriptor operation would wait for it. The directory stays
+        // open meanwhile, as for any call on it.
+        try withDirectory(dirFd) { dirEntry in
+            guard fdTable.withLock({ $0.hasCapacity }) else {
                 throw WASIAbi.Errno.ENFILE
             }
             let newEntry = try fileSystem.openAt(
@@ -1329,7 +1329,13 @@ final class WASIImplementation: Sendable {
                 fdflags: fdflags,
                 symlinkFollow: dirFlags.contains(.SYMLINK_FOLLOW)
             )
-            return try table.push(newEntry)
+            do {
+                return try fdTable.withLock { table in try table.push(newEntry) }
+            } catch {
+                // The table filled up while the file was opened.
+                try? newEntry.asEntry().close()
+                throw error
+            }
         }
     }
 

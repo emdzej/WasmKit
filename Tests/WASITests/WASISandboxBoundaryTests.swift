@@ -70,7 +70,11 @@ import WasmTypes
         let memory = TestSupport.TestGuestMemory()
         let buffers = GuestBuffers(iovs: try memory.readIOVecs(sizes: [4, 4]), memory: memory)
         var calls = 0
-        #expect(try buffers.transfer { _ in calls += 1; return 1 } == 1)
+        #expect(
+            try buffers.transfer { _ in
+                calls += 1
+                return 1
+            } == 1)
         #expect(calls == 1)
     }
 
@@ -89,7 +93,167 @@ import WasmTypes
         }
     }
 
+    /// `transferBatches` has `transfer`'s results, a batch of buffers at a time.
+    @Test func batchesSaturateAtTheABICount() throws {
+        let count = 65537
+        let memory = TestSupport.TestGuestMemory(size: 1 << 20)
+        let iovs = UnsafeGuestBufferPointer<WASIAbi.IOVec>(baseAddress: .init(offset: 0), count: UInt32(count))
+        for index in 0..<UInt32(count) {
+            try iovs.write(
+                at: index, WASIAbi.IOVec(buffer: .init(offset: 0x8_0000), length: 0x1_0000), to: memory)
+        }
+        let buffers = GuestBuffers(iovs: iovs, memory: memory)
+        #expect(try buffers.transferBatches { $0.reduce(0) { $0 + $1.count } } == .max)
+    }
+
+    @Test func buffersAreBatched() throws {
+        let memory = TestSupport.TestGuestMemory()
+        let buffers = GuestBuffers(iovs: try memory.readIOVecs(sizes: [1, 2, 3, 4, 5]), memory: memory)
+        var batches: [[Int]] = []
+        let total = try buffers.transferBatches(batchSize: 2) { batch in
+            batches.append(batch.map(\.count))
+            return batch.reduce(0) { $0 + $1.count }
+        }
+        #expect(total == 15)
+        #expect(batches == [[1, 2], [3, 4], [5]])
+    }
+
+    @Test func aShortBatchEndsTheVector() throws {
+        let memory = TestSupport.TestGuestMemory()
+        let buffers = GuestBuffers(iovs: try memory.readIOVecs(sizes: [4, 4, 4]), memory: memory)
+        var calls = 0
+        #expect(
+            try buffers.transferBatches(batchSize: 2) { _ in
+                calls += 1
+                return 5
+            } == 5)
+        #expect(calls == 1)
+    }
+
+    @Test func anErrorAfterSomeBatchesReportsTheBytes() throws {
+        let memory = TestSupport.TestGuestMemory()
+        let buffers = GuestBuffers(iovs: try memory.readIOVecs(sizes: [4, 4]), memory: memory)
+        var calls = 0
+        let total = try buffers.transferBatches(batchSize: 1) { batch in
+            calls += 1
+            guard calls == 1 else { throw WASIAbi.Errno.EAGAIN }
+            return batch[0].count
+        }
+        #expect(total == 4)
+        #expect(throws: WASIAbi.Errno.EAGAIN) {
+            _ = try buffers.transferBatches { _ in throw WASIAbi.Errno.EAGAIN }
+        }
+    }
+
+    #if !os(Windows)
+        /// Vectored reads and writes of a host file, at its position and at an offset.
+        @Test func vectoredIOOnAHostFile() throws {
+            let directory = try TestSupport.TemporaryDirectory()
+            try directory.createFile(at: "file.txt", contents: "")
+            let bridge = try WASIBridgeToHost(
+                fileSystem: .host().withPreopens([.init(guestPath: "/", hostPath: directory.path)]))
+            try bridge.runAndClose { bridge in
+                let wasi = bridge.underlying
+                let memory = TestSupport.TestGuestMemory()
+                let fd = try wasi.path_open(
+                    dirFd: 3, dirFlags: [], path: "file.txt", oflags: [],
+                    fsRightsBase: [.FD_READ, .FD_WRITE, .FD_SEEK], fsRightsInheriting: [], fdflags: [])
+                let pieces = ["abc", "", "defg", "h"].map { Array($0.utf8) }
+                #expect(try wasi.fd_write(fileDescriptor: fd, ioVectors: try memory.writeIOVecs(pieces), memory: memory) == 8)
+                #expect(try wasi.fd_pwrite(fd: fd, iovs: try memory.writeIOVecs([Array("XY".utf8), Array("Z".utf8)]), offset: 2, memory: memory) == 3)
+
+                _ = try wasi.fd_seek(fd: fd, offset: 0, whence: .SET)
+                let readVecs = try memory.readIOVecs(sizes: [2, 0, 5, 10])
+                #expect(try wasi.fd_read(fd: fd, iovs: readVecs, memory: memory) == 8)
+                #expect(Array(try memory.loadIOVecs(readVecs).joined().prefix(8)) == Array("abXYZfgh".utf8))
+
+                let preadVecs = try memory.readIOVecs(sizes: [1, 2])
+                #expect(try wasi.fd_pread(fd: fd, iovs: preadVecs, offset: 5, memory: memory) == 3)
+                #expect(try memory.loadIOVecs(preadVecs).joined().map { $0 } == Array("fgh".utf8))
+            }
+        }
+    #endif
+
+    #if os(macOS) || os(Linux)
+        /// Opening a FIFO blocks until it has a writer. Other descriptor calls go on meanwhile,
+        /// as the open does not hold the descriptor table's lock.
+        @Test func aBlockingOpenDoesNotBlockOtherCalls() throws {
+            let directory = try TestSupport.TemporaryDirectory()
+            let fifoPath = directory.url.appendingPathComponent("fifo").path
+            #expect(mkfifo(fifoPath, 0o600) == 0)
+            let bridge = try WASIBridgeToHost(
+                fileSystem: .host().withPreopens([.init(guestPath: "/", hostPath: directory.path)]))
+            try bridge.runAndClose { bridge in
+                let wasi = bridge.underlying
+                let opened = DispatchSemaphore(value: 0)
+                DispatchQueue.global().async {
+                    _ = try? wasi.path_open(
+                        dirFd: 3, dirFlags: [], path: "fifo", oflags: [], fsRightsBase: [.FD_READ],
+                        fsRightsInheriting: [], fdflags: [])
+                    opened.signal()
+                }
+                // Give the open time to block, then use the table from another thread.
+                Thread.sleep(forTimeInterval: 0.1)
+                let statted = DispatchSemaphore(value: 0)
+                DispatchQueue.global().async {
+                    _ = try? wasi.fd_fdstat_get(fileDescriptor: 3)
+                    statted.signal()
+                }
+                let stattedMeanwhile = statted.wait(timeout: .now() + 2) == .success
+                #expect(stattedMeanwhile)
+                #expect(opened.wait(timeout: .now()) == .timedOut)
+
+                // A writer unblocks the open, and with it anything that waited for it.
+                let writer = open(fifoPath, O_WRONLY)
+                #expect(writer >= 0)
+                #expect(opened.wait(timeout: .now() + 5) == .success)
+                close(writer)
+                if !stattedMeanwhile { _ = statted.wait(timeout: .now() + 5) }
+            }
+        }
+    #endif
+
     // MARK: - Directory entries
+
+    #if !os(Windows)
+        /// Listing a directory through a buffer too small for it, as wasi-libc does: each call
+        /// continues from the cookie of the last entry that fit, which the next call either
+        /// continues the kept stream at or replays.
+        @Test func aDirectoryIsListedAcrossCallsOnce() throws {
+            let directory = try TestSupport.TemporaryDirectory()
+            let names = (0..<40).map { "file-\($0)-" + String(repeating: "x", count: $0 % 7) }
+            for name in names { try directory.createFile(at: name, contents: "") }
+            let bridge = try WASIBridgeToHost(
+                fileSystem: .host().withPreopens([.init(guestPath: "/", hostPath: directory.path)]))
+            try bridge.runAndClose { bridge in
+                let wasi = bridge.underlying
+                let memory = TestSupport.TestGuestMemory()
+                let bufferSize: UInt32 = 100
+                let buffer = UnsafeGuestBufferPointer<UInt8>(baseAddress: .init(offset: 0x1000), count: bufferSize)
+                var cookie: WASIAbi.DirCookie = 0
+                var listed: [String] = []
+                var calls = 0
+                while true {
+                    calls += 1
+                    let used = try wasi.fd_readdir(fd: 3, buffer: buffer, cookie: cookie, memory: memory)
+                    let bytes = memory.read(count: Int(used), at: 0x1000)
+                    var offset = 0
+                    // Entries that fit whole: a 24-byte dirent, then the name.
+                    while offset + 24 <= bytes.count {
+                        let next = bytes[offset..<offset + 8].reversed().reduce(UInt64(0)) { $0 << 8 | UInt64($1) }
+                        let nameLength = Int(bytes[offset + 16..<offset + 20].reversed().reduce(UInt32(0)) { $0 << 8 | UInt32($1) })
+                        guard offset + 24 + nameLength <= bytes.count else { break }
+                        listed.append(String(decoding: bytes[offset + 24..<offset + 24 + nameLength], as: UTF8.self))
+                        cookie = next
+                        offset += 24 + nameLength
+                    }
+                    guard used == bufferSize else { break }
+                    #expect(calls < 100)
+                }
+                #expect(listed.sorted() == (names + [".", ".."]).sorted())
+            }
+        }
+    #endif
 
     @Test func aDirentCutShortStaysInsideItsBuffer() throws {
         let memory = TestSupport.TestGuestMemory()
