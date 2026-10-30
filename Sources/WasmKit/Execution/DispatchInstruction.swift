@@ -74,381 +74,634 @@ extension Execution {
         case 47: return try self.execute_memoryFill(sp: &sp, pc: &pc, md: &md, ms: &ms)
         case 48: return self.execute_v128Const(sp: &sp, pc: &pc, md: &md, ms: &ms)
         case 49: return self.execute_i8x16Shuffle(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 50: return try self.execute_simd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 51: return self.execute_const32(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 52: return self.execute_const64(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 53: return self.execute_i32Add(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 54: return self.execute_i64Add(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 55: return self.execute_i32Sub(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 56: return self.execute_i64Sub(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 57: return self.execute_i32Mul(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 58: return self.execute_i64Mul(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 59: return self.execute_i32And(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 60: return self.execute_i64And(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 61: return self.execute_i32Or(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 62: return self.execute_i64Or(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 63: return self.execute_i32Xor(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 64: return self.execute_i64Xor(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 65: return self.execute_i32Shl(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 66: return self.execute_i64Shl(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 67: return self.execute_i32ShrS(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 68: return self.execute_i64ShrS(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 69: return self.execute_i32ShrU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 70: return self.execute_i64ShrU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 71: return self.execute_i32Rotl(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 72: return self.execute_i64Rotl(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 73: return self.execute_i32Rotr(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 74: return self.execute_i64Rotr(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 75: return try self.execute_i32DivS(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 76: return try self.execute_i64DivS(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 77: return try self.execute_i32DivU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 78: return try self.execute_i64DivU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 79: return try self.execute_i32RemS(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 80: return try self.execute_i64RemS(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 81: return try self.execute_i32RemU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 82: return try self.execute_i64RemU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 83: return self.execute_i32Eq(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 84: return self.execute_i64Eq(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 85: return self.execute_i32Ne(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 86: return self.execute_i64Ne(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 87: return self.execute_i32LtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 88: return self.execute_i64LtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 89: return self.execute_i32LtU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 90: return self.execute_i64LtU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 91: return self.execute_i32GtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 92: return self.execute_i64GtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 93: return self.execute_i32GtU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 94: return self.execute_i64GtU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 95: return self.execute_i32LeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 96: return self.execute_i64LeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 97: return self.execute_i32LeU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 98: return self.execute_i64LeU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 99: return self.execute_i32GeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 100: return self.execute_i64GeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 101: return self.execute_i32GeU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 102: return self.execute_i64GeU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 103: return self.execute_i32Clz(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 104: return self.execute_i64Clz(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 105: return self.execute_i32Ctz(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 106: return self.execute_i64Ctz(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 107: return self.execute_i32Popcnt(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 108: return self.execute_i64Popcnt(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 109: return self.execute_i32Eqz(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 110: return self.execute_i64Eqz(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 111: return self.execute_i32WrapI64(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 112: return self.execute_i64ExtendI32S(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 113: return self.execute_i64ExtendI32U(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 114: return self.execute_i32Extend8S(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 115: return self.execute_i64Extend8S(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 116: return self.execute_i32Extend16S(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 117: return self.execute_i64Extend16S(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 118: return self.execute_i64Extend32S(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 119: return try self.execute_i32TruncF32S(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 120: return try self.execute_i32TruncF32U(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 121: return self.execute_i32TruncSatF32S(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 122: return self.execute_i32TruncSatF32U(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 123: return try self.execute_i32TruncF64S(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 124: return try self.execute_i32TruncF64U(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 125: return self.execute_i32TruncSatF64S(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 126: return self.execute_i32TruncSatF64U(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 127: return try self.execute_i64TruncF32S(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 128: return try self.execute_i64TruncF32U(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 129: return self.execute_i64TruncSatF32S(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 130: return self.execute_i64TruncSatF32U(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 131: return try self.execute_i64TruncF64S(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 132: return try self.execute_i64TruncF64U(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 133: return self.execute_i64TruncSatF64S(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 134: return self.execute_i64TruncSatF64U(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 135: return self.execute_f32ConvertI32S(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 136: return self.execute_f32ConvertI32U(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 137: return self.execute_f32ConvertI64S(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 138: return self.execute_f32ConvertI64U(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 139: return self.execute_f64ConvertI32S(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 140: return self.execute_f64ConvertI32U(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 141: return self.execute_f64ConvertI64S(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 142: return self.execute_f64ConvertI64U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 50: return try self.execute_v128Load(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 51: return try self.execute_v128Load8X8S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 52: return try self.execute_v128Load8X8U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 53: return try self.execute_v128Load16X4S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 54: return try self.execute_v128Load16X4U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 55: return try self.execute_v128Load32X2S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 56: return try self.execute_v128Load32X2U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 57: return try self.execute_v128Load8Splat(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 58: return try self.execute_v128Load16Splat(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 59: return try self.execute_v128Load32Splat(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 60: return try self.execute_v128Load64Splat(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 61: return try self.execute_v128Load32Zero(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 62: return try self.execute_v128Load64Zero(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 63: return try self.execute_v128Store(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 64: return try self.execute_v128Load8Lane(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 65: return try self.execute_v128Load16Lane(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 66: return try self.execute_v128Load32Lane(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 67: return try self.execute_v128Load64Lane(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 68: return try self.execute_v128Store8Lane(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 69: return try self.execute_v128Store16Lane(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 70: return try self.execute_v128Store32Lane(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 71: return try self.execute_v128Store64Lane(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 72: return self.execute_i8x16ExtractLaneS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 73: return self.execute_i8x16ExtractLaneU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 74: return self.execute_i8x16ReplaceLane(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 75: return self.execute_i16x8ExtractLaneS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 76: return self.execute_i16x8ExtractLaneU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 77: return self.execute_i16x8ReplaceLane(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 78: return self.execute_i32x4ExtractLane(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 79: return self.execute_i32x4ReplaceLane(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 80: return self.execute_i64x2ExtractLane(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 81: return self.execute_i64x2ReplaceLane(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 82: return self.execute_f32x4ExtractLane(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 83: return self.execute_f32x4ReplaceLane(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 84: return self.execute_f64x2ExtractLane(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 85: return self.execute_f64x2ReplaceLane(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 86: return self.execute_i8x16Swizzle(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 87: return self.execute_i8x16Splat(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 88: return self.execute_i16x8Splat(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 89: return self.execute_i32x4Splat(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 90: return self.execute_i64x2Splat(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 91: return self.execute_f32x4Splat(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 92: return self.execute_f64x2Splat(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 93: return self.execute_i8x16Eq(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 94: return self.execute_i8x16Ne(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 95: return self.execute_i8x16LtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 96: return self.execute_i8x16LtU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 97: return self.execute_i8x16GtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 98: return self.execute_i8x16GtU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 99: return self.execute_i8x16LeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 100: return self.execute_i8x16LeU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 101: return self.execute_i8x16GeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 102: return self.execute_i8x16GeU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 103: return self.execute_i16x8Eq(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 104: return self.execute_i16x8Ne(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 105: return self.execute_i16x8LtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 106: return self.execute_i16x8LtU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 107: return self.execute_i16x8GtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 108: return self.execute_i16x8GtU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 109: return self.execute_i16x8LeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 110: return self.execute_i16x8LeU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 111: return self.execute_i16x8GeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 112: return self.execute_i16x8GeU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 113: return self.execute_i32x4Eq(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 114: return self.execute_i32x4Ne(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 115: return self.execute_i32x4LtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 116: return self.execute_i32x4LtU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 117: return self.execute_i32x4GtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 118: return self.execute_i32x4GtU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 119: return self.execute_i32x4LeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 120: return self.execute_i32x4LeU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 121: return self.execute_i32x4GeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 122: return self.execute_i32x4GeU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 123: return self.execute_i64x2Eq(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 124: return self.execute_i64x2Ne(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 125: return self.execute_i64x2LtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 126: return self.execute_i64x2GtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 127: return self.execute_i64x2LeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 128: return self.execute_i64x2GeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 129: return self.execute_f32x4Eq(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 130: return self.execute_f32x4Ne(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 131: return self.execute_f32x4Lt(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 132: return self.execute_f32x4Gt(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 133: return self.execute_f32x4Le(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 134: return self.execute_f32x4Ge(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 135: return self.execute_f64x2Eq(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 136: return self.execute_f64x2Ne(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 137: return self.execute_f64x2Lt(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 138: return self.execute_f64x2Gt(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 139: return self.execute_f64x2Le(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 140: return self.execute_f64x2Ge(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 141: return self.execute_v128Not(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 142: return self.execute_v128And(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 143: return self.execute_v128Andnot(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 144: return self.execute_v128Or(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 145: return self.execute_v128Xor(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 146: return self.execute_v128Bitselect(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 147: return self.execute_v128AnyTrue(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 148: return self.execute_i8x16Abs(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 149: return self.execute_i8x16Neg(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 150: return self.execute_i8x16AllTrue(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 151: return self.execute_i8x16Bitmask(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 152: return self.execute_i8x16Shl(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 153: return self.execute_i8x16ShrS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 154: return self.execute_i8x16ShrU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 155: return self.execute_i8x16Add(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 156: return self.execute_i8x16Sub(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 157: return self.execute_i8x16AddSatS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 158: return self.execute_i8x16AddSatU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 159: return self.execute_i8x16SubSatS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 160: return self.execute_i8x16SubSatU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 161: return self.execute_i8x16AvgrU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 162: return self.execute_i8x16MinS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 163: return self.execute_i8x16MinU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 164: return self.execute_i8x16MaxS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 165: return self.execute_i8x16MaxU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 166: return self.execute_i16x8Abs(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 167: return self.execute_i16x8Neg(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 168: return self.execute_i16x8AllTrue(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 169: return self.execute_i16x8Bitmask(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 170: return self.execute_i16x8Shl(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 171: return self.execute_i16x8ShrS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 172: return self.execute_i16x8ShrU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 173: return self.execute_i16x8Add(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 174: return self.execute_i16x8Sub(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 175: return self.execute_i16x8Mul(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 176: return self.execute_i16x8AddSatS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 177: return self.execute_i16x8AddSatU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 178: return self.execute_i16x8SubSatS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 179: return self.execute_i16x8SubSatU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 180: return self.execute_i16x8AvgrU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 181: return self.execute_i16x8MinS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 182: return self.execute_i16x8MinU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 183: return self.execute_i16x8MaxS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 184: return self.execute_i16x8MaxU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 185: return self.execute_i32x4Abs(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 186: return self.execute_i32x4Neg(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 187: return self.execute_i32x4AllTrue(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 188: return self.execute_i32x4Bitmask(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 189: return self.execute_i32x4Shl(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 190: return self.execute_i32x4ShrS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 191: return self.execute_i32x4ShrU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 192: return self.execute_i32x4Add(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 193: return self.execute_i32x4Sub(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 194: return self.execute_i32x4Mul(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 195: return self.execute_i32x4MinS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 196: return self.execute_i32x4MinU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 197: return self.execute_i32x4MaxS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 198: return self.execute_i32x4MaxU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 199: return self.execute_i64x2Abs(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 200: return self.execute_i64x2Neg(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 201: return self.execute_i64x2AllTrue(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 202: return self.execute_i64x2Bitmask(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 203: return self.execute_i64x2Shl(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 204: return self.execute_i64x2ShrS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 205: return self.execute_i64x2ShrU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 206: return self.execute_i64x2Add(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 207: return self.execute_i64x2Sub(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 208: return self.execute_i64x2Mul(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 209: return self.execute_i8x16NarrowI16X8S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 210: return self.execute_i8x16NarrowI16X8U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 211: return self.execute_i16x8NarrowI32X4S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 212: return self.execute_i16x8NarrowI32X4U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 213: return self.execute_i16x8ExtendLowI8X16S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 214: return self.execute_i16x8ExtendHighI8X16S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 215: return self.execute_i16x8ExtmulLowI8X16S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 216: return self.execute_i16x8ExtmulHighI8X16S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 217: return self.execute_i16x8ExtaddPairwiseI8X16S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 218: return self.execute_i16x8ExtendLowI8X16U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 219: return self.execute_i16x8ExtendHighI8X16U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 220: return self.execute_i16x8ExtmulLowI8X16U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 221: return self.execute_i16x8ExtmulHighI8X16U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 222: return self.execute_i16x8ExtaddPairwiseI8X16U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 223: return self.execute_i32x4ExtendLowI16X8S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 224: return self.execute_i32x4ExtendHighI16X8S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 225: return self.execute_i32x4ExtmulLowI16X8S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 226: return self.execute_i32x4ExtmulHighI16X8S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 227: return self.execute_i32x4ExtaddPairwiseI16X8S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 228: return self.execute_i32x4ExtendLowI16X8U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 229: return self.execute_i32x4ExtendHighI16X8U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 230: return self.execute_i32x4ExtmulLowI16X8U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 231: return self.execute_i32x4ExtmulHighI16X8U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 232: return self.execute_i32x4ExtaddPairwiseI16X8U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 233: return self.execute_i64x2ExtendLowI32X4S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 234: return self.execute_i64x2ExtendHighI32X4S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 235: return self.execute_i64x2ExtmulLowI32X4S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 236: return self.execute_i64x2ExtmulHighI32X4S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 237: return self.execute_i64x2ExtendLowI32X4U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 238: return self.execute_i64x2ExtendHighI32X4U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 239: return self.execute_i64x2ExtmulLowI32X4U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 240: return self.execute_i64x2ExtmulHighI32X4U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 241: return self.execute_i32x4DotI16X8S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 242: return self.execute_i16x8Q15MulrSatS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 243: return self.execute_i8x16Popcnt(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 244: return self.execute_f32x4Ceil(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 245: return self.execute_f32x4Floor(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 246: return self.execute_f32x4Trunc(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 247: return self.execute_f32x4Nearest(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 248: return self.execute_f32x4Abs(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 249: return self.execute_f32x4Neg(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 250: return self.execute_f32x4Sqrt(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 251: return self.execute_f32x4Add(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 252: return self.execute_f32x4Sub(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 253: return self.execute_f32x4Mul(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 254: return self.execute_f32x4Div(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 255: return self.execute_f32x4Min(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 256: return self.execute_f32x4Max(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 257: return self.execute_f32x4Pmin(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 258: return self.execute_f32x4Pmax(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 259: return self.execute_f64x2Ceil(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 260: return self.execute_f64x2Floor(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 261: return self.execute_f64x2Trunc(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 262: return self.execute_f64x2Nearest(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 263: return self.execute_f64x2Abs(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 264: return self.execute_f64x2Neg(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 265: return self.execute_f64x2Sqrt(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 266: return self.execute_f64x2Add(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 267: return self.execute_f64x2Sub(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 268: return self.execute_f64x2Mul(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 269: return self.execute_f64x2Div(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 270: return self.execute_f64x2Min(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 271: return self.execute_f64x2Max(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 272: return self.execute_f64x2Pmin(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 273: return self.execute_f64x2Pmax(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 274: return self.execute_i32x4TruncSatF32X4S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 275: return self.execute_i32x4TruncSatF32X4U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 276: return self.execute_f32x4ConvertI32X4S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 277: return self.execute_f32x4ConvertI32X4U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 278: return self.execute_f64x2ConvertLowI32X4S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 279: return self.execute_f64x2ConvertLowI32X4U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 280: return self.execute_i32x4TruncSatF64X2SZero(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 281: return self.execute_i32x4TruncSatF64X2UZero(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 282: return self.execute_f32x4DemoteF64X2Zero(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 283: return self.execute_f64x2PromoteLowF32X4(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 284: return self.execute_i8x16RelaxedSwizzle(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 285: return self.execute_i32x4RelaxedTruncF32X4S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 286: return self.execute_i32x4RelaxedTruncF32X4U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 287: return self.execute_i32x4RelaxedTruncF64X2SZero(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 288: return self.execute_i32x4RelaxedTruncF64X2UZero(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 289: return self.execute_f32x4RelaxedMadd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 290: return self.execute_f32x4RelaxedNmadd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 291: return self.execute_f64x2RelaxedMadd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 292: return self.execute_f64x2RelaxedNmadd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 293: return self.execute_i8x16RelaxedLaneselect(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 294: return self.execute_i16x8RelaxedLaneselect(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 295: return self.execute_i32x4RelaxedLaneselect(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 296: return self.execute_i64x2RelaxedLaneselect(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 297: return self.execute_f32x4RelaxedMin(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 298: return self.execute_f32x4RelaxedMax(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 299: return self.execute_f64x2RelaxedMin(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 300: return self.execute_f64x2RelaxedMax(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 301: return self.execute_i16x8RelaxedQ15MulrS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 302: return self.execute_i16x8RelaxedDotI8X16I7X16S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 303: return self.execute_i32x4RelaxedDotI8X16I7X16AddS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 304: return self.execute_const32(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 305: return self.execute_const64(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 306: return self.execute_i32Add(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 307: return self.execute_i64Add(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 308: return self.execute_i32Sub(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 309: return self.execute_i64Sub(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 310: return self.execute_i32Mul(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 311: return self.execute_i64Mul(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 312: return self.execute_i32And(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 313: return self.execute_i64And(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 314: return self.execute_i32Or(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 315: return self.execute_i64Or(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 316: return self.execute_i32Xor(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 317: return self.execute_i64Xor(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 318: return self.execute_i32Shl(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 319: return self.execute_i64Shl(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 320: return self.execute_i32ShrS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 321: return self.execute_i64ShrS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 322: return self.execute_i32ShrU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 323: return self.execute_i64ShrU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 324: return self.execute_i32Rotl(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 325: return self.execute_i64Rotl(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 326: return self.execute_i32Rotr(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 327: return self.execute_i64Rotr(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 328: return try self.execute_i32DivS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 329: return try self.execute_i64DivS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 330: return try self.execute_i32DivU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 331: return try self.execute_i64DivU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 332: return try self.execute_i32RemS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 333: return try self.execute_i64RemS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 334: return try self.execute_i32RemU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 335: return try self.execute_i64RemU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 336: return self.execute_i32Eq(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 337: return self.execute_i64Eq(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 338: return self.execute_i32Ne(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 339: return self.execute_i64Ne(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 340: return self.execute_i32LtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 341: return self.execute_i64LtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 342: return self.execute_i32LtU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 343: return self.execute_i64LtU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 344: return self.execute_i32GtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 345: return self.execute_i64GtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 346: return self.execute_i32GtU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 347: return self.execute_i64GtU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 348: return self.execute_i32LeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 349: return self.execute_i64LeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 350: return self.execute_i32LeU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 351: return self.execute_i64LeU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 352: return self.execute_i32GeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 353: return self.execute_i64GeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 354: return self.execute_i32GeU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 355: return self.execute_i64GeU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 356: return self.execute_i32Clz(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 357: return self.execute_i64Clz(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 358: return self.execute_i32Ctz(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 359: return self.execute_i64Ctz(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 360: return self.execute_i32Popcnt(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 361: return self.execute_i64Popcnt(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 362: return self.execute_i32Eqz(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 363: return self.execute_i64Eqz(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 364: return self.execute_i32WrapI64(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 365: return self.execute_i64ExtendI32S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 366: return self.execute_i64ExtendI32U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 367: return self.execute_i32Extend8S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 368: return self.execute_i64Extend8S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 369: return self.execute_i32Extend16S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 370: return self.execute_i64Extend16S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 371: return self.execute_i64Extend32S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 372: return try self.execute_i32TruncF32S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 373: return try self.execute_i32TruncF32U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 374: return self.execute_i32TruncSatF32S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 375: return self.execute_i32TruncSatF32U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 376: return try self.execute_i32TruncF64S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 377: return try self.execute_i32TruncF64U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 378: return self.execute_i32TruncSatF64S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 379: return self.execute_i32TruncSatF64U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 380: return try self.execute_i64TruncF32S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 381: return try self.execute_i64TruncF32U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 382: return self.execute_i64TruncSatF32S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 383: return self.execute_i64TruncSatF32U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 384: return try self.execute_i64TruncF64S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 385: return try self.execute_i64TruncF64U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 386: return self.execute_i64TruncSatF64S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 387: return self.execute_i64TruncSatF64U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 388: return self.execute_f32ConvertI32S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 389: return self.execute_f32ConvertI32U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 390: return self.execute_f32ConvertI64S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 391: return self.execute_f32ConvertI64U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 392: return self.execute_f64ConvertI32S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 393: return self.execute_f64ConvertI32U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 394: return self.execute_f64ConvertI64S(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 395: return self.execute_f64ConvertI64U(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // f32ReinterpretI32 shares i64ExtendI32U's handler body; see Instruction.handlerIdentity
-        case 143: return self.execute_i64ExtendI32U(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 144: return self.execute_f64ReinterpretI64(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 396: return self.execute_i64ExtendI32U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 397: return self.execute_f64ReinterpretI64(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i32ReinterpretF32 shares i64ExtendI32U's handler body; see Instruction.handlerIdentity
-        case 145: return self.execute_i64ExtendI32U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 398: return self.execute_i64ExtendI32U(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64ReinterpretF64 shares f64ReinterpretI64's handler body; see Instruction.handlerIdentity
-        case 146: return self.execute_f64ReinterpretI64(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 147: return self.execute_f32Add(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 148: return self.execute_f64Add(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 149: return self.execute_f32Sub(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 150: return self.execute_f64Sub(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 151: return self.execute_f32Mul(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 152: return self.execute_f64Mul(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 153: return self.execute_f32Div(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 154: return self.execute_f64Div(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 155: return self.execute_f32Min(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 156: return self.execute_f64Min(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 157: return self.execute_f32Max(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 158: return self.execute_f64Max(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 159: return self.execute_f32CopySign(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 160: return self.execute_f64CopySign(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 161: return self.execute_f32Eq(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 162: return self.execute_f64Eq(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 163: return self.execute_f32Ne(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 164: return self.execute_f64Ne(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 165: return self.execute_f32Lt(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 166: return self.execute_f64Lt(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 167: return self.execute_f32Gt(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 168: return self.execute_f64Gt(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 169: return self.execute_f32Le(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 170: return self.execute_f64Le(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 171: return self.execute_f32Ge(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 172: return self.execute_f64Ge(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 173: return self.execute_f32Abs(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 174: return self.execute_f64Abs(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 175: return self.execute_f32Neg(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 176: return self.execute_f64Neg(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 177: return self.execute_f32Ceil(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 178: return self.execute_f64Ceil(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 179: return self.execute_f32Floor(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 180: return self.execute_f64Floor(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 181: return self.execute_f32Trunc(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 182: return self.execute_f64Trunc(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 183: return self.execute_f32Nearest(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 184: return self.execute_f64Nearest(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 185: return self.execute_f32Sqrt(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 186: return self.execute_f64Sqrt(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 187: return self.execute_f64PromoteF32(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 188: return self.execute_f32DemoteF64(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 189: return self.execute_select(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 190: return self.execute_refNull(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 191: return self.execute_refIsNull(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 192: return self.execute_refFunc(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 193: return try self.execute_tableGet(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 194: return try self.execute_tableSet(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 195: return self.execute_tableSize(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 196: return try self.execute_tableGrow(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 197: return try self.execute_tableFill(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 198: return try self.execute_tableCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 199: return try self.execute_tableInit(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 200: return self.execute_tableElementDrop(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 201: return self.execute_onEnter(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 202: return self.execute_onExit(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 203: return try self.execute_breakpoint(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 204: return try self.executeToken_i32AtomicLoad(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 205: return try self.executeToken_i64AtomicLoad(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 206: return try self.executeToken_i32AtomicLoad8U(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 207: return try self.executeToken_i32AtomicLoad16U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 399: return self.execute_f64ReinterpretI64(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 400: return self.execute_f32Add(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 401: return self.execute_f64Add(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 402: return self.execute_f32Sub(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 403: return self.execute_f64Sub(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 404: return self.execute_f32Mul(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 405: return self.execute_f64Mul(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 406: return self.execute_f32Div(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 407: return self.execute_f64Div(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 408: return self.execute_f32Min(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 409: return self.execute_f64Min(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 410: return self.execute_f32Max(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 411: return self.execute_f64Max(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 412: return self.execute_f32CopySign(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 413: return self.execute_f64CopySign(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 414: return self.execute_f32Eq(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 415: return self.execute_f64Eq(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 416: return self.execute_f32Ne(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 417: return self.execute_f64Ne(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 418: return self.execute_f32Lt(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 419: return self.execute_f64Lt(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 420: return self.execute_f32Gt(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 421: return self.execute_f64Gt(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 422: return self.execute_f32Le(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 423: return self.execute_f64Le(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 424: return self.execute_f32Ge(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 425: return self.execute_f64Ge(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 426: return self.execute_f32Abs(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 427: return self.execute_f64Abs(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 428: return self.execute_f32Neg(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 429: return self.execute_f64Neg(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 430: return self.execute_f32Ceil(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 431: return self.execute_f64Ceil(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 432: return self.execute_f32Floor(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 433: return self.execute_f64Floor(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 434: return self.execute_f32Trunc(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 435: return self.execute_f64Trunc(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 436: return self.execute_f32Nearest(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 437: return self.execute_f64Nearest(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 438: return self.execute_f32Sqrt(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 439: return self.execute_f64Sqrt(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 440: return self.execute_f64PromoteF32(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 441: return self.execute_f32DemoteF64(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 442: return self.execute_select(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 443: return self.execute_refNull(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 444: return self.execute_refIsNull(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 445: return self.execute_refFunc(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 446: return try self.execute_tableGet(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 447: return try self.execute_tableSet(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 448: return self.execute_tableSize(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 449: return try self.execute_tableGrow(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 450: return try self.execute_tableFill(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 451: return try self.execute_tableCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 452: return try self.execute_tableInit(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 453: return self.execute_tableElementDrop(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 454: return self.execute_onEnter(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 455: return self.execute_onExit(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 456: return try self.execute_breakpoint(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 457: return try self.executeToken_i32AtomicLoad(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 458: return try self.executeToken_i64AtomicLoad(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 459: return try self.executeToken_i32AtomicLoad8U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 460: return try self.executeToken_i32AtomicLoad16U(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicLoad8U shares i32AtomicLoad8U's handler body; see Instruction.handlerIdentity
-        case 208: return try self.executeToken_i32AtomicLoad8U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 461: return try self.executeToken_i32AtomicLoad8U(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicLoad16U shares i32AtomicLoad16U's handler body; see Instruction.handlerIdentity
-        case 209: return try self.executeToken_i32AtomicLoad16U(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 462: return try self.executeToken_i32AtomicLoad16U(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicLoad32U shares i32AtomicLoad's handler body; see Instruction.handlerIdentity
-        case 210: return try self.executeToken_i32AtomicLoad(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 211: return try self.executeToken_i32AtomicStore(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 212: return try self.executeToken_i64AtomicStore(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 213: return try self.executeToken_i32AtomicStore8(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 214: return try self.executeToken_i32AtomicStore16(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 463: return try self.executeToken_i32AtomicLoad(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 464: return try self.executeToken_i32AtomicStore(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 465: return try self.executeToken_i64AtomicStore(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 466: return try self.executeToken_i32AtomicStore8(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 467: return try self.executeToken_i32AtomicStore16(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicStore8 shares i32AtomicStore8's handler body; see Instruction.handlerIdentity
-        case 215: return try self.executeToken_i32AtomicStore8(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 468: return try self.executeToken_i32AtomicStore8(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicStore16 shares i32AtomicStore16's handler body; see Instruction.handlerIdentity
-        case 216: return try self.executeToken_i32AtomicStore16(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 469: return try self.executeToken_i32AtomicStore16(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicStore32 shares i32AtomicStore's handler body; see Instruction.handlerIdentity
-        case 217: return try self.executeToken_i32AtomicStore(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 218: return try self.executeToken_i32AtomicRmwAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 219: return try self.executeToken_i64AtomicRmwAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 220: return try self.executeToken_i32AtomicRmwSub(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 221: return try self.executeToken_i64AtomicRmwSub(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 222: return try self.executeToken_i32AtomicRmwAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 223: return try self.executeToken_i64AtomicRmwAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 224: return try self.executeToken_i32AtomicRmwOr(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 225: return try self.executeToken_i64AtomicRmwOr(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 226: return try self.executeToken_i32AtomicRmwXor(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 227: return try self.executeToken_i64AtomicRmwXor(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 228: return try self.executeToken_i32AtomicRmwXchg(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 229: return try self.executeToken_i64AtomicRmwXchg(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 230: return try self.executeToken_i32AtomicRmw8AddU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 470: return try self.executeToken_i32AtomicStore(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 471: return try self.executeToken_i32AtomicRmwAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 472: return try self.executeToken_i64AtomicRmwAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 473: return try self.executeToken_i32AtomicRmwSub(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 474: return try self.executeToken_i64AtomicRmwSub(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 475: return try self.executeToken_i32AtomicRmwAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 476: return try self.executeToken_i64AtomicRmwAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 477: return try self.executeToken_i32AtomicRmwOr(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 478: return try self.executeToken_i64AtomicRmwOr(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 479: return try self.executeToken_i32AtomicRmwXor(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 480: return try self.executeToken_i64AtomicRmwXor(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 481: return try self.executeToken_i32AtomicRmwXchg(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 482: return try self.executeToken_i64AtomicRmwXchg(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 483: return try self.executeToken_i32AtomicRmw8AddU(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicRmw8AddU shares i32AtomicRmw8AddU's handler body; see Instruction.handlerIdentity
-        case 231: return try self.executeToken_i32AtomicRmw8AddU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 232: return try self.executeToken_i32AtomicRmw8SubU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 484: return try self.executeToken_i32AtomicRmw8AddU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 485: return try self.executeToken_i32AtomicRmw8SubU(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicRmw8SubU shares i32AtomicRmw8SubU's handler body; see Instruction.handlerIdentity
-        case 233: return try self.executeToken_i32AtomicRmw8SubU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 234: return try self.executeToken_i32AtomicRmw8AndU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 486: return try self.executeToken_i32AtomicRmw8SubU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 487: return try self.executeToken_i32AtomicRmw8AndU(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicRmw8AndU shares i32AtomicRmw8AndU's handler body; see Instruction.handlerIdentity
-        case 235: return try self.executeToken_i32AtomicRmw8AndU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 236: return try self.executeToken_i32AtomicRmw8OrU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 488: return try self.executeToken_i32AtomicRmw8AndU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 489: return try self.executeToken_i32AtomicRmw8OrU(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicRmw8OrU shares i32AtomicRmw8OrU's handler body; see Instruction.handlerIdentity
-        case 237: return try self.executeToken_i32AtomicRmw8OrU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 238: return try self.executeToken_i32AtomicRmw8XorU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 490: return try self.executeToken_i32AtomicRmw8OrU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 491: return try self.executeToken_i32AtomicRmw8XorU(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicRmw8XorU shares i32AtomicRmw8XorU's handler body; see Instruction.handlerIdentity
-        case 239: return try self.executeToken_i32AtomicRmw8XorU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 240: return try self.executeToken_i32AtomicRmw8XchgU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 492: return try self.executeToken_i32AtomicRmw8XorU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 493: return try self.executeToken_i32AtomicRmw8XchgU(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicRmw8XchgU shares i32AtomicRmw8XchgU's handler body; see Instruction.handlerIdentity
-        case 241: return try self.executeToken_i32AtomicRmw8XchgU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 242: return try self.executeToken_i32AtomicRmw16AddU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 494: return try self.executeToken_i32AtomicRmw8XchgU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 495: return try self.executeToken_i32AtomicRmw16AddU(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicRmw16AddU shares i32AtomicRmw16AddU's handler body; see Instruction.handlerIdentity
-        case 243: return try self.executeToken_i32AtomicRmw16AddU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 244: return try self.executeToken_i32AtomicRmw16SubU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 496: return try self.executeToken_i32AtomicRmw16AddU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 497: return try self.executeToken_i32AtomicRmw16SubU(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicRmw16SubU shares i32AtomicRmw16SubU's handler body; see Instruction.handlerIdentity
-        case 245: return try self.executeToken_i32AtomicRmw16SubU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 246: return try self.executeToken_i32AtomicRmw16AndU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 498: return try self.executeToken_i32AtomicRmw16SubU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 499: return try self.executeToken_i32AtomicRmw16AndU(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicRmw16AndU shares i32AtomicRmw16AndU's handler body; see Instruction.handlerIdentity
-        case 247: return try self.executeToken_i32AtomicRmw16AndU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 248: return try self.executeToken_i32AtomicRmw16OrU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 500: return try self.executeToken_i32AtomicRmw16AndU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 501: return try self.executeToken_i32AtomicRmw16OrU(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicRmw16OrU shares i32AtomicRmw16OrU's handler body; see Instruction.handlerIdentity
-        case 249: return try self.executeToken_i32AtomicRmw16OrU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 250: return try self.executeToken_i32AtomicRmw16XorU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 502: return try self.executeToken_i32AtomicRmw16OrU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 503: return try self.executeToken_i32AtomicRmw16XorU(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicRmw16XorU shares i32AtomicRmw16XorU's handler body; see Instruction.handlerIdentity
-        case 251: return try self.executeToken_i32AtomicRmw16XorU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 252: return try self.executeToken_i32AtomicRmw16XchgU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 504: return try self.executeToken_i32AtomicRmw16XorU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 505: return try self.executeToken_i32AtomicRmw16XchgU(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicRmw16XchgU shares i32AtomicRmw16XchgU's handler body; see Instruction.handlerIdentity
-        case 253: return try self.executeToken_i32AtomicRmw16XchgU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 506: return try self.executeToken_i32AtomicRmw16XchgU(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicRmw32AddU shares i32AtomicRmwAdd's handler body; see Instruction.handlerIdentity
-        case 254: return try self.executeToken_i32AtomicRmwAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 507: return try self.executeToken_i32AtomicRmwAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicRmw32SubU shares i32AtomicRmwSub's handler body; see Instruction.handlerIdentity
-        case 255: return try self.executeToken_i32AtomicRmwSub(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 508: return try self.executeToken_i32AtomicRmwSub(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicRmw32AndU shares i32AtomicRmwAnd's handler body; see Instruction.handlerIdentity
-        case 256: return try self.executeToken_i32AtomicRmwAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 509: return try self.executeToken_i32AtomicRmwAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicRmw32OrU shares i32AtomicRmwOr's handler body; see Instruction.handlerIdentity
-        case 257: return try self.executeToken_i32AtomicRmwOr(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 510: return try self.executeToken_i32AtomicRmwOr(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicRmw32XorU shares i32AtomicRmwXor's handler body; see Instruction.handlerIdentity
-        case 258: return try self.executeToken_i32AtomicRmwXor(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 511: return try self.executeToken_i32AtomicRmwXor(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicRmw32XchgU shares i32AtomicRmwXchg's handler body; see Instruction.handlerIdentity
-        case 259: return try self.executeToken_i32AtomicRmwXchg(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 260: return try self.executeToken_i32AtomicRmwCmpxchg(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 261: return try self.executeToken_i64AtomicRmwCmpxchg(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 262: return try self.executeToken_i32AtomicRmw8CmpxchgU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 263: return try self.executeToken_i32AtomicRmw16CmpxchgU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 512: return try self.executeToken_i32AtomicRmwXchg(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 513: return try self.executeToken_i32AtomicRmwCmpxchg(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 514: return try self.executeToken_i64AtomicRmwCmpxchg(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 515: return try self.executeToken_i32AtomicRmw8CmpxchgU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 516: return try self.executeToken_i32AtomicRmw16CmpxchgU(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicRmw8CmpxchgU shares i32AtomicRmw8CmpxchgU's handler body; see Instruction.handlerIdentity
-        case 264: return try self.executeToken_i32AtomicRmw8CmpxchgU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 517: return try self.executeToken_i32AtomicRmw8CmpxchgU(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicRmw16CmpxchgU shares i32AtomicRmw16CmpxchgU's handler body; see Instruction.handlerIdentity
-        case 265: return try self.executeToken_i32AtomicRmw16CmpxchgU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 518: return try self.executeToken_i32AtomicRmw16CmpxchgU(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64AtomicRmw32CmpxchgU shares i32AtomicRmwCmpxchg's handler body; see Instruction.handlerIdentity
-        case 266: return try self.executeToken_i32AtomicRmwCmpxchg(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 267: return try self.execute_memoryAtomicWait32(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 268: return try self.execute_memoryAtomicWait64(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 269: return try self.execute_memoryAtomicNotify(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 270: return self.execute_atomicFence(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 271: return try self.execute_throwTag(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 272: return try self.execute_throwRef(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 273: return self.execute_catchHandlers(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 274: return self.execute_catchHandlersEnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 275: return self.execute_brIfI32Eq(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 276: return self.execute_brIfI32Ne(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 277: return self.execute_brIfI32LtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 278: return self.execute_brIfI32LtU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 279: return self.execute_brIfI32GtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 280: return self.execute_brIfI32GtU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 281: return self.execute_brIfI32LeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 282: return self.execute_brIfI32LeU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 283: return self.execute_brIfI32GeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 284: return self.execute_brIfI32GeU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 285: return self.execute_brIfI64Eq(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 286: return self.execute_brIfI64Ne(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 287: return self.execute_brIfI64LtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 288: return self.execute_brIfI64LtU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 289: return self.execute_brIfI64GtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 290: return self.execute_brIfI64GtU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 291: return self.execute_brIfI64LeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 292: return self.execute_brIfI64LeU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 293: return self.execute_brIfI64GeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 294: return self.execute_brIfI64GeU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 295: return self.execute_returnCrossInstance(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 296: return try self.execute_memoryOutOfBoundsTrap(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 297: return try self.execute_unalignedAtomicTrap(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 298: return self.execute_brIfF32Eq(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 299: return self.execute_brIfF32Ne(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 300: return self.execute_brIfF32Lt(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 301: return self.execute_brIfF32Le(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 302: return self.execute_brIfNotF32Lt(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 303: return self.execute_brIfNotF32Le(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 304: return self.execute_brIfF64Eq(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 305: return self.execute_brIfF64Ne(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 306: return self.execute_brIfF64Lt(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 307: return self.execute_brIfF64Le(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 308: return self.execute_brIfNotF64Lt(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 309: return self.execute_brIfNotF64Le(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 310: return self.execute_f32AddAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 311: return self.execute_f32AddSub(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 312: return self.execute_f32AddMul(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 313: return self.execute_f32SubAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 314: return self.execute_f32SubSub(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 315: return self.execute_f32SubMul(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 316: return self.execute_f32MulAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 317: return self.execute_f32MulSub(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 318: return self.execute_f32MulMul(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 319: return self.execute_f64AddAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 320: return self.execute_f64AddSub(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 321: return self.execute_f64AddMul(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 322: return self.execute_f64SubAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 323: return self.execute_f64SubSub(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 324: return self.execute_f64SubMul(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 325: return self.execute_f64MulAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 326: return self.execute_f64MulSub(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 327: return self.execute_f64MulMul(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 328: return self.execute_brIfI32And(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 329: return self.execute_brIfNotI32And(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 330: return self.execute_brIfI64And(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 331: return self.execute_brIfNotI64And(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 332: return self.execute_i32ShlAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 333: return self.execute_i32MulAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 334: return self.execute_i32AddAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 335: return self.execute_i32AndAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 336: return self.execute_i32ShrUAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 337: return self.execute_i32OrAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 338: return self.execute_i32ShrUAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 339: return self.execute_i32SubAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 340: return self.execute_i32ShlOr(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 341: return self.execute_i32AddAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 342: return self.execute_i32ShrUOr(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 343: return self.execute_i32XorShrU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 344: return self.execute_i32AddSub(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 345: return self.execute_i32XorShl(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 346: return self.execute_i32SubAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 347: return self.execute_i32AndShl(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 348: return self.execute_i64XorRotl(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 349: return self.execute_i64MulAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 350: return self.execute_i64ShlAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 351: return self.execute_i64AndMul(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 352: return self.execute_i64ShlOr(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 353: return self.execute_i64XorAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 354: return self.execute_i64MulXor(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 355: return self.execute_i64AndXor(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 356: return self.execute_i64RotlXor(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 357: return self.execute_i64SubAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 358: return self.execute_i64XorXor(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 359: return self.execute_i64OrOr(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 360: return self.execute_i64ShrUAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 361: return self.execute_i64AndAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 362: return self.execute_i64XorMul(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 363: return self.execute_i64XorShrU(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 364: return self.execute_i32MulSubRev(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 712: return try self.executeToken_i32LoadWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 713: return try self.executeToken_i64LoadWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 519: return try self.executeToken_i32AtomicRmwCmpxchg(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 520: return try self.execute_memoryAtomicWait32(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 521: return try self.execute_memoryAtomicWait64(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 522: return try self.execute_memoryAtomicNotify(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 523: return self.execute_atomicFence(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 524: return try self.execute_throwTag(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 525: return try self.execute_throwRef(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 526: return self.execute_catchHandlers(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 527: return self.execute_catchHandlersEnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 528: return self.execute_brIfI32Eq(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 529: return self.execute_brIfI32Ne(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 530: return self.execute_brIfI32LtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 531: return self.execute_brIfI32LtU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 532: return self.execute_brIfI32GtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 533: return self.execute_brIfI32GtU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 534: return self.execute_brIfI32LeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 535: return self.execute_brIfI32LeU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 536: return self.execute_brIfI32GeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 537: return self.execute_brIfI32GeU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 538: return self.execute_brIfI64Eq(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 539: return self.execute_brIfI64Ne(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 540: return self.execute_brIfI64LtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 541: return self.execute_brIfI64LtU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 542: return self.execute_brIfI64GtS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 543: return self.execute_brIfI64GtU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 544: return self.execute_brIfI64LeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 545: return self.execute_brIfI64LeU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 546: return self.execute_brIfI64GeS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 547: return self.execute_brIfI64GeU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 548: return self.execute_returnCrossInstance(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 549: return try self.execute_memoryOutOfBoundsTrap(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 550: return try self.execute_unalignedAtomicTrap(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 551: return self.execute_brIfF32Eq(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 552: return self.execute_brIfF32Ne(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 553: return self.execute_brIfF32Lt(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 554: return self.execute_brIfF32Le(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 555: return self.execute_brIfNotF32Lt(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 556: return self.execute_brIfNotF32Le(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 557: return self.execute_brIfF64Eq(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 558: return self.execute_brIfF64Ne(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 559: return self.execute_brIfF64Lt(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 560: return self.execute_brIfF64Le(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 561: return self.execute_brIfNotF64Lt(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 562: return self.execute_brIfNotF64Le(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 563: return self.execute_f32AddAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 564: return self.execute_f32AddSub(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 565: return self.execute_f32AddMul(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 566: return self.execute_f32SubAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 567: return self.execute_f32SubSub(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 568: return self.execute_f32SubMul(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 569: return self.execute_f32MulAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 570: return self.execute_f32MulSub(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 571: return self.execute_f32MulMul(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 572: return self.execute_f64AddAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 573: return self.execute_f64AddSub(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 574: return self.execute_f64AddMul(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 575: return self.execute_f64SubAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 576: return self.execute_f64SubSub(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 577: return self.execute_f64SubMul(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 578: return self.execute_f64MulAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 579: return self.execute_f64MulSub(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 580: return self.execute_f64MulMul(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 581: return self.execute_brIfI32And(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 582: return self.execute_brIfNotI32And(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 583: return self.execute_brIfI64And(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 584: return self.execute_brIfNotI64And(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 585: return self.execute_i32ShlAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 586: return self.execute_i32MulAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 587: return self.execute_i32AddAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 588: return self.execute_i32AndAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 589: return self.execute_i32ShrUAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 590: return self.execute_i32OrAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 591: return self.execute_i32ShrUAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 592: return self.execute_i32SubAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 593: return self.execute_i32ShlOr(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 594: return self.execute_i32AddAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 595: return self.execute_i32ShrUOr(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 596: return self.execute_i32XorShrU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 597: return self.execute_i32AddSub(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 598: return self.execute_i32XorShl(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 599: return self.execute_i32SubAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 600: return self.execute_i32AndShl(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 601: return self.execute_i64XorRotl(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 602: return self.execute_i64MulAdd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 603: return self.execute_i64ShlAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 604: return self.execute_i64AndMul(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 605: return self.execute_i64ShlOr(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 606: return self.execute_i64XorAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 607: return self.execute_i64MulXor(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 608: return self.execute_i64AndXor(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 609: return self.execute_i64RotlXor(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 610: return self.execute_i64SubAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 611: return self.execute_i64XorXor(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 612: return self.execute_i64OrOr(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 613: return self.execute_i64ShrUAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 614: return self.execute_i64AndAnd(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 615: return self.execute_i64XorMul(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 616: return self.execute_i64XorShrU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 617: return self.execute_i32MulSubRev(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 965: return try self.executeToken_i32LoadWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 966: return try self.executeToken_i64LoadWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // f32LoadWithCopy shares i32LoadWithCopy's handler body; see Instruction.handlerIdentity
-        case 714: return try self.executeToken_i32LoadWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 967: return try self.executeToken_i32LoadWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // f64LoadWithCopy shares i64LoadWithCopy's handler body; see Instruction.handlerIdentity
-        case 715: return try self.executeToken_i64LoadWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 716: return try self.executeToken_i32Load8SWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 717: return try self.executeToken_i32Load8UWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 718: return try self.executeToken_i32Load16SWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 719: return try self.executeToken_i32Load16UWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 720: return try self.executeToken_i64Load8SWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 968: return try self.executeToken_i64LoadWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 969: return try self.executeToken_i32Load8SWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 970: return try self.executeToken_i32Load8UWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 971: return try self.executeToken_i32Load16SWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 972: return try self.executeToken_i32Load16UWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 973: return try self.executeToken_i64Load8SWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64Load8UWithCopy shares i32Load8UWithCopy's handler body; see Instruction.handlerIdentity
-        case 721: return try self.executeToken_i32Load8UWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 722: return try self.executeToken_i64Load16SWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 974: return try self.executeToken_i32Load8UWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 975: return try self.executeToken_i64Load16SWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64Load16UWithCopy shares i32Load16UWithCopy's handler body; see Instruction.handlerIdentity
-        case 723: return try self.executeToken_i32Load16UWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 724: return try self.executeToken_i64Load32SWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 976: return try self.executeToken_i32Load16UWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 977: return try self.executeToken_i64Load32SWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
         // i64Load32UWithCopy shares i32LoadWithCopy's handler body; see Instruction.handlerIdentity
-        case 725: return try self.executeToken_i32LoadWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 726: return try self.executeToken_consumeFuel(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 727: return try self.execute_outOfFuelTrap(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 728: return try self.executeToken_checkEpoch(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 729: return try self.execute_epochDeadlineTrap(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 730: return try self.execute_callRef(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 731: return try self.execute_returnCallRef(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 732: return try self.execute_refAsNonNull(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 733: return self.execute_brIfNull(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 734: return self.execute_brIfNotNull(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 735: return self.execute_selectMemory(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 736: return self.execute_selectSharedMemory(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 978: return try self.executeToken_i32LoadWithCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 979: return try self.executeToken_consumeFuel(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 980: return try self.execute_outOfFuelTrap(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 981: return try self.executeToken_checkEpoch(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 982: return try self.execute_epochDeadlineTrap(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 983: return try self.execute_callRef(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 984: return try self.execute_returnCallRef(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 985: return try self.execute_refAsNonNull(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 986: return self.execute_brIfNull(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 987: return self.execute_brIfNotNull(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 988: return self.execute_selectMemory(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 989: return self.execute_selectSharedMemory(sp: &sp, pc: &pc, md: &md, ms: &ms)
         default: preconditionFailure("Unknown instruction!?")
 
         }
@@ -1657,12 +1910,2036 @@ extension Execution {
         self.i8x16Shuffle(sp: sp.pointee, immediate: immediate)
         return next
     }
-    @_silgen_name("wasmkit_execute_simd") @inline(__always)
-    mutating func execute_simd(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
-        let immediate = Instruction.SimdOperand.load(from: &pc.pointee)
-        try self.simd(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate: immediate)
+    @_silgen_name("wasmkit_execute_v128Load") @inline(__always)
+    mutating func execute_v128Load(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.LoadOperand.load(from: &pc.pointee)
+        try simdLoad(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate)
         let next = pc.pointee.pointee
         pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Load8X8S") @inline(__always)
+    mutating func execute_v128Load8X8S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.LoadOperand.load(from: &pc.pointee)
+        try simdLoad(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate, UInt64.self) { V128Storage(Int16.Vector(truncatingIfNeeded: V128Storage(lo: $0, hi: 0).lanes(Int8.self).lowHalf)) }
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Load8X8U") @inline(__always)
+    mutating func execute_v128Load8X8U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.LoadOperand.load(from: &pc.pointee)
+        try simdLoad(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate, UInt64.self) { V128Storage(UInt16.Vector(truncatingIfNeeded: V128Storage(lo: $0, hi: 0).lanes(UInt8.self).lowHalf)) }
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Load16X4S") @inline(__always)
+    mutating func execute_v128Load16X4S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.LoadOperand.load(from: &pc.pointee)
+        try simdLoad(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate, UInt64.self) { V128Storage(Int32.Vector(truncatingIfNeeded: V128Storage(lo: $0, hi: 0).lanes(Int16.self).lowHalf)) }
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Load16X4U") @inline(__always)
+    mutating func execute_v128Load16X4U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.LoadOperand.load(from: &pc.pointee)
+        try simdLoad(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate, UInt64.self) { V128Storage(UInt32.Vector(truncatingIfNeeded: V128Storage(lo: $0, hi: 0).lanes(UInt16.self).lowHalf)) }
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Load32X2S") @inline(__always)
+    mutating func execute_v128Load32X2S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.LoadOperand.load(from: &pc.pointee)
+        try simdLoad(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate, UInt64.self) { V128Storage(Int64.Vector(truncatingIfNeeded: V128Storage(lo: $0, hi: 0).lanes(Int32.self).lowHalf)) }
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Load32X2U") @inline(__always)
+    mutating func execute_v128Load32X2U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.LoadOperand.load(from: &pc.pointee)
+        try simdLoad(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate, UInt64.self) { V128Storage(UInt64.Vector(truncatingIfNeeded: V128Storage(lo: $0, hi: 0).lanes(UInt32.self).lowHalf)) }
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Load8Splat") @inline(__always)
+    mutating func execute_v128Load8Splat(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.LoadOperand.load(from: &pc.pointee)
+        try simdLoad(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate, UInt8.self) { V128Storage(UInt8.Vector(repeating: $0)) }
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Load16Splat") @inline(__always)
+    mutating func execute_v128Load16Splat(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.LoadOperand.load(from: &pc.pointee)
+        try simdLoad(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate, UInt16.self) { V128Storage(UInt16.Vector(repeating: $0)) }
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Load32Splat") @inline(__always)
+    mutating func execute_v128Load32Splat(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.LoadOperand.load(from: &pc.pointee)
+        try simdLoad(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate, UInt32.self) { V128Storage(UInt32.Vector(repeating: $0)) }
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Load64Splat") @inline(__always)
+    mutating func execute_v128Load64Splat(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.LoadOperand.load(from: &pc.pointee)
+        try simdLoad(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate, UInt64.self) { V128Storage(lo: $0, hi: $0) }
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Load32Zero") @inline(__always)
+    mutating func execute_v128Load32Zero(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.LoadOperand.load(from: &pc.pointee)
+        try simdLoad(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate, UInt32.self) { V128Storage(lo: UInt64($0), hi: 0) }
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Load64Zero") @inline(__always)
+    mutating func execute_v128Load64Zero(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.LoadOperand.load(from: &pc.pointee)
+        try simdLoad(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate, UInt64.self) { V128Storage(lo: $0, hi: 0) }
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Store") @inline(__always)
+    mutating func execute_v128Store(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.StoreOperand.load(from: &pc.pointee)
+        try simdStore(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Load8Lane") @inline(__always)
+    mutating func execute_v128Load8Lane(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.SimdLoadLaneOperand.load(from: &pc.pointee)
+        try simdLoadLane(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate, UInt8.self)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Load16Lane") @inline(__always)
+    mutating func execute_v128Load16Lane(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.SimdLoadLaneOperand.load(from: &pc.pointee)
+        try simdLoadLane(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate, UInt16.self)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Load32Lane") @inline(__always)
+    mutating func execute_v128Load32Lane(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.SimdLoadLaneOperand.load(from: &pc.pointee)
+        try simdLoadLane(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate, UInt32.self)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Load64Lane") @inline(__always)
+    mutating func execute_v128Load64Lane(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.SimdLoadLaneOperand.load(from: &pc.pointee)
+        try simdLoadLane(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate, UInt64.self)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Store8Lane") @inline(__always)
+    mutating func execute_v128Store8Lane(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.SimdStoreLaneOperand.load(from: &pc.pointee)
+        try simdStoreLane(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate, UInt8.self)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Store16Lane") @inline(__always)
+    mutating func execute_v128Store16Lane(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.SimdStoreLaneOperand.load(from: &pc.pointee)
+        try simdStoreLane(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate, UInt16.self)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Store32Lane") @inline(__always)
+    mutating func execute_v128Store32Lane(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.SimdStoreLaneOperand.load(from: &pc.pointee)
+        try simdStoreLane(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate, UInt32.self)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Store64Lane") @inline(__always)
+    mutating func execute_v128Store64Lane(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.SimdStoreLaneOperand.load(from: &pc.pointee)
+        try simdStoreLane(sp: sp.pointee, md: md.pointee, ms: ms.pointee, immediate, UInt64.self)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16ExtractLaneS") @inline(__always)
+    mutating func execute_i8x16ExtractLaneS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdExtractLaneOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdExtractLane(immediate, Int8.self) { .i32(UInt32(bitPattern: Int32($0))) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16ExtractLaneU") @inline(__always)
+    mutating func execute_i8x16ExtractLaneU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdExtractLaneOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdExtractLane(immediate, UInt8.self) { .i32(UInt32($0)) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16ReplaceLane") @inline(__always)
+    mutating func execute_i8x16ReplaceLane(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdReplaceLaneOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdReplaceLane(immediate, UInt8.self) { UInt8(truncatingIfNeeded: $0.i32) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8ExtractLaneS") @inline(__always)
+    mutating func execute_i16x8ExtractLaneS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdExtractLaneOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdExtractLane(immediate, Int16.self) { .i32(UInt32(bitPattern: Int32($0))) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8ExtractLaneU") @inline(__always)
+    mutating func execute_i16x8ExtractLaneU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdExtractLaneOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdExtractLane(immediate, UInt16.self) { .i32(UInt32($0)) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8ReplaceLane") @inline(__always)
+    mutating func execute_i16x8ReplaceLane(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdReplaceLaneOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdReplaceLane(immediate, UInt16.self) { UInt16(truncatingIfNeeded: $0.i32) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4ExtractLane") @inline(__always)
+    mutating func execute_i32x4ExtractLane(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdExtractLaneOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdExtractLane(immediate, UInt32.self) { .i32($0) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4ReplaceLane") @inline(__always)
+    mutating func execute_i32x4ReplaceLane(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdReplaceLaneOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdReplaceLane(immediate, UInt32.self) { $0.i32 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2ExtractLane") @inline(__always)
+    mutating func execute_i64x2ExtractLane(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdExtractLaneOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdExtractLane(immediate, UInt64.self) { .i64($0) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2ReplaceLane") @inline(__always)
+    mutating func execute_i64x2ReplaceLane(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdReplaceLaneOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdReplaceLane(immediate, UInt64.self) { $0.i64 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4ExtractLane") @inline(__always)
+    mutating func execute_f32x4ExtractLane(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdExtractLaneOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdExtractLane(immediate, UInt32.self) { .rawF32($0) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4ReplaceLane") @inline(__always)
+    mutating func execute_f32x4ReplaceLane(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdReplaceLaneOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdReplaceLane(immediate, UInt32.self) { $0.rawF32 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2ExtractLane") @inline(__always)
+    mutating func execute_f64x2ExtractLane(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdExtractLaneOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdExtractLane(immediate, UInt64.self) { .rawF64($0) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2ReplaceLane") @inline(__always)
+    mutating func execute_f64x2ReplaceLane(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdReplaceLaneOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdReplaceLane(immediate, UInt64.self) { $0.rawF64 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16Swizzle") @inline(__always)
+    mutating func execute_i8x16Swizzle(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt8.self) { swizzle($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16Splat") @inline(__always)
+    mutating func execute_i8x16Splat(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdFromScalar(immediate) { UInt8.Vector(repeating: UInt8(truncatingIfNeeded: $0.i32)) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8Splat") @inline(__always)
+    mutating func execute_i16x8Splat(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdFromScalar(immediate) { UInt16.Vector(repeating: UInt16(truncatingIfNeeded: $0.i32)) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4Splat") @inline(__always)
+    mutating func execute_i32x4Splat(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdFromScalar(immediate) { UInt32.Vector(repeating: $0.i32) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2Splat") @inline(__always)
+    mutating func execute_i64x2Splat(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdFromScalar(immediate) { UInt64.Vector(repeating: $0.i64) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4Splat") @inline(__always)
+    mutating func execute_f32x4Splat(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdFromScalar(immediate) { UInt32.Vector(repeating: $0.rawF32) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2Splat") @inline(__always)
+    mutating func execute_f64x2Splat(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdFromScalar(immediate) { UInt64.Vector(repeating: $0.rawF64) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16Eq") @inline(__always)
+    mutating func execute_i8x16Eq(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt8.self) { .allOnes(where: $0 .== $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16Ne") @inline(__always)
+    mutating func execute_i8x16Ne(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt8.self) { .allOnes(where: $0 .!= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16LtS") @inline(__always)
+    mutating func execute_i8x16LtS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int8.self) { .allOnes(where: $0 .< $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16LtU") @inline(__always)
+    mutating func execute_i8x16LtU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt8.self) { .allOnes(where: $0 .< $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16GtS") @inline(__always)
+    mutating func execute_i8x16GtS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int8.self) { .allOnes(where: $0 .> $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16GtU") @inline(__always)
+    mutating func execute_i8x16GtU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt8.self) { .allOnes(where: $0 .> $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16LeS") @inline(__always)
+    mutating func execute_i8x16LeS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int8.self) { .allOnes(where: $0 .<= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16LeU") @inline(__always)
+    mutating func execute_i8x16LeU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt8.self) { .allOnes(where: $0 .<= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16GeS") @inline(__always)
+    mutating func execute_i8x16GeS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int8.self) { .allOnes(where: $0 .>= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16GeU") @inline(__always)
+    mutating func execute_i8x16GeU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt8.self) { .allOnes(where: $0 .>= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8Eq") @inline(__always)
+    mutating func execute_i16x8Eq(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt16.self) { .allOnes(where: $0 .== $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8Ne") @inline(__always)
+    mutating func execute_i16x8Ne(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt16.self) { .allOnes(where: $0 .!= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8LtS") @inline(__always)
+    mutating func execute_i16x8LtS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int16.self) { .allOnes(where: $0 .< $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8LtU") @inline(__always)
+    mutating func execute_i16x8LtU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt16.self) { .allOnes(where: $0 .< $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8GtS") @inline(__always)
+    mutating func execute_i16x8GtS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int16.self) { .allOnes(where: $0 .> $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8GtU") @inline(__always)
+    mutating func execute_i16x8GtU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt16.self) { .allOnes(where: $0 .> $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8LeS") @inline(__always)
+    mutating func execute_i16x8LeS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int16.self) { .allOnes(where: $0 .<= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8LeU") @inline(__always)
+    mutating func execute_i16x8LeU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt16.self) { .allOnes(where: $0 .<= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8GeS") @inline(__always)
+    mutating func execute_i16x8GeS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int16.self) { .allOnes(where: $0 .>= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8GeU") @inline(__always)
+    mutating func execute_i16x8GeU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt16.self) { .allOnes(where: $0 .>= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4Eq") @inline(__always)
+    mutating func execute_i32x4Eq(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt32.self) { .allOnes(where: $0 .== $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4Ne") @inline(__always)
+    mutating func execute_i32x4Ne(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt32.self) { .allOnes(where: $0 .!= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4LtS") @inline(__always)
+    mutating func execute_i32x4LtS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int32.self) { .allOnes(where: $0 .< $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4LtU") @inline(__always)
+    mutating func execute_i32x4LtU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt32.self) { .allOnes(where: $0 .< $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4GtS") @inline(__always)
+    mutating func execute_i32x4GtS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int32.self) { .allOnes(where: $0 .> $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4GtU") @inline(__always)
+    mutating func execute_i32x4GtU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt32.self) { .allOnes(where: $0 .> $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4LeS") @inline(__always)
+    mutating func execute_i32x4LeS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int32.self) { .allOnes(where: $0 .<= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4LeU") @inline(__always)
+    mutating func execute_i32x4LeU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt32.self) { .allOnes(where: $0 .<= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4GeS") @inline(__always)
+    mutating func execute_i32x4GeS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int32.self) { .allOnes(where: $0 .>= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4GeU") @inline(__always)
+    mutating func execute_i32x4GeU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt32.self) { .allOnes(where: $0 .>= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2Eq") @inline(__always)
+    mutating func execute_i64x2Eq(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt64.self) { .allOnes(where: $0 .== $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2Ne") @inline(__always)
+    mutating func execute_i64x2Ne(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt64.self) { .allOnes(where: $0 .!= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2LtS") @inline(__always)
+    mutating func execute_i64x2LtS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int64.self) { .allOnes(where: $0 .< $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2GtS") @inline(__always)
+    mutating func execute_i64x2GtS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int64.self) { .allOnes(where: $0 .> $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2LeS") @inline(__always)
+    mutating func execute_i64x2LeS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int64.self) { .allOnes(where: $0 .<= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2GeS") @inline(__always)
+    mutating func execute_i64x2GeS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int64.self) { .allOnes(where: $0 .>= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4Eq") @inline(__always)
+    mutating func execute_f32x4Eq(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self, Int32.self) { .allOnes(where: $0 .== $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4Ne") @inline(__always)
+    mutating func execute_f32x4Ne(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self, Int32.self) { .allOnes(where: $0 .!= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4Lt") @inline(__always)
+    mutating func execute_f32x4Lt(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self, Int32.self) { .allOnes(where: $0 .< $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4Gt") @inline(__always)
+    mutating func execute_f32x4Gt(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self, Int32.self) { .allOnes(where: $0 .> $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4Le") @inline(__always)
+    mutating func execute_f32x4Le(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self, Int32.self) { .allOnes(where: $0 .<= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4Ge") @inline(__always)
+    mutating func execute_f32x4Ge(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self, Int32.self) { .allOnes(where: $0 .>= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2Eq") @inline(__always)
+    mutating func execute_f64x2Eq(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self, Int64.self) { .allOnes(where: $0 .== $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2Ne") @inline(__always)
+    mutating func execute_f64x2Ne(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self, Int64.self) { .allOnes(where: $0 .!= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2Lt") @inline(__always)
+    mutating func execute_f64x2Lt(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self, Int64.self) { .allOnes(where: $0 .< $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2Gt") @inline(__always)
+    mutating func execute_f64x2Gt(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self, Int64.self) { .allOnes(where: $0 .> $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2Le") @inline(__always)
+    mutating func execute_f64x2Le(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self, Int64.self) { .allOnes(where: $0 .<= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2Ge") @inline(__always)
+    mutating func execute_f64x2Ge(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self, Int64.self) { .allOnes(where: $0 .>= $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Not") @inline(__always)
+    mutating func execute_v128Not(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt64.self) { ~$0 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128And") @inline(__always)
+    mutating func execute_v128And(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt64.self) { $0 & $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Andnot") @inline(__always)
+    mutating func execute_v128Andnot(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt64.self) { $0 & ~$1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Or") @inline(__always)
+    mutating func execute_v128Or(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt64.self) { $0 | $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Xor") @inline(__always)
+    mutating func execute_v128Xor(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt64.self) { $0 ^ $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128Bitselect") @inline(__always)
+    mutating func execute_v128Bitselect(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdTernaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt64.self) { bitselect($0, $1, $2) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_v128AnyTrue") @inline(__always)
+    mutating func execute_v128AnyTrue(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdToI32(immediate, UInt64.self) { any($0 .!= 0) ? 1 : 0 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16Abs") @inline(__always)
+    mutating func execute_i8x16Abs(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int8.self) { $0.replacing(with: 0 &- $0, where: $0 .< 0) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16Neg") @inline(__always)
+    mutating func execute_i8x16Neg(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int8.self) { 0 &- $0 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16AllTrue") @inline(__always)
+    mutating func execute_i8x16AllTrue(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdToI32(immediate, UInt8.self) { all($0 .!= 0) ? 1 : 0 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16Bitmask") @inline(__always)
+    mutating func execute_i8x16Bitmask(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdToI32(immediate, Int8.self) { bitmask($0) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16Shl") @inline(__always)
+    mutating func execute_i8x16Shl(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdShift(immediate, UInt8.self) { $0 &<< $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16ShrS") @inline(__always)
+    mutating func execute_i8x16ShrS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdShift(immediate, Int8.self) { $0 &>> $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16ShrU") @inline(__always)
+    mutating func execute_i8x16ShrU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdShift(immediate, UInt8.self) { $0 &>> $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16Add") @inline(__always)
+    mutating func execute_i8x16Add(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt8.self) { $0 &+ $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16Sub") @inline(__always)
+    mutating func execute_i8x16Sub(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt8.self) { $0 &- $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16AddSatS") @inline(__always)
+    mutating func execute_i8x16AddSatS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int8.self) { saturatingAdd($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16AddSatU") @inline(__always)
+    mutating func execute_i8x16AddSatU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt8.self) { saturatingAdd($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16SubSatS") @inline(__always)
+    mutating func execute_i8x16SubSatS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int8.self) { saturatingSubtract($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16SubSatU") @inline(__always)
+    mutating func execute_i8x16SubSatU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt8.self) { saturatingSubtract($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16AvgrU") @inline(__always)
+    mutating func execute_i8x16AvgrU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt8.self) { roundingAverage($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16MinS") @inline(__always)
+    mutating func execute_i8x16MinS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int8.self) { pointwiseMin($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16MinU") @inline(__always)
+    mutating func execute_i8x16MinU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt8.self) { pointwiseMin($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16MaxS") @inline(__always)
+    mutating func execute_i8x16MaxS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int8.self) { pointwiseMax($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16MaxU") @inline(__always)
+    mutating func execute_i8x16MaxU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt8.self) { pointwiseMax($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8Abs") @inline(__always)
+    mutating func execute_i16x8Abs(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int16.self) { $0.replacing(with: 0 &- $0, where: $0 .< 0) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8Neg") @inline(__always)
+    mutating func execute_i16x8Neg(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int16.self) { 0 &- $0 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8AllTrue") @inline(__always)
+    mutating func execute_i16x8AllTrue(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdToI32(immediate, UInt16.self) { all($0 .!= 0) ? 1 : 0 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8Bitmask") @inline(__always)
+    mutating func execute_i16x8Bitmask(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdToI32(immediate, Int16.self) { bitmask($0) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8Shl") @inline(__always)
+    mutating func execute_i16x8Shl(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdShift(immediate, UInt16.self) { $0 &<< $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8ShrS") @inline(__always)
+    mutating func execute_i16x8ShrS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdShift(immediate, Int16.self) { $0 &>> $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8ShrU") @inline(__always)
+    mutating func execute_i16x8ShrU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdShift(immediate, UInt16.self) { $0 &>> $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8Add") @inline(__always)
+    mutating func execute_i16x8Add(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt16.self) { $0 &+ $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8Sub") @inline(__always)
+    mutating func execute_i16x8Sub(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt16.self) { $0 &- $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8Mul") @inline(__always)
+    mutating func execute_i16x8Mul(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt16.self) { $0 &* $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8AddSatS") @inline(__always)
+    mutating func execute_i16x8AddSatS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int16.self) { saturatingAdd($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8AddSatU") @inline(__always)
+    mutating func execute_i16x8AddSatU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt16.self) { saturatingAdd($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8SubSatS") @inline(__always)
+    mutating func execute_i16x8SubSatS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int16.self) { saturatingSubtract($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8SubSatU") @inline(__always)
+    mutating func execute_i16x8SubSatU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt16.self) { saturatingSubtract($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8AvgrU") @inline(__always)
+    mutating func execute_i16x8AvgrU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt16.self) { roundingAverage($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8MinS") @inline(__always)
+    mutating func execute_i16x8MinS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int16.self) { pointwiseMin($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8MinU") @inline(__always)
+    mutating func execute_i16x8MinU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt16.self) { pointwiseMin($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8MaxS") @inline(__always)
+    mutating func execute_i16x8MaxS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int16.self) { pointwiseMax($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8MaxU") @inline(__always)
+    mutating func execute_i16x8MaxU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt16.self) { pointwiseMax($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4Abs") @inline(__always)
+    mutating func execute_i32x4Abs(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int32.self) { $0.replacing(with: 0 &- $0, where: $0 .< 0) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4Neg") @inline(__always)
+    mutating func execute_i32x4Neg(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int32.self) { 0 &- $0 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4AllTrue") @inline(__always)
+    mutating func execute_i32x4AllTrue(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdToI32(immediate, UInt32.self) { all($0 .!= 0) ? 1 : 0 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4Bitmask") @inline(__always)
+    mutating func execute_i32x4Bitmask(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdToI32(immediate, Int32.self) { bitmask($0) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4Shl") @inline(__always)
+    mutating func execute_i32x4Shl(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdShift(immediate, UInt32.self) { $0 &<< $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4ShrS") @inline(__always)
+    mutating func execute_i32x4ShrS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdShift(immediate, Int32.self) { $0 &>> $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4ShrU") @inline(__always)
+    mutating func execute_i32x4ShrU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdShift(immediate, UInt32.self) { $0 &>> $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4Add") @inline(__always)
+    mutating func execute_i32x4Add(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt32.self) { $0 &+ $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4Sub") @inline(__always)
+    mutating func execute_i32x4Sub(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt32.self) { $0 &- $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4Mul") @inline(__always)
+    mutating func execute_i32x4Mul(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt32.self) { $0 &* $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4MinS") @inline(__always)
+    mutating func execute_i32x4MinS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int32.self) { pointwiseMin($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4MinU") @inline(__always)
+    mutating func execute_i32x4MinU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt32.self) { pointwiseMin($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4MaxS") @inline(__always)
+    mutating func execute_i32x4MaxS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int32.self) { pointwiseMax($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4MaxU") @inline(__always)
+    mutating func execute_i32x4MaxU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt32.self) { pointwiseMax($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2Abs") @inline(__always)
+    mutating func execute_i64x2Abs(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int64.self) { $0.replacing(with: 0 &- $0, where: $0 .< 0) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2Neg") @inline(__always)
+    mutating func execute_i64x2Neg(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int64.self) { 0 &- $0 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2AllTrue") @inline(__always)
+    mutating func execute_i64x2AllTrue(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdToI32(immediate, UInt64.self) { all($0 .!= 0) ? 1 : 0 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2Bitmask") @inline(__always)
+    mutating func execute_i64x2Bitmask(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdToI32(immediate, Int64.self) { bitmask($0) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2Shl") @inline(__always)
+    mutating func execute_i64x2Shl(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdShift(immediate, UInt64.self) { $0 &<< $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2ShrS") @inline(__always)
+    mutating func execute_i64x2ShrS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdShift(immediate, Int64.self) { $0 &>> $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2ShrU") @inline(__always)
+    mutating func execute_i64x2ShrU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simdShift(immediate, UInt64.self) { $0 &>> $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2Add") @inline(__always)
+    mutating func execute_i64x2Add(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt64.self) { $0 &+ $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2Sub") @inline(__always)
+    mutating func execute_i64x2Sub(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt64.self) { $0 &- $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2Mul") @inline(__always)
+    mutating func execute_i64x2Mul(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt64.self) { $0 &* $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16NarrowI16X8S") @inline(__always)
+    mutating func execute_i8x16NarrowI16X8S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int16.self, Int8.self) { narrow($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16NarrowI16X8U") @inline(__always)
+    mutating func execute_i8x16NarrowI16X8U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int16.self, UInt8.self) { narrow($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8NarrowI32X4S") @inline(__always)
+    mutating func execute_i16x8NarrowI32X4S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int32.self, Int16.self) { narrow($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8NarrowI32X4U") @inline(__always)
+    mutating func execute_i16x8NarrowI32X4U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int32.self, UInt16.self) { narrow($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8ExtendLowI8X16S") @inline(__always)
+    mutating func execute_i16x8ExtendLowI8X16S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int8.self, Int16.self) { .init(truncatingIfNeeded: $0.lowHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8ExtendHighI8X16S") @inline(__always)
+    mutating func execute_i16x8ExtendHighI8X16S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int8.self, Int16.self) { .init(truncatingIfNeeded: $0.highHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8ExtmulLowI8X16S") @inline(__always)
+    mutating func execute_i16x8ExtmulLowI8X16S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int8.self, Int16.self) { Int16.Vector(truncatingIfNeeded: $0.lowHalf) &* Int16.Vector(truncatingIfNeeded: $1.lowHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8ExtmulHighI8X16S") @inline(__always)
+    mutating func execute_i16x8ExtmulHighI8X16S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int8.self, Int16.self) { Int16.Vector(truncatingIfNeeded: $0.highHalf) &* Int16.Vector(truncatingIfNeeded: $1.highHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8ExtaddPairwiseI8X16S") @inline(__always)
+    mutating func execute_i16x8ExtaddPairwiseI8X16S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int8.self, Int16.self) { Int16.Vector(truncatingIfNeeded: $0.evenHalf) &+ Int16.Vector(truncatingIfNeeded: $0.oddHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8ExtendLowI8X16U") @inline(__always)
+    mutating func execute_i16x8ExtendLowI8X16U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt8.self, UInt16.self) { .init(truncatingIfNeeded: $0.lowHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8ExtendHighI8X16U") @inline(__always)
+    mutating func execute_i16x8ExtendHighI8X16U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt8.self, UInt16.self) { .init(truncatingIfNeeded: $0.highHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8ExtmulLowI8X16U") @inline(__always)
+    mutating func execute_i16x8ExtmulLowI8X16U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt8.self, UInt16.self) { UInt16.Vector(truncatingIfNeeded: $0.lowHalf) &* UInt16.Vector(truncatingIfNeeded: $1.lowHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8ExtmulHighI8X16U") @inline(__always)
+    mutating func execute_i16x8ExtmulHighI8X16U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt8.self, UInt16.self) { UInt16.Vector(truncatingIfNeeded: $0.highHalf) &* UInt16.Vector(truncatingIfNeeded: $1.highHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8ExtaddPairwiseI8X16U") @inline(__always)
+    mutating func execute_i16x8ExtaddPairwiseI8X16U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt8.self, UInt16.self) { UInt16.Vector(truncatingIfNeeded: $0.evenHalf) &+ UInt16.Vector(truncatingIfNeeded: $0.oddHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4ExtendLowI16X8S") @inline(__always)
+    mutating func execute_i32x4ExtendLowI16X8S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int16.self, Int32.self) { .init(truncatingIfNeeded: $0.lowHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4ExtendHighI16X8S") @inline(__always)
+    mutating func execute_i32x4ExtendHighI16X8S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int16.self, Int32.self) { .init(truncatingIfNeeded: $0.highHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4ExtmulLowI16X8S") @inline(__always)
+    mutating func execute_i32x4ExtmulLowI16X8S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int16.self, Int32.self) { Int32.Vector(truncatingIfNeeded: $0.lowHalf) &* Int32.Vector(truncatingIfNeeded: $1.lowHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4ExtmulHighI16X8S") @inline(__always)
+    mutating func execute_i32x4ExtmulHighI16X8S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int16.self, Int32.self) { Int32.Vector(truncatingIfNeeded: $0.highHalf) &* Int32.Vector(truncatingIfNeeded: $1.highHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4ExtaddPairwiseI16X8S") @inline(__always)
+    mutating func execute_i32x4ExtaddPairwiseI16X8S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int16.self, Int32.self) { Int32.Vector(truncatingIfNeeded: $0.evenHalf) &+ Int32.Vector(truncatingIfNeeded: $0.oddHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4ExtendLowI16X8U") @inline(__always)
+    mutating func execute_i32x4ExtendLowI16X8U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt16.self, UInt32.self) { .init(truncatingIfNeeded: $0.lowHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4ExtendHighI16X8U") @inline(__always)
+    mutating func execute_i32x4ExtendHighI16X8U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt16.self, UInt32.self) { .init(truncatingIfNeeded: $0.highHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4ExtmulLowI16X8U") @inline(__always)
+    mutating func execute_i32x4ExtmulLowI16X8U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt16.self, UInt32.self) { UInt32.Vector(truncatingIfNeeded: $0.lowHalf) &* UInt32.Vector(truncatingIfNeeded: $1.lowHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4ExtmulHighI16X8U") @inline(__always)
+    mutating func execute_i32x4ExtmulHighI16X8U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt16.self, UInt32.self) { UInt32.Vector(truncatingIfNeeded: $0.highHalf) &* UInt32.Vector(truncatingIfNeeded: $1.highHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4ExtaddPairwiseI16X8U") @inline(__always)
+    mutating func execute_i32x4ExtaddPairwiseI16X8U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt16.self, UInt32.self) { UInt32.Vector(truncatingIfNeeded: $0.evenHalf) &+ UInt32.Vector(truncatingIfNeeded: $0.oddHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2ExtendLowI32X4S") @inline(__always)
+    mutating func execute_i64x2ExtendLowI32X4S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int32.self, Int64.self) { .init(truncatingIfNeeded: $0.lowHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2ExtendHighI32X4S") @inline(__always)
+    mutating func execute_i64x2ExtendHighI32X4S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int32.self, Int64.self) { .init(truncatingIfNeeded: $0.highHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2ExtmulLowI32X4S") @inline(__always)
+    mutating func execute_i64x2ExtmulLowI32X4S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int32.self, Int64.self) { Int64.Vector(truncatingIfNeeded: $0.lowHalf) &* Int64.Vector(truncatingIfNeeded: $1.lowHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2ExtmulHighI32X4S") @inline(__always)
+    mutating func execute_i64x2ExtmulHighI32X4S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int32.self, Int64.self) { Int64.Vector(truncatingIfNeeded: $0.highHalf) &* Int64.Vector(truncatingIfNeeded: $1.highHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2ExtendLowI32X4U") @inline(__always)
+    mutating func execute_i64x2ExtendLowI32X4U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt32.self, UInt64.self) { .init(truncatingIfNeeded: $0.lowHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2ExtendHighI32X4U") @inline(__always)
+    mutating func execute_i64x2ExtendHighI32X4U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt32.self, UInt64.self) { .init(truncatingIfNeeded: $0.highHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2ExtmulLowI32X4U") @inline(__always)
+    mutating func execute_i64x2ExtmulLowI32X4U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt32.self, UInt64.self) { UInt64.Vector(truncatingIfNeeded: $0.lowHalf) &* UInt64.Vector(truncatingIfNeeded: $1.lowHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2ExtmulHighI32X4U") @inline(__always)
+    mutating func execute_i64x2ExtmulHighI32X4U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt32.self, UInt64.self) { UInt64.Vector(truncatingIfNeeded: $0.highHalf) &* UInt64.Vector(truncatingIfNeeded: $1.highHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4DotI16X8S") @inline(__always)
+    mutating func execute_i32x4DotI16X8S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int16.self, Int32.self) { Int32.Vector(truncatingIfNeeded: $0.evenHalf) &* Int32.Vector(truncatingIfNeeded: $1.evenHalf) &+ Int32.Vector(truncatingIfNeeded: $0.oddHalf) &* Int32.Vector(truncatingIfNeeded: $1.oddHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8Q15MulrSatS") @inline(__always)
+    mutating func execute_i16x8Q15MulrSatS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int16.self) { q15MulRoundSaturating($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16Popcnt") @inline(__always)
+    mutating func execute_i8x16Popcnt(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt8.self) { lanewise($0) { UInt8($0.nonzeroBitCount) } }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4Ceil") @inline(__always)
+    mutating func execute_f32x4Ceil(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self) { $0.rounded(.up) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4Floor") @inline(__always)
+    mutating func execute_f32x4Floor(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self) { $0.rounded(.down) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4Trunc") @inline(__always)
+    mutating func execute_f32x4Trunc(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self) { $0.rounded(.towardZero) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4Nearest") @inline(__always)
+    mutating func execute_f32x4Nearest(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self) { $0.rounded(.toNearestOrEven) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4Abs") @inline(__always)
+    mutating func execute_f32x4Abs(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt32.self) { $0 & ~0x8000_0000 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4Neg") @inline(__always)
+    mutating func execute_f32x4Neg(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt32.self) { $0 ^ 0x8000_0000 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4Sqrt") @inline(__always)
+    mutating func execute_f32x4Sqrt(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self) { $0.squareRoot() }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4Add") @inline(__always)
+    mutating func execute_f32x4Add(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self) { $0 + $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4Sub") @inline(__always)
+    mutating func execute_f32x4Sub(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self) { $0 - $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4Mul") @inline(__always)
+    mutating func execute_f32x4Mul(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self) { $0 * $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4Div") @inline(__always)
+    mutating func execute_f32x4Div(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self) { $0 / $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4Min") @inline(__always)
+    mutating func execute_f32x4Min(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self) { lanewise($0, $1) { $0.min($1) } }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4Max") @inline(__always)
+    mutating func execute_f32x4Max(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self) { lanewise($0, $1) { $0.max($1) } }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4Pmin") @inline(__always)
+    mutating func execute_f32x4Pmin(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self) { $0.replacing(with: $1, where: $1 .< $0) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4Pmax") @inline(__always)
+    mutating func execute_f32x4Pmax(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self) { $0.replacing(with: $1, where: $0 .< $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2Ceil") @inline(__always)
+    mutating func execute_f64x2Ceil(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self) { $0.rounded(.up) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2Floor") @inline(__always)
+    mutating func execute_f64x2Floor(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self) { $0.rounded(.down) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2Trunc") @inline(__always)
+    mutating func execute_f64x2Trunc(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self) { $0.rounded(.towardZero) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2Nearest") @inline(__always)
+    mutating func execute_f64x2Nearest(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self) { $0.rounded(.toNearestOrEven) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2Abs") @inline(__always)
+    mutating func execute_f64x2Abs(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt64.self) { $0 & ~0x8000_0000_0000_0000 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2Neg") @inline(__always)
+    mutating func execute_f64x2Neg(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt64.self) { $0 ^ 0x8000_0000_0000_0000 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2Sqrt") @inline(__always)
+    mutating func execute_f64x2Sqrt(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self) { $0.squareRoot() }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2Add") @inline(__always)
+    mutating func execute_f64x2Add(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self) { $0 + $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2Sub") @inline(__always)
+    mutating func execute_f64x2Sub(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self) { $0 - $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2Mul") @inline(__always)
+    mutating func execute_f64x2Mul(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self) { $0 * $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2Div") @inline(__always)
+    mutating func execute_f64x2Div(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self) { $0 / $1 }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2Min") @inline(__always)
+    mutating func execute_f64x2Min(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self) { lanewise($0, $1) { $0.min($1) } }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2Max") @inline(__always)
+    mutating func execute_f64x2Max(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self) { lanewise($0, $1) { $0.max($1) } }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2Pmin") @inline(__always)
+    mutating func execute_f64x2Pmin(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self) { $0.replacing(with: $1, where: $1 .< $0) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2Pmax") @inline(__always)
+    mutating func execute_f64x2Pmax(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self) { $0.replacing(with: $1, where: $0 .< $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4TruncSatF32X4S") @inline(__always)
+    mutating func execute_i32x4TruncSatF32X4S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self, UInt32.self) { lanewise($0) { $0.truncSatToI32S } }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4TruncSatF32X4U") @inline(__always)
+    mutating func execute_i32x4TruncSatF32X4U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self, UInt32.self) { lanewise($0) { $0.truncSatToI32U } }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4ConvertI32X4S") @inline(__always)
+    mutating func execute_f32x4ConvertI32X4S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int32.self, Float.self) { .init($0) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4ConvertI32X4U") @inline(__always)
+    mutating func execute_f32x4ConvertI32X4U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt32.self, Float.self) { .init($0) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2ConvertLowI32X4S") @inline(__always)
+    mutating func execute_f64x2ConvertLowI32X4S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int32.self, Double.self) { .init($0.lowHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2ConvertLowI32X4U") @inline(__always)
+    mutating func execute_f64x2ConvertLowI32X4U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt32.self, Double.self) { .init($0.lowHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4TruncSatF64X2SZero") @inline(__always)
+    mutating func execute_i32x4TruncSatF64X2SZero(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self, UInt32.self) { .init(lowHalf: lanewise($0) { $0.truncSatToI32S }, highHalf: .zero) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4TruncSatF64X2UZero") @inline(__always)
+    mutating func execute_i32x4TruncSatF64X2UZero(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self, UInt32.self) { .init(lowHalf: lanewise($0) { $0.truncSatToI32U }, highHalf: .zero) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4DemoteF64X2Zero") @inline(__always)
+    mutating func execute_f32x4DemoteF64X2Zero(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self, Float.self) { .init(lowHalf: .init($0), highHalf: .zero) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2PromoteLowF32X4") @inline(__always)
+    mutating func execute_f64x2PromoteLowF32X4(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self, Double.self) { .init($0.lowHalf) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16RelaxedSwizzle") @inline(__always)
+    mutating func execute_i8x16RelaxedSwizzle(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt8.self) { swizzle($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4RelaxedTruncF32X4S") @inline(__always)
+    mutating func execute_i32x4RelaxedTruncF32X4S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self, UInt32.self) { lanewise($0) { $0.truncSatToI32S } }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4RelaxedTruncF32X4U") @inline(__always)
+    mutating func execute_i32x4RelaxedTruncF32X4U(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self, UInt32.self) { lanewise($0) { $0.truncSatToI32U } }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4RelaxedTruncF64X2SZero") @inline(__always)
+    mutating func execute_i32x4RelaxedTruncF64X2SZero(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self, UInt32.self) { .init(lowHalf: lanewise($0) { $0.truncSatToI32S }, highHalf: .zero) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4RelaxedTruncF64X2UZero") @inline(__always)
+    mutating func execute_i32x4RelaxedTruncF64X2UZero(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdUnaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self, UInt32.self) { .init(lowHalf: lanewise($0) { $0.truncSatToI32U }, highHalf: .zero) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4RelaxedMadd") @inline(__always)
+    mutating func execute_f32x4RelaxedMadd(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdTernaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self) { unfusedMultiplyAdd($0, $1, $2) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4RelaxedNmadd") @inline(__always)
+    mutating func execute_f32x4RelaxedNmadd(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdTernaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self) { unfusedMultiplyAdd(-$0, $1, $2) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2RelaxedMadd") @inline(__always)
+    mutating func execute_f64x2RelaxedMadd(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdTernaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self) { unfusedMultiplyAdd($0, $1, $2) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2RelaxedNmadd") @inline(__always)
+    mutating func execute_f64x2RelaxedNmadd(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdTernaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self) { unfusedMultiplyAdd(-$0, $1, $2) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i8x16RelaxedLaneselect") @inline(__always)
+    mutating func execute_i8x16RelaxedLaneselect(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdTernaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt64.self) { bitselect($0, $1, $2) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8RelaxedLaneselect") @inline(__always)
+    mutating func execute_i16x8RelaxedLaneselect(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdTernaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt64.self) { bitselect($0, $1, $2) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4RelaxedLaneselect") @inline(__always)
+    mutating func execute_i32x4RelaxedLaneselect(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdTernaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt64.self) { bitselect($0, $1, $2) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i64x2RelaxedLaneselect") @inline(__always)
+    mutating func execute_i64x2RelaxedLaneselect(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdTernaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, UInt64.self) { bitselect($0, $1, $2) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4RelaxedMin") @inline(__always)
+    mutating func execute_f32x4RelaxedMin(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self) { lanewise($0, $1) { $0.min($1) } }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f32x4RelaxedMax") @inline(__always)
+    mutating func execute_f32x4RelaxedMax(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Float.self) { lanewise($0, $1) { $0.max($1) } }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2RelaxedMin") @inline(__always)
+    mutating func execute_f64x2RelaxedMin(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self) { lanewise($0, $1) { $0.min($1) } }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_f64x2RelaxedMax") @inline(__always)
+    mutating func execute_f64x2RelaxedMax(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Double.self) { lanewise($0, $1) { $0.max($1) } }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8RelaxedQ15MulrS") @inline(__always)
+    mutating func execute_i16x8RelaxedQ15MulrS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int16.self) { q15MulRoundSaturating($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i16x8RelaxedDotI8X16I7X16S") @inline(__always)
+    mutating func execute_i16x8RelaxedDotI8X16I7X16S(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdBinaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int8.self, Int16.self) { relaxedDot($0, $1) }
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i32x4RelaxedDotI8X16I7X16AddS") @inline(__always)
+    mutating func execute_i32x4RelaxedDotI8X16I7X16AddS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.SimdTernaryOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        sp.pointee.simd(immediate, Int8.self, Int32.self) { relaxedDotAdd($0, $1, $2) }
         return next
     }
     @_silgen_name("wasmkit_execute_const32") @inline(__always)
@@ -7276,7 +9553,7 @@ extension Instruction {
             #if !(arch(i386) || arch(x86_64) || arch(arm) || arch(arm64) || arch(arm64_32))
             fatalError("Direct threading is not supported on this platform")
             #else
-            return CodeSlot(wasmkit_tc_exec_handlers.296)
+            return CodeSlot(wasmkit_tc_exec_handlers.549)
             #endif
         }
         /// The direct-threaded head slot of the `unalignedAtomicTrap` pseudo-instruction.
@@ -7289,7 +9566,7 @@ extension Instruction {
             #if !(arch(i386) || arch(x86_64) || arch(arm) || arch(arm64) || arch(arm64_32))
             fatalError("Direct threading is not supported on this platform")
             #else
-            return CodeSlot(wasmkit_tc_exec_handlers.297)
+            return CodeSlot(wasmkit_tc_exec_handlers.550)
             #endif
         }
         /// The direct-threaded head slot of the `outOfFuelTrap` pseudo-instruction.
@@ -7302,7 +9579,7 @@ extension Instruction {
             #if !(arch(i386) || arch(x86_64) || arch(arm) || arch(arm64) || arch(arm64_32))
             fatalError("Direct threading is not supported on this platform")
             #else
-            return CodeSlot(wasmkit_tc_exec_handlers.727)
+            return CodeSlot(wasmkit_tc_exec_handlers.980)
             #endif
         }
         /// The direct-threaded head slot of the `epochDeadlineTrap` pseudo-instruction.
@@ -7315,7 +9592,7 @@ extension Instruction {
             #if !(arch(i386) || arch(x86_64) || arch(arm) || arch(arm64) || arch(arm64_32))
             fatalError("Direct threading is not supported on this platform")
             #else
-            return CodeSlot(wasmkit_tc_exec_handlers.729)
+            return CodeSlot(wasmkit_tc_exec_handlers.982)
             #endif
         }
 }

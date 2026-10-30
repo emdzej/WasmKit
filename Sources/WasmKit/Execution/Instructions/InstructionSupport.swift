@@ -694,9 +694,6 @@ extension Instruction {
                     op.lane12, op.lane13, op.lane14, op.lane15,
                 ]
                 target.write("\(reg(op.result)) = i8x16.shuffle \(reg(op.lhs)), \(reg(op.rhs)), \(lanes)")
-            case .simd(let op):
-                let name = SIMDOpcode(rawValue: op.opcode).map { "\($0)" } ?? "unknown(\(op.opcode))"
-                target.write("\(reg(op.result)) = simd.\(name) lane:\(op.lane) \(reg(op.input0)), \(reg(op.input1)), \(reg(op.input2)) offset:\(offset(op.offset))")
             case .i32Add(let op): binop("i32.add", op)
             case .i32Sub(let op): binop("i32.sub", op)
             case .i32Mul(let op): binop("i32.mul", op)

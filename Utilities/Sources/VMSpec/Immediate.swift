@@ -403,17 +403,6 @@ extension VMGen.ImmediateLayout {
         $0.field(name: "result", type: .VReg)
     }
 
-    static let simd = Self(name: "SimdOperand") {
-        $0.field(name: "opcode", type: .UInt16)
-        $0.field(name: "lane", type: .UInt8)
-        $0.field(name: "reserved", type: .UInt8)
-        $0.field(name: "offset", type: .UInt64)
-        $0.field(name: "input0", type: .VReg)
-        $0.field(name: "input1", type: .VReg)
-        $0.field(name: "input2", type: .VReg)
-        $0.field(name: "result", type: .VReg)
-    }
-
     static let rmw = Self(name: "RmwOperand") {
         $0.field(name: "offset", type: .UInt64)
         $0.field(name: "pointer", type: .VReg)

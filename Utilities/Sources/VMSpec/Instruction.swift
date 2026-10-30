@@ -1712,8 +1712,7 @@ extension VMGen {
         let simdInsts: [Instruction] = [
             Instruction(name: "v128Const", documentation: "WebAssembly SIMD Instruction `v128.const`", immediateLayout: .v128Const),
             Instruction(name: "i8x16Shuffle", documentation: "WebAssembly SIMD Instruction `i8x16.shuffle`", immediateLayout: .i8x16Shuffle),
-            Instruction(name: "simd", documentation: "WebAssembly SIMD instruction (runtime-dispatched)", mayThrow: true, useCurrentMemory: .read, immediateLayout: .simd),
-        ]
+        ] + simdInstructions
         instructions += memoryLoadStoreInsts
         instructions += memoryOpInsts
         instructions += simdInsts

@@ -4853,17 +4853,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
             try validator.validateMemArg(memarg, naturalAlignment: load.naturalAlignment)
             guard let opcode = SIMDOpcode.fromLoad(load) else { preconditionFailure("missing SIMDOpcode mapping: \(load)") }
             try popPushEmit(.address(isMemory64: isMemory64), .v128) { pointer, result in
-                .simd(
-                    Instruction.SimdOperand(
-                        opcode: opcode.rawValue,
-                        lane: 0,
-                        reserved: 0,
-                        offset: memarg.offset,
-                        input0: pointer,
-                        input1: .zero,
-                        input2: .zero,
-                        result: result
-                    ))
+                .simd(opcode, load: .init(offset: memarg.offset, pointer: pointer, result: result))
             }
             return
         case .i32Load8S: instruction = Instruction.i32Load8S
@@ -4917,18 +4907,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
             let value = try popVRegOperand(.v128)
             let pointer = try popVRegOperand(.address(isMemory64: isMemory64))
             if let value = value, let pointer = pointer {
-                emit(
-                    .simd(
-                        Instruction.SimdOperand(
-                            opcode: opcode.rawValue,
-                            lane: 0,
-                            reserved: 0,
-                            offset: memarg.offset,
-                            input0: pointer,
-                            input1: value,
-                            input2: .zero,
-                            result: .zero
-                        )))
+                emit(.simd(opcode, store: .init(offset: memarg.offset, pointer: pointer, value: value)))
             }
             return
         case .i32Store8: instruction = Instruction.i32Store8
@@ -4986,14 +4965,14 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
         guard let opcode = SIMDOpcode.fromSimd(simd) else { preconditionFailure("missing SIMDOpcode mapping: \(simd)") }
         func emitUnaryV128() throws(WasmKitError) {
             try popPushEmit(.v128, .v128) { v0, result in
-                .simd(.init(opcode: opcode.rawValue, lane: 0, reserved: 0, offset: 0, input0: v0, input1: .zero, input2: .zero, result: result))
+                .simd(opcode, unary: .init(input: v0, result: result))
             }
         }
         func emitBinaryV128() throws(WasmKitError) {
             try pop2PushEmit((.v128, .v128), .v128) { popped, result in
                 let rhs = popped.0
                 let lhs = popped.1
-                return .simd(.init(opcode: opcode.rawValue, lane: 0, reserved: 0, offset: 0, input0: lhs, input1: rhs, input2: .zero, result: result))
+                return .simd(opcode, binary: .init(lhs: lhs, rhs: rhs, result: result))
             }
         }
         func emitTernaryV128() throws(WasmKitError) {
@@ -5001,38 +4980,38 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
                 let mask = popped.0
                 let b = popped.1
                 let a = popped.2
-                return .simd(.init(opcode: opcode.rawValue, lane: 0, reserved: 0, offset: 0, input0: a, input1: b, input2: mask, result: result))
+                return .simd(opcode, ternary: .init(a: a, b: b, c: mask, result: result))
             }
         }
         func emitUnaryI32() throws(WasmKitError) {
             try popPushEmit(.v128, .i32) { v0, result in
-                .simd(.init(opcode: opcode.rawValue, lane: 0, reserved: 0, offset: 0, input0: v0, input1: .zero, input2: .zero, result: result))
+                .simd(opcode, unary: .init(input: v0, result: result))
             }
         }
         func emitShift() throws(WasmKitError) {
             try pop2PushEmit((.i32, .v128), .v128) { popped, result in
                 let shift = popped.0
                 let vec = popped.1
-                return .simd(.init(opcode: opcode.rawValue, lane: 0, reserved: 0, offset: 0, input0: vec, input1: shift, input2: .zero, result: result))
+                return .simd(opcode, binary: .init(lhs: vec, rhs: shift, result: result))
             }
         }
 
         switch simd {
         case .i8x16Splat, .i16x8Splat, .i32x4Splat:
             try popPushEmit(.i32, .v128) { scalar, result in
-                .simd(.init(opcode: opcode.rawValue, lane: 0, reserved: 0, offset: 0, input0: scalar, input1: .zero, input2: .zero, result: result))
+                .simd(opcode, unary: .init(input: scalar, result: result))
             }
         case .i64x2Splat:
             try popPushEmit(.i64, .v128) { scalar, result in
-                .simd(.init(opcode: opcode.rawValue, lane: 0, reserved: 0, offset: 0, input0: scalar, input1: .zero, input2: .zero, result: result))
+                .simd(opcode, unary: .init(input: scalar, result: result))
             }
         case .f32x4Splat:
             try popPushEmit(.f32, .v128) { scalar, result in
-                .simd(.init(opcode: opcode.rawValue, lane: 0, reserved: 0, offset: 0, input0: scalar, input1: .zero, input2: .zero, result: result))
+                .simd(opcode, unary: .init(input: scalar, result: result))
             }
         case .f64x2Splat:
             try popPushEmit(.f64, .v128) { scalar, result in
-                .simd(.init(opcode: opcode.rawValue, lane: 0, reserved: 0, offset: 0, input0: scalar, input1: .zero, input2: .zero, result: result))
+                .simd(opcode, unary: .init(input: scalar, result: result))
             }
 
         case .v128Bitselect:
@@ -5121,39 +5100,39 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
         switch simdLane {
         case .i8x16ExtractLaneS, .i8x16ExtractLaneU, .i16x8ExtractLaneS, .i16x8ExtractLaneU, .i32x4ExtractLane:
             try popPushEmit(.v128, .i32) { vec, result in
-                .simd(.init(opcode: opcode.rawValue, lane: lane, reserved: 0, offset: 0, input0: vec, input1: .zero, input2: .zero, result: result))
+                .simd(opcode, extractLane: .init(vector: vec, result: result, lane: lane))
             }
         case .i64x2ExtractLane:
             try popPushEmit(.v128, .i64) { vec, result in
-                .simd(.init(opcode: opcode.rawValue, lane: lane, reserved: 0, offset: 0, input0: vec, input1: .zero, input2: .zero, result: result))
+                .simd(opcode, extractLane: .init(vector: vec, result: result, lane: lane))
             }
         case .f32x4ExtractLane:
             try popPushEmit(.v128, .f32) { vec, result in
-                .simd(.init(opcode: opcode.rawValue, lane: lane, reserved: 0, offset: 0, input0: vec, input1: .zero, input2: .zero, result: result))
+                .simd(opcode, extractLane: .init(vector: vec, result: result, lane: lane))
             }
         case .f64x2ExtractLane:
             try popPushEmit(.v128, .f64) { vec, result in
-                .simd(.init(opcode: opcode.rawValue, lane: lane, reserved: 0, offset: 0, input0: vec, input1: .zero, input2: .zero, result: result))
+                .simd(opcode, extractLane: .init(vector: vec, result: result, lane: lane))
             }
         case .i8x16ReplaceLane:
             try pop2PushEmit((.i32, .v128), .v128) { popped, result in
-                .simd(.init(opcode: opcode.rawValue, lane: lane, reserved: 0, offset: 0, input0: popped.1, input1: popped.0, input2: .zero, result: result))
+                .simd(opcode, replaceLane: .init(vector: popped.1, scalar: popped.0, result: result, lane: lane))
             }
         case .i16x8ReplaceLane, .i32x4ReplaceLane:
             try pop2PushEmit((.i32, .v128), .v128) { popped, result in
-                .simd(.init(opcode: opcode.rawValue, lane: lane, reserved: 0, offset: 0, input0: popped.1, input1: popped.0, input2: .zero, result: result))
+                .simd(opcode, replaceLane: .init(vector: popped.1, scalar: popped.0, result: result, lane: lane))
             }
         case .i64x2ReplaceLane:
             try pop2PushEmit((.i64, .v128), .v128) { popped, result in
-                .simd(.init(opcode: opcode.rawValue, lane: lane, reserved: 0, offset: 0, input0: popped.1, input1: popped.0, input2: .zero, result: result))
+                .simd(opcode, replaceLane: .init(vector: popped.1, scalar: popped.0, result: result, lane: lane))
             }
         case .f32x4ReplaceLane:
             try pop2PushEmit((.f32, .v128), .v128) { popped, result in
-                .simd(.init(opcode: opcode.rawValue, lane: lane, reserved: 0, offset: 0, input0: popped.1, input1: popped.0, input2: .zero, result: result))
+                .simd(opcode, replaceLane: .init(vector: popped.1, scalar: popped.0, result: result, lane: lane))
             }
         case .f64x2ReplaceLane:
             try pop2PushEmit((.f64, .v128), .v128) { popped, result in
-                .simd(.init(opcode: opcode.rawValue, lane: lane, reserved: 0, offset: 0, input0: popped.1, input1: popped.0, input2: .zero, result: result))
+                .simd(opcode, replaceLane: .init(vector: popped.1, scalar: popped.0, result: result, lane: lane))
             }
         }
     }
@@ -5180,13 +5159,13 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
             try pop2PushEmit((.v128, .address(isMemory64: isMemory64)), .v128) { popped, result in
                 let vec = popped.0
                 let ptr = popped.1
-                return .simd(.init(opcode: opcode.rawValue, lane: lane, reserved: 0, offset: memarg.offset, input0: ptr, input1: vec, input2: .zero, result: result))
+                return .simd(opcode, loadLane: .init(offset: memarg.offset, pointer: ptr, vector: vec, result: result, lane: lane))
             }
         case .v128Store8Lane, .v128Store16Lane, .v128Store32Lane, .v128Store64Lane:
             let vec = try popVRegOperand(.v128)
             let ptr = try popVRegOperand(.address(isMemory64: isMemory64))
             if let vec = vec, let ptr = ptr {
-                emit(.simd(.init(opcode: opcode.rawValue, lane: lane, reserved: 0, offset: memarg.offset, input0: ptr, input1: vec, input2: .zero, result: .zero)))
+                emit(.simd(opcode, storeLane: .init(offset: memarg.offset, pointer: ptr, vector: vec, lane: lane)))
             }
         }
     }

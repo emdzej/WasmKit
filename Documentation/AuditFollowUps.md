@@ -22,16 +22,6 @@ wabt 1.0.42.
   type. `wasmtime/import.wast` and `wasmtime/instance.wast` need exports the test harness's
   `host` instance does not have yet (`ComponentResourceTests.SpectestHost`).
 
-## Performance
-
-### 2. SIMD still dispatches through one handler
-
-- **Where:** `Sources/WasmKit/Execution/Instructions/SIMDCore.swift`.
-- **Problem:** every SIMD instruction decodes `SIMDOpcode` and switches on it, then switches again
-  per lane. Phase 4 removed the per-operation allocations, which made SIMD 2.5× faster.
-- **Fix:** generate one instruction per operation in `Utilities/Sources/VMGen.swift` and
-  `VMSpec`, working on `SIMD16<UInt8>`, `SIMD4<Float>` and so on via `V128Storage`.
-
 ## Notes
 
 - **GC types:** `TypeCanonicalizer` (`Sources/WasmKit/TypeCanonicalization.swift`) identifies a

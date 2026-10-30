@@ -374,6 +374,9 @@ enum VMGen {
         inlineImpls["atomicFence"] = """
         atomicFence(sp: sp.pointee)
         """
+        for op in simdOps {
+            inlineImpls[op.name] = op.implementation
+        }
 
         return inlineImpls
     }
@@ -1001,7 +1004,7 @@ enum VMGen {
             ),
             GeneratedFile(
                 projectSources + ["WasmKit", "Execution", "Instructions", "Instruction.swift"],
-                header + generateEnumDefinition(instructions: instructions)
+                header + generateEnumDefinition(instructions: instructions) + generateSIMDConstructors()
             ),
         ]
 
