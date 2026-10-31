@@ -20,6 +20,13 @@ enum SwiftName {
         makeName(ConvertCase.camelCase(kebab: kebab))
     }
 
+    /// Make an argument label at a call site from the given kebab-case text: only `inout`,
+    /// `var` and `let` need escaping there, and escaping others is warned about.
+    static func makeArgumentLabel(kebab: String) -> String {
+        let name = ConvertCase.camelCase(kebab: kebab)
+        return ["inout", "var", "let"].contains(name) ? "`\(name)`" : name
+    }
+
     /// Make a Swift type name from the given kebab-case text.
     ///
     /// A type named after a keyword gets a trailing underscore rather than backticks: `Self`

@@ -4,8 +4,16 @@ import WasmTypes
 // per operation. Each is a Swift expression over the vectors defined here, which the compiler
 // lowers to the host's vector instructions.
 
+// What `SIMD` requires of its scalars, which a lane type must refine to be one: Embedded Swift
+// has no `Codable`, and does not require it.
+#if $Embedded
+    typealias V128LaneScalar = SIMDScalar & Hashable
+#else
+    typealias V128LaneScalar = SIMDScalar & Hashable & Codable
+#endif
+
 /// A type a `v128` can be split into lanes of.
-protocol V128Lane: SIMDScalar {
+protocol V128Lane: V128LaneScalar {
     /// The vector of the lanes that make up a `v128`, such as `SIMD16<UInt8>`.
     associatedtype Vector: SIMD where Vector.Scalar == Self
     /// The lane whose bytes, in little-endian order, are those of `lane` in host order.

@@ -44,7 +44,7 @@
             #expect(parsed == value)
         }
 
-        @Test(arguments: [Float(0.1), 16_777_217, Float(1) / 3])
+        @Test(arguments: [Float(0.1), 16_777_216, Float(1) / 3])
         func aFloat32ReadsBackAsItself(value: Float) throws {
             let text = WAVEFormatter.format(.float32(value))
             guard case .float32(let parsed) = try parse(text, as: .primitive(.float32)) else {

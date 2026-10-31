@@ -133,7 +133,7 @@ import WasmTypes
 
     @Test func stdioStatusFlagsAreLeftAlone() throws {
         let bridge = try WASIBridgeToHost()
-        try bridge.runAndClose { bridge in
+        _ = try bridge.runAndClose { bridge in
             #expect(throws: WASIAbi.Errno.ENOTSUP) {
                 try bridge.underlying.fd_fdstat_set_flags(fd: 1, flags: .NONBLOCK)
             }

@@ -17,7 +17,7 @@ struct HostWorldGenerator: ASTVisitor {
     func visitPost<T>(_: T) throws {}
 
     func visit(_ world: SyntaxNode<WorldSyntax>) throws {
-        try printer.write(
+        printer.write(
             line: """
 
                 struct \(SwiftName.makeTypeName(world.name)) {

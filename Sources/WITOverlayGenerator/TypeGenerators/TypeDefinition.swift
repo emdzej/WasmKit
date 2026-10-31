@@ -18,7 +18,7 @@ struct TypeDefinition {
     func print(printer: SourcePrinter, signatureTranslation: SignatureTranslation, typeDef: SyntaxNode<TypeDefSyntax>) throws {
         switch typeDef.body {
         case .record(let record):
-            try printer.write(line: "\(accessLevel) struct \(SwiftName.makeTypeName(typeDef.name)) {")
+            printer.write(line: "\(accessLevel) struct \(SwiftName.makeTypeName(typeDef.name)) {")
             try printer.indent {
                 for field in record.fields {
                     try printer.write(line: "\(accessLevel) var \(SwiftName.makeName(field.name)): \(signatureTranslation.convertType(field.type))")
@@ -48,7 +48,7 @@ struct TypeDefinition {
             try printer.write(line: "\(accessLevel) typealias \(SwiftName.makeTypeName(typeDef.name)) = \(signatureTranslation.convertType(typeAlias.typeRepr))")
         case .enum(let enumType):
             let discriminantType = CanonicalABI.discriminantType(numberOfCases: UInt32(enumType.cases.count))
-            try printer.write(line: "\(accessLevel) enum \(SwiftName.makeTypeName(typeDef.name)): \(discriminantType.swiftTypeName) {")
+            printer.write(line: "\(accessLevel) enum \(SwiftName.makeTypeName(typeDef.name)): \(discriminantType.swiftTypeName) {")
             try printer.indent {
                 for enumCase in enumType.cases {
                     try printer.write(line: "case \(SwiftName.makeName(enumCase.name))")
@@ -62,7 +62,7 @@ struct TypeDefinition {
             }
             printer.write(line: "}")
         case .variant(let variant):
-            try printer.write(line: "\(accessLevel) enum \(SwiftName.makeTypeName(typeDef.name)) {")
+            printer.write(line: "\(accessLevel) enum \(SwiftName.makeTypeName(typeDef.name)) {")
             try printer.indent {
                 for variantCase in variant.cases {
                     var caseDef = try "case \(SwiftName.makeName(variantCase.name))"
