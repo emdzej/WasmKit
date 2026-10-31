@@ -456,19 +456,13 @@
             }
         }
 
-        /// Parse a value bound.
+        /// Parse a value bound, as wasm-tools encodes it: just the value type.
+        ///
+        /// `Binary.md` has a `0x00` or `0x01` before it, for an `eq` bound or a type. The two
+        /// cannot be told apart, as `0x00` and `0x01` are type indices too, and value imports
+        /// are not standard yet, so this reads what the tool that writes them writes.
         mutating func parseValueBound() throws(WasmParserError) -> ComponentValueBound {
-            let byte = try stream.consumeAny()
-            switch byte {
-            case 0x00:
-                let idx: UInt32 = try parseUnsigned()
-                return .eq(valueIndex: idx)
-            case 0x01:
-                let valType = try parseValType()
-                return .type(valType)
-            default:
-                throw makeError(.malformedSectionID(byte))
-            }
+            .type(try parseValType())
         }
 
         /// Parse a type bound.

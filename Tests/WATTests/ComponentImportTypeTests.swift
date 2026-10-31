@@ -18,10 +18,9 @@
         func instantiate(
             _ wat: String, imports: ComponentImports = ComponentImports(),
             checking: ComponentLoader.ImportTypeChecking = .lenient, failsWith message: String?,
-            patch: ([UInt8]) throws -> [UInt8] = { $0 },
             sourceLocation: SourceLocation = #_sourceLocation
         ) throws {
-            let component = try parseComponent(bytes: try patch(try wat2wasm(watContent: Array(wat.utf8))))
+            let component = try parseComponent(bytes: try wat2wasm(watContent: Array(wat.utf8)))
             do {
                 _ = try ComponentLoader(store: store, importTypeChecking: checking).instantiate(component: component, imports: imports)
                 #expect(message == nil, "instantiated, expected \(message ?? "")", sourceLocation: sourceLocation)
@@ -196,20 +195,6 @@
                 """#
             func value(_ elements: [ComponentValue]) -> ComponentImports {
                 imports(["v": .value(.tuple(elements))])
-            }
-            // wasm-tools 1.244 encodes the import's value type without the `0x01` before it that
-            // `valuebound` in `Binary.md` has, and the parser follows `Binary.md`. The import
-            // section is the last before the name section, so it can grow without moving others.
-            func instantiate(_ wat: String, imports: ComponentImports, failsWith message: String?) throws {
-                try self.instantiate(wat, imports: imports, failsWith: message) { bytes in
-                    let encoded: [UInt8] = [0x0a, 0x06, 0x01, 0x00, 0x01, UInt8(ascii: "v"), 0x02]
-                    let start = try #require(
-                        bytes.indices.first { bytes[$0...].starts(with: encoded) }, "no value import \(bytes)")
-                    var patched = bytes
-                    patched[start + 1] += 1
-                    patched.insert(0x01, at: start + encoded.count)
-                    return patched
-                }
             }
             let ok: [ComponentValue] = [.u32(1), .list([.string("x")]), .option(.enum("b")), .result(ok: .u8(2), error: nil)]
             try instantiate(wat, imports: value(ok), failsWith: nil)

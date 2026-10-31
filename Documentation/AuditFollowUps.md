@@ -17,10 +17,11 @@ wabt 1.0.42.
   does not and to export everything it does, with the same sorts (`checkComponent` in
   `ComponentLoader.swift`). The types of what it imports and exports are not compared: they are
   only known once it is instantiated.
-- **Value import encoding:** the parser reads a value import's `valuebound` as `Binary.md` has
-  it, with `0x00` or `0x01` before the value. wasm-tools 1.244 writes the value type with no
-  such byte, so components it encodes with value imports do not parse. The two cannot be told
-  apart, as `0x00` and `0x01` are type indices too.
+- **Value import encoding:** the parser reads a value import's type as wasm-tools 1.244 writes
+  it, with nothing before it. `Binary.md` has a `0x00` (an `eq` bound) or `0x01` (a type) there
+  instead, and the two cannot be told apart, as `0x00` and `0x01` are type indices too. Value
+  imports are not standard yet; if wasm-tools moves to `Binary.md`'s form, so should
+  `parseValueBound` in `ComponentParser.swift`.
 - **GC types:** `TypeCanonicalizer` (`Sources/WasmKit/TypeCanonicalization.swift`) identifies a
   type by its function signature, so it rejects recursion groups of several types, types that
   refer to themselves, and non-final types or declared supertypes. GC execution will need
