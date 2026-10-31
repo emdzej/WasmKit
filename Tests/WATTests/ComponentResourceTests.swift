@@ -44,6 +44,31 @@
             try run(path, instantiate: path.hasPrefix("wasm-tools/") ? .withoutImports : .all)
         }
 
+        /// A component can instantiate one defined before it in an enclosing component, so a chain
+        /// of them instantiates as deeply as it is long, however shallow the nesting: the depth is
+        /// bounded, rather than overflowing the stack.
+        @Test(.enabled(if: FileManager.default.fileExists(atPath: defaultWasmToolsPath)))
+        func instantiationDepthIsBounded() throws {
+            // Instantiates `count + 1` components inside the outermost one: $c`count` down to $c0.
+            func chain(_ count: Int) throws -> ParsedComponent {
+                var wat = "(component (component $c0)\n"
+                for i in 1...count {
+                    wat += "(component $c\(i) (alias outer 1 $c\(i - 1) (component $x)) (instance (instantiate $x)))\n"
+                }
+                wat += "(instance (instantiate $c\(count))))"
+                return try parseComponent(bytes: try wat2wasm(watContent: Array(wat.utf8)))
+            }
+            let loader = ComponentLoader(store: Store(engine: Engine()))
+            _ = try loader.instantiate(component: try chain(31))
+            for count in [32, 1000] {
+                #expect {
+                    _ = try loader.instantiate(component: try chain(count))
+                } throws: { error in
+                    "\(error)".contains("components instantiate each other more than 32 deep")
+                }
+            }
+        }
+
         /// A host passes and receives handles to a component's resources and its own.
         @Test(.enabled(if: FileManager.default.fileExists(atPath: defaultWasmToolsPath)))
         func hostPassesHandles() throws {

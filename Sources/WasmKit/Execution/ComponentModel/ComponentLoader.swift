@@ -98,12 +98,24 @@
             try instantiate(ComponentDefinition(component: component, outer: []), imports: imports)
         }
 
+        /// How deeply instantiations may nest: one component's definitions instantiating another,
+        /// and so on. Each level recurses, and nesting alone does not bound it, as a component
+        /// can instantiate one defined before it in an enclosing component: in a debug build a
+        /// chain of 50 to 70 overflowed a test thread's stack. As for nesting, which also limits
+        /// the parser, real components go a handful deep.
+        static let maxInstantiationDepth = 32
+
         /// Instantiates a component definition, whose outer aliases resolve against the
-        /// components it was defined in.
+        /// components it was defined in, inside `depth` other instantiations.
         func instantiate(
             _ definition: ComponentDefinition,
-            imports: ComponentImports
+            imports: ComponentImports,
+            depth: Int = 0
         ) throws -> ComponentInstance {
+            guard depth <= Self.maxInstantiationDepth else {
+                throw ComponentLoaderError.instantiationFailed(
+                    "components instantiate each other more than \(Self.maxInstantiationDepth) deep")
+            }
             let component = definition.component
             // Step 0: Validate imports
             try validateImports(component.imports, against: imports)
@@ -111,7 +123,8 @@
             var context = InstantiationContext(
                 store: store,
                 imports: imports,
-                outer: definition.outer
+                outer: definition.outer,
+                depth: depth
             )
 
             // Step 1: Process definitions in the order they appear in the binary. Each kind of
@@ -124,8 +137,7 @@
                     guard component.nestedComponents.indices.contains(index) else {
                         throw ComponentLoaderError.invalidComponentIndex(index)
                     }
-                    context.components.append(
-                        ComponentDefinition(component: component.nestedComponents[index], outer: context.scopeForNested))
+                    context.components.append(.local(component.nestedComponents[index]))
                 case .coreModule(let index):
                     guard component.coreModules.indices.contains(index) else {
                         throw ComponentLoaderError.invalidCoreModuleIndex(index)
@@ -241,7 +253,7 @@
         var componentFunctions: [InternalComponentFunction] = []
 
         /// The component index space: nested and imported component definitions
-        var components: [ComponentDefinition] = []
+        var components: [ComponentEntry] = []
 
         /// Nested component instances (from component instances index space)
         var nestedComponents: [InternalComponentInstance] = []
@@ -249,16 +261,14 @@
         /// The component's exports so far
         var exports: [String: InternalComponentExternalValue] = [:]
 
-        init(store: Store, imports: ComponentImports, outer: [OuterScope]) {
+        /// How many instantiations this one is inside.
+        let depth: Int
+
+        init(store: Store, imports: ComponentImports, outer: [OuterScope], depth: Int) {
             self.store = store
             self.imports = imports
             self.outer = outer
-        }
-
-        /// What a component defined here sees of this one and those enclosing it: the
-        /// definitions so far, as an outer alias can only refer to those before it.
-        var scopeForNested: [OuterScope] {
-            [OuterScope(types: types, components: components, coreModules: coreModules)] + outer
+            self.depth = depth
         }
 
         /// The component `count` out from this one: 0 for this one.
@@ -268,6 +278,24 @@
                 throw ComponentLoaderError.instantiationFailed("outer alias count \(count) leaves the outermost component")
             }
             return outer[count - 1]
+        }
+
+        /// The component at `index` in the component `count` out from this one: 0 for this one.
+        func component(_ index: Int, outerCount count: Int = 0) throws -> ComponentDefinition {
+            let scope = try outerScope(count: count)
+            guard scope.components.indices.contains(index) else {
+                throw ComponentLoaderError.invalidComponentIndex(index)
+            }
+            switch scope.components[index] {
+            case .definition(let definition):
+                return definition
+            case .local(let component):
+                // What it sees of the component it is defined in is what was defined before it,
+                // as an outer alias can only refer to those.
+                let definedIn = OuterScope(
+                    types: scope.types, components: Array(scope.components.prefix(index)), coreModules: scope.coreModules)
+                return ComponentDefinition(component: component, outer: [definedIn] + outer.dropFirst(count))
+            }
         }
 
         /// The type space `count` components out from this one: 0 for this one.
@@ -284,8 +312,20 @@
     /// What an outer alias can refer to in an enclosing component.
     struct OuterScope {
         let types: ComponentTypeSpace
-        let components: [ComponentDefinition]
+        let components: [ComponentEntry]
         let coreModules: [Module]
+    }
+
+    /// An entry in a component's component index space.
+    ///
+    /// One defined there is kept as parsed, and given the scopes it sees when it is used: were
+    /// each to keep a copy of the definitions before it, each with its own copy, a list of
+    /// sibling components would be a chain as long as the list, freed recursively, which for
+    /// a thousand of them overflowed the stack, and as large as the square of its length.
+    enum ComponentEntry {
+        case local(ParsedComponent)
+        /// An imported or aliased one, which carries its scopes.
+        case definition(ComponentDefinition)
     }
 
     /// A component definition, with the enclosing components its outer aliases refer to.
@@ -796,7 +836,7 @@
                 if case .component(let declaration) = declaration {
                     try checkComponent(definition, against: declaration, name: importDef.name)
                 }
-                context.components.append(definition)
+                context.components.append(.definition(definition))
             case (.type(let bound), let value):
                 context.types.append(try importedType(value, bound: bound, name: importDef.name, scope: context.types.entry))
             default:
@@ -1137,11 +1177,9 @@
                 value = .coreInstance(context.coreInstances[instanceIndex])
 
             case .component(let index):
-                guard context.components.indices.contains(index) else {
-                    throw ComponentLoaderError.invalidComponentIndex(index)
-                }
-                value = .component(context.components[index])
-                context.components.append(context.components[index])
+                let definition = try context.component(index)
+                value = .component(definition)
+                context.components.append(.definition(definition))
             }
             context.exports[export.name] = value
         }
@@ -1276,13 +1314,9 @@
                     guard case .component(let definition) = try componentInstanceExport(instanceIndex, name, context: context) else {
                         throw ComponentLoaderError.instantiationFailed("Export '\(name)' of instance \(instanceIndex) is not a component")
                     }
-                    context.components.append(definition)
+                    context.components.append(.definition(definition))
                 case .outer(let count, let index):
-                    let scope = try context.outerScope(count: count)
-                    guard scope.components.indices.contains(index) else {
-                        throw ComponentLoaderError.invalidComponentIndex(index)
-                    }
-                    context.components.append(scope.components[index])
+                    context.components.append(.definition(try context.component(index, outerCount: count)))
                 case .coreInstanceExport:
                     throw ComponentLoaderError.instantiationFailed("A core instance export cannot be a component")
                 }
@@ -1535,11 +1569,7 @@
         ) throws {
             switch instanceDef {
             case .instantiate(let componentIndex, let args):
-                guard componentIndex < context.components.count else {
-                    throw ComponentLoaderError.invalidComponentIndex(componentIndex)
-                }
-
-                let nestedComponent = context.components[componentIndex]
+                let nestedComponent = try context.component(componentIndex)
 
                 // Build imports for the nested component from the args
                 var nestedImports = ComponentImports()
@@ -1548,7 +1578,7 @@
                 }
 
                 // Recursively instantiate the nested component
-                let nestedInstance = try instantiate(nestedComponent, imports: nestedImports)
+                let nestedInstance = try instantiate(nestedComponent, imports: nestedImports, depth: context.depth + 1)
                 context.nestedComponents.append(nestedInstance.handle)
                 context.componentInstances.append(nestedInstance.handle)
 
@@ -1616,10 +1646,7 @@
                 return .type(try context.runtimeType(ComponentTypeIndex(rawValue: arg.index)))
 
             case .component:
-                guard context.components.indices.contains(arg.index) else {
-                    throw ComponentLoaderError.invalidComponentIndex(arg.index)
-                }
-                return .component(context.components[arg.index])
+                return .component(try context.component(arg.index))
 
             case .value:
                 throw ComponentLoaderError.instantiationFailed(
@@ -1685,10 +1712,7 @@
                 return .type(try context.runtimeType(ComponentTypeIndex(rawValue: export.index)))
 
             case .component:
-                guard context.components.indices.contains(export.index) else {
-                    throw ComponentLoaderError.invalidComponentIndex(export.index)
-                }
-                return .component(context.components[export.index])
+                return .component(try context.component(export.index))
 
             case .value:
                 throw ComponentLoaderError.instantiationFailed(

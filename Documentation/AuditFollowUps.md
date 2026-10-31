@@ -26,9 +26,12 @@ wabt 1.0.42.
   type by its function signature, so it rejects recursion groups of several types, types that
   refer to themselves, and non-final types or declared supertypes. GC execution will need
   iso-recursive canonicalization and declared subtyping in `TypeMatching.swift` instead.
-- **Nesting limit:** components may nest 32 deep (`maxComponentNestingDepth` in
-  `ParsedComponentBuilder.swift`). In a debug build, a 512 KiB test-thread stack overflowed
-  somewhere between 40 and 60 levels.
+- **Nesting limits:** components may nest 32 deep (`maxComponentNestingDepth` in
+  `ParsedComponentBuilder.swift`), and instantiations 32 deep (`maxInstantiationDepth` in
+  `ComponentLoader.swift`), which nesting does not bound: a component can instantiate one defined
+  before it in an enclosing component. Both recurse; in a debug build a 512 KiB test-thread stack
+  overflowed at 40 to 60 levels of nesting, and at 50 to 70 instantiations. Real components go a
+  handful deep, so the limits stay rather than the recursion becoming iterative.
 - **Component test coverage:** `ComponentResourceTests.suite` runs every file in
   `Vendor/component-model/test` but `async` from the binaries wasm-tools encodes, apart from
   those its `unsupported` list gives a reason for: Component Model async, and files whose
