@@ -231,6 +231,7 @@
         var coreTables: [Table] = []
         var coreMemories: [Memory] = []
         var coreGlobals: [Global] = []
+        var coreTags: [Tag] = []
 
         /// The component instance index space: imported and nested instances, in the order they
         /// were defined. Every instance index resolves against this.
@@ -257,12 +258,12 @@
         /// What a component defined here sees of this one and those enclosing it: the
         /// definitions so far, as an outer alias can only refer to those before it.
         var scopeForNested: [OuterScope] {
-            [OuterScope(types: types, components: components)] + outer
+            [OuterScope(types: types, components: components, coreModules: coreModules)] + outer
         }
 
         /// The component `count` out from this one: 0 for this one.
         func outerScope(count: Int) throws -> OuterScope {
-            if count == 0 { return OuterScope(types: types, components: components) }
+            if count == 0 { return OuterScope(types: types, components: components, coreModules: coreModules) }
             guard outer.indices.contains(count - 1) else {
                 throw ComponentLoaderError.instantiationFailed("outer alias count \(count) leaves the outermost component")
             }
@@ -284,6 +285,7 @@
     struct OuterScope {
         let types: ComponentTypeSpace
         let components: [ComponentDefinition]
+        let coreModules: [Module]
     }
 
     /// A component definition, with the enclosing components its outer aliases refer to.
@@ -630,8 +632,9 @@
 
     /// The kind of component import.
     public enum ParsedComponentImportKind {
-        /// Import a function
-        case function(ComponentFuncType)
+        /// Import a function of the type at this index, which is resolved when the component is
+        /// instantiated, as it can be one an alias brings in
+        case function(ComponentTypeIndex)
 
         /// Import a value
         case value(ComponentDefValType)
@@ -779,8 +782,8 @@
                     }
                 }
                 context.componentInstances.append(instance)
-            case (.function(let type), .function(let function)):
-                try checkFunction(function, against: type, in: context.types, name: importDef.name)
+            case (.function(let typeIndex), .function(let function)):
+                try checkFunction(function, against: try context.types.functionType(typeIndex), in: context.types, name: importDef.name)
                 context.componentFunctions.append(function)
             case (.value(let type), .value(let value)):
                 try checkValue(value, against: type, in: context.types, name: importDef.name)
@@ -1222,7 +1225,7 @@
                     // Core function alias from core instance export
                     let coreFunc = try resolveCoreFunctionAlias(alias, context: &context)
                     context.coreFunctions.append(coreFunc)
-                case .memory, .table, .global:
+                case .memory, .table, .global, .tag:
                     // Canon options name their memory by its instance export, so these are only
                     // for inline core instances.
                     guard case .coreInstanceExport(let instanceIndex, let name) = alias.source else {
@@ -1241,6 +1244,9 @@
                     case .table:
                         guard let table = exports[table: name] else { throw notFound }
                         context.coreTables.append(table)
+                    case .tag:
+                        guard case .tag(let tag) = exports[name] else { throw notFound }
+                        context.coreTags.append(tag)
                     default:
                         guard let global = exports[global: name] else { throw notFound }
                         context.coreGlobals.append(global)
@@ -1252,8 +1258,14 @@
                             throw ComponentLoaderError.instantiationFailed("Export '\(name)' of instance \(instanceIndex) is not a core module")
                         }
                         context.coreModules.append(module)
-                    case .outer, .coreInstanceExport:
-                        throw ComponentLoaderError.instantiationFailed("Core module aliases other than instance exports are not supported yet")
+                    case .outer(let count, let index):
+                        let scope = try context.outerScope(count: count)
+                        guard scope.coreModules.indices.contains(index) else {
+                            throw ComponentLoaderError.invalidCoreModuleIndex(index)
+                        }
+                        context.coreModules.append(scope.coreModules[index])
+                    case .coreInstanceExport:
+                        throw ComponentLoaderError.instantiationFailed("A core instance export cannot be a core module")
                     }
                 default:
                     break
@@ -1434,6 +1446,12 @@
                     throw ComponentLoaderError.instantiationFailed("core global index \(export.index) out of bounds")
                 }
                 return .global(context.coreGlobals[export.index])
+
+            case .tag:
+                guard context.coreTags.indices.contains(export.index) else {
+                    throw ComponentLoaderError.instantiationFailed("core tag index \(export.index) out of bounds")
+                }
+                return .tag(context.coreTags[export.index])
 
             case .type:
                 throw ComponentLoaderError.instantiationFailed("Inline type exports not yet supported")
@@ -1666,7 +1684,13 @@
             case .type:
                 return .type(try context.runtimeType(ComponentTypeIndex(rawValue: export.index)))
 
-            case .value, .component:
+            case .component:
+                guard context.components.indices.contains(export.index) else {
+                    throw ComponentLoaderError.invalidComponentIndex(export.index)
+                }
+                return .component(context.components[export.index])
+
+            case .value:
                 throw ComponentLoaderError.instantiationFailed(
                     "Unsupported sort in inline export: \(export.sort)"
                 )
@@ -1755,9 +1779,12 @@
             // lowers its results back for the core caller. Handles move through the caller's table.
             let store = self.store
             let instance = context.state
+            let callsComponent: Bool
+            if case .lifted = componentFunction.handle.implementation { callsComponent = true } else { callsComponent = false }
             let wrappedFunction = Function(store: store, type: coreFuncType) { [componentFunction] _, coreArgs in
                 try instance.checkMayLeave()
                 var abi = CanonicalABIContext(types: types, options: options, store: store, instance: instance)
+                abi.callsComponent = callsComponent
                 // The borrows lent to the call end with it, however it ends: a trap leaves the
                 // instance usable, and its handles must not stay lent.
                 defer { abi.releaseLenders() }

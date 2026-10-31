@@ -5,9 +5,9 @@
     import WasmKit
     import WasmTools
 
-    /// Runs the component model test suite's resource tests against the binaries wasm-tools
-    /// encodes from them, as `ComponentTests` cannot: the text format encoder here has no
-    /// syntax for resources yet.
+    /// Runs the component model test suite against the binaries wasm-tools encodes from it, as
+    /// `ComponentTests` cannot for most files: the text format encoder here has no syntax for
+    /// resources, and differs from wasm-tools' in the bytes it writes for much else.
     @Suite
     struct ComponentResourceTests {
         static let testPath = ComponentTests.vendorPath.appendingPathComponent("component-model/test")
@@ -17,26 +17,31 @@
                 && FileManager.default.fileExists(atPath: defaultWasmToolsPath)
         }
 
-        /// wasmtime's tests, which run against the `host` instance its test harness provides.
-        @Test(.enabled(if: available))
-        func wasmtimeResources() throws {
-            try run("wasmtime/resources.wast", instantiate: .all)
-        }
+        /// Files this cannot run, by path, and why.
+        static let unsupported: [String: String] = [
+            "values/trap-in-post-return.wast": "Component Model async: tasks, streams, futures and waitable sets",
+            // `ComponentTests` runs all but `multiple-resources.wast` from the text format instead.
+            "values/strings.wast": noJSON,
+            "resources/multiple-resources.wast": noJSON,
+            "wasmtime/adapter.wast": noJSON,
+            "wasmtime/fused.wast": noJSON,
+            "wasmtime/types.wast": noJSON,
+        ]
+        private static let noJSON = "wasm-tools cannot write the component values of assert_return to JSON"
 
-        /// wasm-tools' tests, which it only validates: every component here must parse, and
-        /// those without imports instantiate.
-        @Test(.enabled(if: available))
-        func wasmToolsResources() throws {
-            try run("wasm-tools/resources.wast", instantiate: .withoutImports)
-        }
+        /// Every file in the suite's directories but `async`, which needs Component Model async.
+        static let files: [String] = ["names", "resources", "values", "wasm-tools", "wasmtime"].flatMap { directory in
+            ((try? FileManager.default.contentsOfDirectory(atPath: testPath.appendingPathComponent(directory).path)) ?? [])
+                .filter { $0.hasSuffix(".wast") }
+                .map { "\(directory)/\($0)" }
+        }.filter { unsupported[$0] == nil }.sorted()
 
-        /// wasmtime's tests of linking, including module types: the text format encoder here
-        /// cannot encode their instance and module types.
-        @Test(
-            .enabled(if: available),
-            arguments: ["wasmtime/modules.wast", "wasmtime/linking.wast", "wasmtime/import.wast", "wasmtime/instance.wast"])
-        func wasmtimeLinking(_ path: String) throws {
-            try run(path, instantiate: .all)
+        /// wasm-tools' tests are ones it only validates: every component must parse, and those
+        /// without imports instantiate. The others run against the `host` instance wasmtime's
+        /// test harness provides.
+        @Test(.enabled(if: available), arguments: files)
+        func suite(_ path: String) throws {
+            try run(path, instantiate: path.hasPrefix("wasm-tools/") ? .withoutImports : .all)
         }
 
         /// A host passes and receives handles to a component's resources and its own.
@@ -158,13 +163,12 @@
 
             var current: ComponentInstance?
             var definitions: [String: ParsedComponent] = [:]
-            var counts: [String: Int] = [:]
 
             func component(_ command: WAST2JSONCommand) throws -> ParsedComponent {
                 guard let filename = command.filename, let bytes = files[filename] else {
                     throw TestError("\(path):\(command.line): no binary for the component")
                 }
-                return try parseComponent(bytes: bytes)
+                return try parseComponent(bytes: bytes, features: .all)
             }
             func invoke(_ command: WAST2JSONCommand) throws -> [ComponentValue] {
                 guard let action = command.action, action.type == "invoke", let field = action.field else {
@@ -191,7 +195,6 @@
             }
 
             for command in json.commands {
-                counts[command.type, default: 0] += 1
                 do {
                     switch command.type {
                     case "module":
@@ -239,7 +242,8 @@
                     Issue.record("\(path):\(command.line): \(command.type) failed: \(error)")
                 }
             }
-            #expect(counts["module", default: 0] > 0, "\(path): no components ran")
+            // Some files only have components that import, or only invalid ones.
+            #expect(!json.commands.isEmpty, "\(path): no commands")
         }
 
         struct TestError: Error, CustomStringConvertible {

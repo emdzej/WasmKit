@@ -213,6 +213,7 @@
             case 0x01: return .table
             case 0x02: return .memory
             case 0x03: return .global
+            case 0x04: return .tag
             case 0x10: return .type
             case 0x11: return .module
             case 0x12: return .instance
@@ -341,9 +342,13 @@
                 let cases = try parseVector { p throws(WasmParserError) -> ComponentCaseField in
                     let name = try p.stream.parseName()
                     let typeIdx = try p.parseOptionalValType()
-                    // The case's `refines` field, which must be absent.
-                    guard try p.stream.consumeAny() == 0x00 else {
-                        throw p.makeError(.malformedValueType(0x01))
+                    // `Binary.md` requires `0x00` here, as it dropped `refines`, but wasm-tools
+                    // still encodes `(refines i)` as `0x01 i`. It has no meaning, so it is read
+                    // and ignored.
+                    switch try p.stream.consumeAny() {
+                    case 0x00: break
+                    case 0x01: _ = try p.parseUnsigned(UInt32.self)
+                    case let byte: throw p.makeError(.malformedValueType(byte))
                     }
                     return ComponentCaseField(name: name, type: typeIdx)
                 }
@@ -497,8 +502,10 @@
                 }
             }
 
-            // Handle version suffix if present
-            if prefix == 0x01 {
+            // With `0x01`, `Binary.md` has a version suffix follow, which it only allows after a
+            // versioned interface name. Before that, `0x01` meant the same as `0x00`, which
+            // wasm-tools still accepts, so for a name without a version there is no suffix.
+            if prefix == 0x01, name.contains("@") {
                 let suffixLen: UInt32 = try parseUnsigned()
                 // TODO: Version suffix skipped in `parseImportExportName` as not implemented yet
                 _ = try stream.consume(count: Int(suffixLen))  // Skip version suffix for now

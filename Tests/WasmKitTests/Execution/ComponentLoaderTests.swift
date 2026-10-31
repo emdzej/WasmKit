@@ -175,7 +175,7 @@
             component.imports.append(
                 ParsedComponentImport(
                     name: "my-import",
-                    kind: .function(ComponentFuncType(params: [], result: .primitive(.s32)))
+                    kind: .function(ComponentTypeIndex(rawValue: 0))
                 ))
 
             // Provide a coreInstance instead of a function

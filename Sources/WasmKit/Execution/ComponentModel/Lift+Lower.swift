@@ -217,6 +217,9 @@
         var lenders: [ResourceHandle] = []
         /// Reused across `realloc` calls; a fresh stack costs an allocation per string or list.
         private var stack: ExecutionStack?
+        /// Whether this lowers a call to another component's function, which wasmtime makes
+        /// through an adapter whose trap messages differ from its host's.
+        var callsComponent = false
 
         init(
             types: CanonicalABITypes, options: CanonOptions, store: Store,
@@ -300,6 +303,9 @@
             }
             let (end, overflow) = pointer.addingReportingOverflow(count)
             guard pointer >= 0, count >= 0, !overflow, end <= (try memory.byteCount) else {
+                if what == "string", callsComponent {
+                    throw CanonicalABIError(description: "string content out-of-bounds: \(count) bytes at \(pointer)")
+                }
                 let subject = what.map { "\($0) pointer/length" } ?? "pointer"
                 throw CanonicalABIError(
                     description: "\(subject) out of bounds of memory: \(count) bytes at \(pointer)")

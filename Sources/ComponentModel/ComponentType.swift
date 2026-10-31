@@ -51,6 +51,9 @@ public enum CoreDefSort: String {
     case table
     case memory
     case global
+    /// An exception tag, which wasm-tools encodes as `0x04` with exceptions enabled, though
+    /// `Binary.md` does not list it yet
+    case tag
     case type
     case module
     case instance

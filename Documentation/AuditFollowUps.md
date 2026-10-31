@@ -28,10 +28,11 @@ wabt 1.0.42.
 - **Nesting limit:** components may nest 32 deep (`maxComponentNestingDepth` in
   `ParsedComponentBuilder.swift`). In a debug build, a 512 KiB test-thread stack overflowed
   somewhere between 40 and 60 levels.
-- **Component test coverage:** `Tests/WATTests/ComponentTests.swift` runs only a subset of
-  `Vendor/component-model/test`. Most of the remaining files fail on text-format encoding
-  differences from wasm-tools (resources, aliases, type exports), not on runtime behaviour.
-  Running every file is a quick way to measure progress. The WAT parser has no syntax for
-  resources (`resource`, `own`, `borrow`, `canon resource.*`) or for instance type exports other
-  than types, so `Tests/WATTests/ComponentResourceTests.swift` runs the two `resources.wast`
-  files from the binaries wasm-tools encodes instead.
+- **Component test coverage:** `ComponentResourceTests.suite` runs every file in
+  `Vendor/component-model/test` but `async` from the binaries wasm-tools encodes, apart from
+  those its `unsupported` list gives a reason for: Component Model async, and files whose
+  `assert_return` values wasm-tools cannot write to JSON. `Tests/WATTests/ComponentTests.swift`
+  checks the text format encoder here against wasm-tools on a subset: 30 of the suite's 209
+  components encode to the same bytes. Most of the rest do not parse, as the WAT parser has no
+  syntax for resources, for `component`, `type` and `core module` imports, or for instance type
+  exports other than types, and skips function imports' types.

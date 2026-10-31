@@ -622,8 +622,7 @@
         private func convertImportKind(_ externDesc: ComponentExternDesc) throws -> ParsedComponentImportKind {
             switch externDesc {
             case .function(let typeIndex):
-                let funcType = try resolveComponentFuncType(typeIndex)
-                return .function(funcType)
+                return .function(ComponentTypeIndex(rawValue: Int(typeIndex)))
             case .value(let bound):
                 switch bound {
                 case .eq:
