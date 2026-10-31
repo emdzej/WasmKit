@@ -32,7 +32,9 @@
 
         /// wasmtime's tests of linking, including module types: the text format encoder here
         /// cannot encode their instance and module types.
-        @Test(.enabled(if: available), arguments: ["wasmtime/modules.wast", "wasmtime/linking.wast"])
+        @Test(
+            .enabled(if: available),
+            arguments: ["wasmtime/modules.wast", "wasmtime/linking.wast", "wasmtime/import.wast", "wasmtime/instance.wast"])
         func wasmtimeLinking(_ path: String) throws {
             try run(path, instantiate: .all)
         }
@@ -149,9 +151,10 @@
 
             let store = Store(engine: Engine())
             let loader = ComponentLoader(store: store)
-            let host = SpectestHost(store: store)
+            let host = try SpectestHost(store: store)
             var imports = ComponentImports()
             imports.define(name: "host", instance: host.instance)
+            imports.define(name: "host-return-two", host.returnTwo)
 
             var current: ComponentInstance?
             var definitions: [String: ParsedComponent] = [:]
@@ -211,6 +214,9 @@
                             throw TestError("\(path):\(command.line): no component definition \(command.module ?? "")")
                         }
                         current = try loader.instantiate(component: definition, imports: imports)
+                        if let name = command.instance, let current {
+                            imports.define(name: name.hasPrefix("$") ? String(name.dropFirst()) : name, instance: current)
+                        }
                     case "assert_return":
                         let results = try invoke(command)
                         guard (command.expected ?? []).isEmpty else {
@@ -219,7 +225,7 @@
                         #expect(results.isEmpty, "\(path):\(command.line): unexpected results \(results)")
                     case "assert_trap":
                         expectFailure(command) { _ = try invoke(command) }
-                    case "assert_unlinkable":
+                    case "assert_unlinkable", "assert_uninstantiable":
                         expectFailure(command) {
                             _ = try loader.instantiate(component: try component(command), imports: imports)
                         }
@@ -256,8 +262,10 @@
         let resource1: ComponentResourceType
         let resource2 = ComponentResourceType()
         let instance: ComponentInstance
+        /// A function the harness defines outside the `host` instance.
+        let returnTwo: ComponentExternalValue
 
-        init(store: Store) {
+        init(store: Store) throws {
             let drops = self.drops
             let resource1 = ComponentResourceType { rep in
                 drops.count += 1
@@ -283,10 +291,19 @@
                 guard condition else { throw ComponentResourceTests.TestError("host assertion failed: \(message)") }
             }
 
+            returnTwo = function([], .primitive(.u32)) { _ in [.u32(2)] }
+            let nested = ComponentInstance(
+                store: store, exports: ["return-four": function([], .primitive(.u32)) { _ in [.u32(4)] }])
+            let simpleModule = try parseWasm(
+                bytes: try wat2wasm(
+                    watContent: Array(
+                        #"(module (global (export "g") i32 i32.const 100) (func (export "f") (result i32) i32.const 101))"#.utf8)))
             instance = ComponentInstance(
                 store: store,
                 exports: [
                     "return-three": function([], .primitive(.u32)) { _ in [.u32(3)] },
+                    "nested": .instance(nested),
+                    "simple-module": .coreModule(simpleModule),
                     "resource1": .resourceType(resource1),
                     "resource2": .resourceType(resource2),
                     // The same type under another name.

@@ -226,6 +226,12 @@
         /// Core functions created from canonical lower definitions (from core functions index space)
         var coreFunctions: [InternalFunction] = []
 
+        /// The core table, memory and global index spaces, which aliases of core instance
+        /// exports add to
+        var coreTables: [Table] = []
+        var coreMemories: [Memory] = []
+        var coreGlobals: [Global] = []
+
         /// The component instance index space: imported and nested instances, in the order they
         /// were defined. Every instance index resolves against this.
         var componentInstances: [InternalComponentInstance] = []
@@ -604,8 +610,8 @@
         /// The expected type of the import
         public let kind: ParsedComponentImportKind
 
-        /// The index of the instance type an instance import declares, which the provided
-        /// instance is checked against
+        /// The index of the instance or component type an instance or component import
+        /// declares, which the provided instance or component is checked against
         public let declaredType: ComponentTypeIndex?
 
         /// The type a core module import declares, which the provided module is checked against
@@ -749,25 +755,44 @@
             _ importDef: ParsedComponentImport,
             context: inout InstantiationContext
         ) throws {
-            guard let value = context.imports.lookup(name: importDef.name) else {
+            var declaration: ComponentTypeSpace.Entry?
+            if let typeIndex = importDef.declaredType {
+                declaration = try context.types.entry(typeIndex)
+            }
+            let value: InternalComponentExternalValue
+            if let provided = context.imports.lookup(name: importDef.name) {
+                value = provided
+            } else if case .instance(let declaration) = declaration, Self.isEmpty(declaration) {
+                // As in wasmtime, an instance with nothing to export need not be provided.
+                value = .instance(
+                    store.allocator.allocate(
+                        componentInstance: ComponentInstanceEntity(coreInstances: [], exports: [:], functions: [], nestedComponents: [])))
+            } else {
                 throw ComponentLoaderError.missingImport(name: importDef.name)
             }
 
             switch (importDef.kind, value) {
             case (.instance, .instance(let instance)):
-                if let typeIndex = importDef.declaredType, case .instance(let declaration) = try context.types.entry(typeIndex) {
-                    try checkInstance(instance, against: declaration, name: importDef.name, context: context)
+                if case .instance(let declaration) = declaration {
+                    try checkInstance(instance, against: declaration, name: importDef.name) {
+                        try context.typeSpace(outerCount: $0 - 1)
+                    }
                 }
                 context.componentInstances.append(instance)
             case (.function(let type), .function(let function)):
                 try checkFunction(function, against: type, in: context.types, name: importDef.name)
                 context.componentFunctions.append(function)
+            case (.value(let type), .value(let value)):
+                try checkValue(value, against: type, in: context.types, name: importDef.name)
             case (.module, .coreModule(let module)):
                 if let declared = importDef.declaredModuleType {
                     try checkModule(module, against: declared, name: importDef.name)
                 }
                 context.coreModules.append(module)
             case (.component, .component(let definition)):
+                if case .component(let declaration) = declaration {
+                    try checkComponent(definition, against: declaration, name: importDef.name)
+                }
                 context.components.append(definition)
             case (.type(let bound), let value):
                 context.types.append(try importedType(value, bound: bound, name: importDef.name, scope: context.types.entry))
@@ -842,11 +867,118 @@
             }
         }
 
+        /// Checks that `value` is a value of `type`, whose type indices resolve in `space`.
+        private func checkValue(
+            _ value: ComponentValue, against type: ComponentDefValType, in space: ComponentTypeSpace, name: String
+        ) throws {
+            do {
+                try ComponentValueChecker(resolve: space.entry).check(value, type)
+            } catch let mismatch as ComponentTypeMismatch {
+                throw ComponentLoaderError.mismatchedImportType(name: name, reason: mismatch.description)
+            }
+        }
+
+        /// Checks that `definition` imports nothing `declaration` does not and exports all it
+        /// does, each of the same sort.
+        ///
+        /// Their types are not compared: the component's are only known once it is
+        /// instantiated, as they can refer to what it imports.
+        private func checkComponent(_ definition: ComponentDefinition, against declaration: ComponentTypeDecl, name: String) throws {
+            var declaredImports: [String: String] = [:]
+            var declaredExports: [(name: String, sort: String)] = []
+            for decl in declaration.declarations {
+                switch decl {
+                case .importDecl(let entry): declaredImports[entry.name] = Self.sort(of: entry.externDesc)
+                case .instanceDecl(.exportDecl(let entry)): declaredExports.append((entry.name, Self.sort(of: entry.externDesc)))
+                case .instanceDecl: break
+                }
+            }
+            func mismatch(_ reason: String) -> ComponentLoaderError {
+                .mismatchedImportType(name: name, reason: reason)
+            }
+            let component = definition.component
+            for entry in component.imports {
+                guard let declared = declaredImports[entry.name] else {
+                    throw mismatch("missing expected import `\(entry.name)`")
+                }
+                let sort = Self.sort(of: entry.kind)
+                guard sort == declared else {
+                    throw mismatch("type mismatch in import `\(entry.name)`: expected \(sort) found \(declared)")
+                }
+            }
+            for export in declaredExports {
+                guard let entry = component.exports.first(where: { $0.name == export.name }) else {
+                    throw mismatch("missing expected export `\(export.name)`")
+                }
+                let sort = Self.sort(of: entry.kind)
+                guard sort == export.sort else {
+                    throw mismatch("type mismatch in export `\(export.name)`: expected \(export.sort) found \(sort)")
+                }
+            }
+        }
+
+        private static func sort(of desc: ComponentExternDesc) -> String {
+            switch desc {
+            case .coreModule: return "module"
+            case .function: return "func"
+            case .value: return "value"
+            case .type: return "type"
+            case .component: return "component"
+            case .instance: return "instance"
+            }
+        }
+
+        private static func sort(of kind: ParsedComponentImportKind) -> String {
+            switch kind {
+            case .function: return "func"
+            case .value: return "value"
+            case .instance: return "instance"
+            case .module: return "module"
+            case .type: return "type"
+            case .component: return "component"
+            }
+        }
+
+        private static func sort(of kind: ParsedComponentExportKind) -> String {
+            switch kind {
+            case .function: return "func"
+            case .value: return "value"
+            case .type: return "type"
+            case .instance: return "instance"
+            case .coreModule: return "module"
+            case .coreInstance: return "core instance"
+            case .component: return "component"
+            }
+        }
+
+        /// Whether an instance of `declaration` exports nothing, but perhaps instances that
+        /// themselves export nothing.
+        private static func isEmpty(_ declaration: InstanceTypeDecl) -> Bool {
+            // The instance types the declaration defines, at their type indices.
+            var types: [InstanceTypeDecl?] = []
+            for decl in declaration.declarations {
+                switch decl {
+                case .coreType: break
+                case .type(.instance(let type)): types.append(type)
+                case .type: types.append(nil)
+                case .alias(let alias):
+                    if case .type = alias.sort { types.append(nil) }
+                case .exportDecl(let export):
+                    guard case .instance(let index) = export.externDesc, types.indices.contains(Int(index)),
+                        let type = types[Int(index)], isEmpty(type)
+                    else { return false }
+                }
+            }
+            return true
+        }
+
         /// Checks that `instance` has the exports `declaration` lists, of the right sorts, with
-        /// the function types it declares and the types its bounds require.
+        /// the function, value, instance, component and module types it declares and the types
+        /// its bounds require. `outer` gives the type index space an outer alias with a count
+        /// refers to.
         private func checkInstance(
             _ instance: InternalComponentInstance, against declaration: InstanceTypeDecl, name: String,
-            context: InstantiationContext
+            outer: (Int) throws -> ComponentTypeSpace
         ) throws {
             let exports = instance.exports
             // The instance type's own type index spaces.
@@ -860,13 +992,15 @@
                     switch type {
                     case .definedValue(let type): local.append(.value(type))
                     case .function(let type): local.append(.function(type))
-                    // Not checked, and an instance type cannot define a resource type.
-                    case .instance, .component, .resource: local.append(.opaque)
+                    case .instance(let type): local.append(.instance(type))
+                    case .component(let type): local.append(.component(type))
+                    // An instance type cannot define a resource type.
+                    case .resource: local.append(.opaque)
                     }
                 case .alias(let alias):
                     if case .type = alias.sort, case .outer(let count, let index) = alias.target {
-                        // Outer count 1 is the component the instance type is declared in.
-                        let space = try context.typeSpace(outerCount: Int(count) - 1)
+                        // Outer count 1 is the scope the instance type is declared in.
+                        let space = try outer(Int(count))
                         try local.append(space.entry(ComponentTypeIndex(rawValue: Int(index))), from: space)
                     } else if case .type = alias.sort {
                         local.append(.opaque)
@@ -881,7 +1015,13 @@
                     default:
                         break
                     }
+                    let exportName = "\(name).\(export.name)"
                     guard let provided else {
+                        if case .instance(let typeIndex) = export.externDesc,
+                            case .instance(let type) = try local.entry(ComponentTypeIndex(rawValue: Int(typeIndex))), Self.isEmpty(type)
+                        {
+                            continue
+                        }
                         throw ComponentLoaderError.instanceExportNotFound(importName: name, exportName: export.name)
                     }
                     let expected: String
@@ -894,18 +1034,35 @@
                     case .type: expected = "type"
                     }
                     guard provided.sortDescription == expected else {
-                        throw ComponentLoaderError.incompatibleImport(
-                            name: "\(name).\(export.name)", expected: expected, got: provided.sortDescription)
+                        throw ComponentLoaderError.incompatibleImport(name: exportName, expected: expected, got: provided.sortDescription)
                     }
-                    if case .coreModule(let typeIndex) = export.externDesc, case .coreModule(let module) = provided,
-                        localCoreTypes.indices.contains(Int(typeIndex)), case .module(let type) = localCoreTypes[Int(typeIndex)]
-                    {
-                        try checkModule(module, against: type, name: "\(name).\(export.name)")
+                    func localType(_ index: UInt32) throws -> ComponentTypeSpace.Entry {
+                        try local.entry(ComponentTypeIndex(rawValue: Int(index)))
                     }
-                    if case .function(let typeIndex) = export.externDesc, case .function(let function) = provided,
-                        case .function(let type) = try local.entry(ComponentTypeIndex(rawValue: Int(typeIndex)))
-                    {
-                        try checkFunction(function, against: type, in: local, name: "\(name).\(export.name)")
+                    switch (export.externDesc, provided) {
+                    case (.coreModule(let typeIndex), .coreModule(let module)):
+                        if localCoreTypes.indices.contains(Int(typeIndex)), case .module(let type) = localCoreTypes[Int(typeIndex)] {
+                            try checkModule(module, against: type, name: exportName)
+                        }
+                    case (.function(let typeIndex), .function(let function)):
+                        if case .function(let type) = try localType(typeIndex) {
+                            try checkFunction(function, against: type, in: local, name: exportName)
+                        }
+                    case (.value(.type(let type)), .value(let value)):
+                        try checkValue(value, against: type, in: local, name: exportName)
+                    case (.instance(let typeIndex), .instance(let nested)):
+                        if case .instance(let type) = try localType(typeIndex) {
+                            // Outer count 1 in the nested type is this one.
+                            try checkInstance(nested, against: type, name: exportName) { count in
+                                count == 1 ? local : try outer(count - 1)
+                            }
+                        }
+                    case (.component(let typeIndex), .component(let component)):
+                        if case .component(let type) = try localType(typeIndex) {
+                            try checkComponent(component, against: type, name: exportName)
+                        }
+                    default:
+                        break
                     }
                 }
             }
@@ -1065,9 +1222,29 @@
                     // Core function alias from core instance export
                     let coreFunc = try resolveCoreFunctionAlias(alias, context: &context)
                     context.coreFunctions.append(coreFunc)
-                case .memory:
-                    // Core memory aliases are resolved when needed (in canon options)
-                    break
+                case .memory, .table, .global:
+                    // Canon options name their memory by its instance export, so these are only
+                    // for inline core instances.
+                    guard case .coreInstanceExport(let instanceIndex, let name) = alias.source else {
+                        throw ComponentLoaderError.instantiationFailed("A core \(coreSort) alias must be of a core instance export")
+                    }
+                    guard context.coreInstances.indices.contains(instanceIndex) else {
+                        throw ComponentLoaderError.invalidCoreInstanceIndex(instanceIndex)
+                    }
+                    let exports = Instance(handle: context.coreInstances[instanceIndex], store: store).exports
+                    let notFound = ComponentLoaderError.instantiationFailed(
+                        "core instance \(instanceIndex) has no \(coreSort) export \"\(name)\"")
+                    switch coreSort {
+                    case .memory:
+                        guard let memory = exports[memory: name] else { throw notFound }
+                        context.coreMemories.append(memory)
+                    case .table:
+                        guard let table = exports[table: name] else { throw notFound }
+                        context.coreTables.append(table)
+                    default:
+                        guard let global = exports[global: name] else { throw notFound }
+                        context.coreGlobals.append(global)
+                    }
                 case .module:
                     switch alias.source {
                     case .componentInstanceExport(let instanceIndex, let name):
@@ -1241,14 +1418,22 @@
                 return .function(Function(handle: context.coreFunctions[export.index], store: store))
 
             case .memory:
-                // Memory from some core instance
-                throw ComponentLoaderError.instantiationFailed("Inline memory exports not yet supported")
+                guard context.coreMemories.indices.contains(export.index) else {
+                    throw ComponentLoaderError.instantiationFailed("core memory index \(export.index) out of bounds")
+                }
+                return .memory(context.coreMemories[export.index])
 
             case .table:
-                throw ComponentLoaderError.instantiationFailed("Inline table exports not yet supported")
+                guard context.coreTables.indices.contains(export.index) else {
+                    throw ComponentLoaderError.instantiationFailed("core table index \(export.index) out of bounds")
+                }
+                return .table(context.coreTables[export.index])
 
             case .global:
-                throw ComponentLoaderError.instantiationFailed("Inline global exports not yet supported")
+                guard context.coreGlobals.indices.contains(export.index) else {
+                    throw ComponentLoaderError.instantiationFailed("core global index \(export.index) out of bounds")
+                }
+                return .global(context.coreGlobals[export.index])
 
             case .type:
                 throw ComponentLoaderError.instantiationFailed("Inline type exports not yet supported")
@@ -1651,6 +1836,9 @@
         ) throws {
             for required in requiredImports {
                 guard let provided = providedImports.lookup(name: required.name) else {
+                    // An instance with nothing to export need not be provided: whether it has
+                    // is known once its type is.
+                    if case .instance = required.kind { continue }
                     throw ComponentLoaderError.missingImport(name: required.name)
                 }
 
@@ -1661,16 +1849,8 @@
                     // against the types defined before it.
                     break
 
-                case (.value, .value):
-                    // TODO: Value type compatibility not covered yet in `ComponentLoader.validateImports
-                    break
-
-                case (.instance, .instance):
-                    // Instance imports don't have detailed type checking yet
-                    break
-
-                case (.module, .coreModule):
-                    // Module imports don't have detailed type checking yet
+                case (.value, .value), (.instance, .instance), (.module, .coreModule):
+                    // Checked against the declared type when it is processed
                     break
 
                 case (.type, _):
@@ -1678,7 +1858,7 @@
                     break
 
                 case (.component, .component):
-                    // Component imports don't have detailed type checking yet
+                    // Checked against the declared type when it is processed
                     break
 
                 case (.component, _):

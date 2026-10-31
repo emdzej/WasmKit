@@ -330,7 +330,7 @@
                 var declaredType: ComponentTypeIndex?
                 var declaredModuleType: CoreModuleType?
                 switch importDef.externDesc {
-                case .instance(let typeIndex):
+                case .instance(let typeIndex), .component(let typeIndex):
                     declaredType = ComponentTypeIndex(rawValue: Int(typeIndex))
                 case .coreModule(let typeIndex):
                     if coreTypes.indices.contains(Int(typeIndex)), case .module(let type) = coreTypes[Int(typeIndex)] {

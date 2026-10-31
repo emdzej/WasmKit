@@ -21,6 +21,15 @@
         func within(_ context: String) -> ComponentTypeMismatch {
             ComponentTypeMismatch("\(context): \(description)")
         }
+
+        /// Runs `body`, placing a mismatch it throws within `context`.
+        static func within(_ context: String, _ body: () throws -> Void) throws {
+            do {
+                try body()
+            } catch let mismatch as ComponentTypeMismatch {
+                throw mismatch.within(context)
+            }
+        }
     }
 
     /// Compares an expected type, whose indices resolve in `expected`, against a provided one,
@@ -81,8 +90,8 @@
             guard depth < Self.maxDepth else {
                 throw ComponentTypeMismatch("type indices nest too deeply or form a cycle")
             }
-            let expected = try resolve(expected, in: self.expected)
-            let provided = try resolve(provided, in: self.provided)
+            let expected = try Self.resolve(expected, in: self.expected)
+            let provided = try Self.resolve(provided, in: self.provided)
             switch (expected, provided) {
             case (.inlined(.primitive(let e)), .inlined(.primitive(let p))):
                 guard e == p else { throw mismatch(expected, provided) }
@@ -176,7 +185,7 @@
         }
 
         /// `type`, with a type index replaced by the value type it names.
-        private func resolve(_ type: ComponentDefValType, in resolve: Resolve) throws -> ComponentDefValType {
+        static func resolve(_ type: ComponentDefValType, in resolve: Resolve) throws -> ComponentDefValType {
             guard case .inlined(.index(let index)) = type else { return type }
             guard case .value(let type) = try resolve(index) else {
                 throw ComponentTypeMismatch("type index \(index.rawValue) is not a value type")
@@ -189,18 +198,14 @@
         }
 
         private func nested(_ context: String, _ body: () throws -> Void) throws {
-            do {
-                try body()
-            } catch let mismatch as ComponentTypeMismatch {
-                throw mismatch.within(context)
-            }
+            try ComponentTypeMismatch.within(context, body)
         }
 
         private func mismatch(_ expected: ComponentDefValType, _ provided: ComponentDefValType) -> ComponentTypeMismatch {
             ComponentTypeMismatch("expected \(Self.describe(expected)), found \(Self.describe(provided))")
         }
 
-        private static func describe(_ type: ComponentDefValType) -> String {
+        static func describe(_ type: ComponentDefValType) -> String {
             switch type {
             case .inlined(.primitive(let type)):
                 switch type {
@@ -231,6 +236,154 @@
             case .enum: return "enum"
             case .variant: return "variant"
             case .resource: return "resource"
+            case .own: return "own"
+            case .borrow: return "borrow"
+            }
+        }
+    }
+
+    // MARK: - Values
+
+    /// Checks that an imported value is a value of the type its import declares, whose indices
+    /// resolve with `resolve`.
+    struct ComponentValueChecker {
+        let resolve: ComponentTypeMatcher.Resolve
+
+        /// As for types, a malformed binary's type indices could form a cycle.
+        private static let maxDepth = 100
+
+        func check(_ value: ComponentValue, _ type: ComponentDefValType) throws {
+            try check(value, type, depth: 0)
+        }
+
+        private func check(_ value: ComponentValue, _ type: ComponentValType?, depth: Int, what: String) throws {
+            switch (type, value) {
+            case (nil, .tuple(let elements)) where elements.isEmpty: break
+            case (nil, _): throw ComponentTypeMismatch("expected no \(what) payload, found one")
+            case (.some(let type), _): try check(value, .inlined(type), depth: depth + 1)
+            }
+        }
+
+        private func check(_ value: ComponentValue, _ type: ComponentDefValType, depth: Int) throws {
+            guard depth < Self.maxDepth else {
+                throw ComponentTypeMismatch("type indices nest too deeply or form a cycle")
+            }
+            let type = try ComponentTypeMatcher.resolve(type, in: resolve)
+            switch (value, type) {
+            case (.bool, .inlined(.primitive(.bool))), (.s8, .inlined(.primitive(.s8))), (.s16, .inlined(.primitive(.s16))),
+                (.s32, .inlined(.primitive(.s32))), (.s64, .inlined(.primitive(.s64))), (.u8, .inlined(.primitive(.u8))),
+                (.u16, .inlined(.primitive(.u16))), (.u32, .inlined(.primitive(.u32))), (.u64, .inlined(.primitive(.u64))),
+                (.float32, .inlined(.primitive(.float32))), (.float64, .inlined(.primitive(.float64))),
+                (.char, .inlined(.primitive(.char))), (.string, .inlined(.primitive(.string))):
+                break
+
+            case (.list(let values), .list(let element)):
+                for (index, value) in values.enumerated() {
+                    try ComponentTypeMismatch.within("type mismatch in list element \(index)") {
+                        try check(value, .inlined(element), depth: depth + 1)
+                    }
+                }
+
+            case (.tuple(let values), .tuple(let types)):
+                guard values.count == types.count else {
+                    throw ComponentTypeMismatch("expected \(types.count) types, found \(values.count)")
+                }
+                for (index, (value, type)) in zip(values, types).enumerated() {
+                    try ComponentTypeMismatch.within("type mismatch in tuple field \(index)") {
+                        try check(value, .inlined(type), depth: depth + 1)
+                    }
+                }
+
+            case (.record(let fields), .record(let types)):
+                guard fields.count == types.count else {
+                    throw ComponentTypeMismatch("expected \(types.count) fields, found \(fields.count)")
+                }
+                for (field, type) in zip(fields, types) {
+                    guard field.name == type.name else {
+                        throw ComponentTypeMismatch("expected field name `\(type.name)`, found `\(field.name)`")
+                    }
+                    try ComponentTypeMismatch.within("type mismatch in record field `\(type.name)`") {
+                        try check(field.value, .inlined(type.type), depth: depth + 1)
+                    }
+                }
+
+            case (.variant(let name, let payload), .variant(let cases)):
+                guard let declared = cases.first(where: { $0.name == name }) else {
+                    throw ComponentTypeMismatch("no variant case named `\(name)`")
+                }
+                switch (declared.type, payload) {
+                case (nil, nil): break
+                case (nil, .some): throw ComponentTypeMismatch("expected case `\(name)` to have no payload")
+                case (.some, nil): throw ComponentTypeMismatch("expected case `\(name)` to have a payload, found none")
+                case (.some(let type), .some(let payload)):
+                    try ComponentTypeMismatch.within("type mismatch in variant case `\(name)`") {
+                        try check(payload, .inlined(type), depth: depth + 1)
+                    }
+                }
+
+            case (.flags(let names), .flags(let declared)):
+                if let name = names.subtracting(declared).sorted().first {
+                    throw ComponentTypeMismatch("no flag named `\(name)`")
+                }
+
+            case (.enum(let name), .enum(let cases)):
+                guard cases.contains(name) else { throw ComponentTypeMismatch("no enum case named `\(name)`") }
+
+            case (.option(let payload), .option(let type)):
+                if let payload {
+                    try ComponentTypeMismatch.within("type mismatch in option") {
+                        try check(payload, .inlined(type), depth: depth + 1)
+                    }
+                }
+
+            // A value with `error` set is the `err` case, as for lowering.
+            case (.result(_, let error?), .result(_, let errorType)):
+                try ComponentTypeMismatch.within("type mismatch in err variant") {
+                    try check(error, errorType, depth: depth, what: "err")
+                }
+            case (.result(let ok, nil), .result(let okType, _)):
+                switch (ok, okType) {
+                case (nil, nil), (nil, .some): break
+                case (.some(let ok), _):
+                    try ComponentTypeMismatch.within("type mismatch in ok variant") {
+                        try check(ok, okType, depth: depth, what: "ok")
+                    }
+                }
+
+            case (.own(let resource), .own(let index)), (.borrow(let resource), .borrow(let index)):
+                guard case .resource(let type) = try resolve(index) else {
+                    throw ComponentTypeMismatch("handle type does not refer to a resource")
+                }
+                guard resource.type === type else { throw ComponentTypeMismatch("resource types are not the same") }
+
+            default:
+                throw ComponentTypeMismatch("expected \(ComponentTypeMatcher.describe(type)), found \(Self.describe(value))")
+            }
+        }
+
+        private static func describe(_ value: ComponentValue) -> String {
+            switch value {
+            case .bool: return "bool"
+            case .s8: return "s8"
+            case .s16: return "s16"
+            case .s32: return "s32"
+            case .s64: return "s64"
+            case .u8: return "u8"
+            case .u16: return "u16"
+            case .u32: return "u32"
+            case .u64: return "u64"
+            case .float32: return "f32"
+            case .float64: return "f64"
+            case .char: return "char"
+            case .string: return "string"
+            case .list: return "list"
+            case .record: return "record"
+            case .variant: return "variant"
+            case .tuple: return "tuple"
+            case .flags: return "flags"
+            case .enum: return "enum"
+            case .option: return "option"
+            case .result: return "result"
             case .own: return "own"
             case .borrow: return "borrow"
             }

@@ -11,19 +11,16 @@ suites come from `./Vendor/checkout-dependency <name>` (`testsuite`, `wasi-tests
 `wasi-threads`, and `--category component-model`). The encoder comparison needs `wast2json` from
 wabt 1.0.42.
 
-## Correctness
-
-### 1. Smaller items
-
-- **Import type checks:** function, value and core module types are checked
-  (`ComponentTypeMatching.swift`). Parameter names may differ unless the loader is created with
-  `importTypeChecking: .strict`, as wasmtime's linker allows. Not checked: the types of imported
-  values and components, and instance or component exports nested inside an instance import's
-  type. `wasmtime/import.wast` and `wasmtime/instance.wast` need exports the test harness's
-  `host` instance does not have yet (`ComponentResourceTests.SpectestHost`).
-
 ## Notes
 
+- **Component imports:** an imported component is checked to import nothing its declared type
+  does not and to export everything it does, with the same sorts (`checkComponent` in
+  `ComponentLoader.swift`). The types of what it imports and exports are not compared: they are
+  only known once it is instantiated.
+- **Value import encoding:** the parser reads a value import's `valuebound` as `Binary.md` has
+  it, with `0x00` or `0x01` before the value. wasm-tools 1.244 writes the value type with no
+  such byte, so components it encodes with value imports do not parse. The two cannot be told
+  apart, as `0x00` and `0x01` are type indices too.
 - **GC types:** `TypeCanonicalizer` (`Sources/WasmKit/TypeCanonicalization.swift`) identifies a
   type by its function signature, so it rejects recursion groups of several types, types that
   refer to themselves, and non-final types or declared supertypes. GC execution will need
