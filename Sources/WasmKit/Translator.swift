@@ -74,16 +74,26 @@ extension InternalInstance {
         guard Int(index) < self.types.count else {
             throw WasmKitError(message: .indexOutOfBounds("type", index, max: UInt32(self.types.count)))
         }
-        return self.types[Int(index)]
+        guard case .function(let type) = self.types[Int(index)] else {
+            throw WasmKitError("type \(index) is not a function type")
+        }
+        return type
     }
     func resolveBlockType(_ blockType: BlockType) throws(WasmKitError) -> FunctionType {
         if case .type(.ref(let referenceType)) = blockType, case .concrete = referenceType.heapType {
             return FunctionType(parameters: [], results: [.ref(try typeCanonicalizer.canonicalize(referenceType))])
         }
-        return try FunctionType(blockType: blockType, typeSection: self.types)
+        let type: FunctionType
+        switch blockType {
+        case .type(let valueType): type = FunctionType(parameters: [], results: [valueType])
+        case .empty: type = FunctionType(parameters: [], results: [])
+        case .funcType(let typeIndex): type = try resolveType(typeIndex)
+        }
+        try type.checkFitsInterpreter()
+        return type
     }
-    func functionType(_ index: FunctionIndex, interner: Interner<FunctionType>) throws(WasmKitError) -> FunctionType {
-        return try interner.resolve(self.functions[validating: Int(index)].type)
+    func functionType(_ index: FunctionIndex, registry: TypeRegistry) throws(WasmKitError) -> FunctionType {
+        return try registry.resolve(self.functions[validating: Int(index)].type)
     }
     func globalType(_ index: GlobalIndex) throws(WasmKitError) -> ValueType {
         let globalTypes = self.globalTypes
@@ -656,10 +666,12 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
         var valueHeight: Int { values.count }
         let stackRegBase: VReg
         let stackLayout: StackLayout
+        let typeRegistry: TypeRegistry
 
-        init(stackLayout: StackLayout) {
+        init(stackLayout: StackLayout, typeRegistry: TypeRegistry) {
             self.stackRegBase = stackLayout.stackRegBase
             self.stackLayout = stackLayout
+            self.typeRegistry = typeRegistry
         }
 
         mutating func push(_ value: ValueType) -> VReg {
@@ -784,15 +796,15 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
             if case .some(let actual) = value, actual == expected {
                 return register
             }
-            try Self.check(value, matches: expected)
+            try Self.check(value, matches: expected, in: typeRegistry)
             return register
         }
         /// Checks that a value of type `actual` can be used where `expected` is.
         @inline(never)
-        static func check(_ actual: MetaValue, matches expected: ValueType) throws(WasmKitError) {
+        static func check(_ actual: MetaValue, matches expected: ValueType, in typeRegistry: TypeRegistry) throws(WasmKitError) {
             switch actual {
             case .some(let actual):
-                guard actual == expected || actual.isSubtype(of: expected) else {
+                guard actual == expected || typeRegistry.isSubtype(actual, of: expected) else {
                     throw WasmKitError("Expected \(expected) on the stack top but got \(actual)")
                 }
             case .unknown: break  // OK
@@ -2574,7 +2586,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
     }
 
     let allocator: ISeqAllocator
-    let funcTypeInterner: Interner<FunctionType>
+    let typeRegistry: TypeRegistry
     let engineConfiguration: EngineConfiguration
     var module: InternalInstance
     /// The fuel region being translated, when the engine meters fuel; `nil` otherwise.
@@ -2653,7 +2665,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
     init(
         allocator: ISeqAllocator,
         engineConfiguration: EngineConfiguration,
-        funcTypeInterner: Interner<FunctionType>,
+        typeRegistry: TypeRegistry,
         module: InternalInstance,
         type: FunctionType,
         locals: [WasmTypes.ValueType],
@@ -2662,7 +2674,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
         isIntercepting: Bool
     ) throws(WasmKitError) {
         self.allocator = allocator
-        self.funcTypeInterner = funcTypeInterner
+        self.typeRegistry = typeRegistry
         self.engineConfiguration = engineConfiguration
         self.type = type
         self.module = module
@@ -2674,7 +2686,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
             locals: locals,
             codeSize: codeSize
         )
-        self.valueStack = ValueStack(stackLayout: stackLayout)
+        self.valueStack = ValueStack(stackLayout: stackLayout, typeRegistry: typeRegistry)
         self.locals = Locals(types: type.parameters + locals)
         self.tracksLocalInitialization = self.locals.hasNonDefaultable
         self.isLocalInitialized =
@@ -3021,7 +3033,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
             guard try checkBeforePop(typeHint: type, depth: stackDepth) else { return }
             let actual = valueStack.peekType(depth: stackDepth)
             if case .some(let actualType) = actual, actualType == type { continue }
-            try ValueStack.check(actual, matches: type)
+            try ValueStack.check(actual, matches: type, in: typeRegistry)
         }
     }
 
@@ -3460,7 +3472,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
 
         if case .if(_, _, isElse: false) = toBePopped.kind {
             let blockType = toBePopped.blockType
-            guard blockType.parameters.isSubtype(of: blockType.results) else {
+            guard typeRegistry.isSubtype(blockType.parameters, of: blockType.results) else {
                 throw WasmKitError(message: .parameterResultTypeMismatch(blockType: blockType))
             }
         }
@@ -4055,7 +4067,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
         return VReg(slotIndex: argumentsSlotIndex)
     }
     mutating func visitCall(functionIndex: UInt32) throws(WasmKitError) -> Output {
-        let calleeType = try self.module.functionType(functionIndex, interner: funcTypeInterner)
+        let calleeType = try self.module.functionType(functionIndex, registry: typeRegistry)
         guard let arguments = try visitCallLike(calleeType: calleeType) else { return }
         guard let callee = self.module.resolveCallee(functionIndex) else {
             // Skip actual code emission if validation-only mode
@@ -4088,7 +4100,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
         let calleeType = try self.module.resolveType(typeIndex)
         guard let arguments = try visitCallLike(calleeType: calleeType) else { return }
         guard let address = address else { return }
-        let internType = funcTypeInterner.intern(calleeType)
+        let internType = try module.typeCanonicalizer.canonicalID(of: typeIndex)
         let operand = Instruction.CallIndirectOperand(
             tableIndex: tableIndex,
             type: internType,
@@ -4111,7 +4123,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
     }
 
     mutating func visitReturnCall(functionIndex: UInt32) throws(WasmKitError) {
-        let calleeType = try self.module.functionType(functionIndex, interner: funcTypeInterner)
+        let calleeType = try self.module.functionType(functionIndex, registry: typeRegistry)
         try validator.validateReturnCallLike(calleeType: calleeType, callerType: type)
 
         guard let callee = self.module.resolveCallee(functionIndex) else {
@@ -4143,7 +4155,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
         let address = try popOnStackOperand(addressType)  // function address
         guard let address = address else { return }
 
-        let internType = funcTypeInterner.intern(calleeType)
+        let internType = try module.typeCanonicalizer.canonicalID(of: typeIndex)
 
         // A tail call leaves this function as a return does; the callee reports its own entry.
         if isIntercepting {
@@ -4173,7 +4185,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
 
     mutating func visitThrow(tagIndex: UInt32) throws(WasmKitError) -> Output {
         let tag = try module.tags[validating: Int(tagIndex)]
-        let tagType = funcTypeInterner.resolve(tag.type)
+        let tagType = typeRegistry.resolve(tag.type)
         // Pop tag parameter values and ensure they're on the physical stack
         for param in tagType.parameters.reversed() {
             guard (try popOnStackOperand(param)) != nil else { return }
@@ -4255,7 +4267,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
             var catchTypes: [ValueType]
             if let tagIndex {
                 tag = try module.tags[validating: Int(tagIndex)]
-                let tagType = funcTypeInterner.resolve(tag!.type)
+                let tagType = typeRegistry.resolve(tag!.type)
                 catchTypes = tagType.parameters
             } else {
                 tag = nil
@@ -4267,7 +4279,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
             }
 
             // Validate that the caught value types match the target label's copy types
-            guard catchTypes.isSubtype(of: targetFrame.copyTypes) else {
+            guard typeRegistry.isSubtype(catchTypes, of: targetFrame.copyTypes) else {
                 throw WasmKitError(message: .catchTypeMismatch)
             }
 
@@ -4361,7 +4373,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
                     throw WasmKitError(message: .cannotSelectOnReferenceTypes)
                 }
             case .some(let operandType):
-                guard operandType.isSubtype(of: type) else {
+                guard typeRegistry.isSubtype(operandType, of: type) else {
                     throw WasmKitError(message: .typeMismatchOnSelect(expected: type, actual: operandType))
                 }
             }
@@ -6754,26 +6766,6 @@ extension FunctionType {
         guard resultSlots <= Int(UInt16.max) else {
             throw WasmKitError(message: .blockTypeTooLargeForInterpreter("results", slots: resultSlots))
         }
-    }
-
-    fileprivate init(blockType: WasmParser.BlockType, typeSection: [FunctionType]) throws(WasmKitError) {
-        switch blockType {
-        case .type(let valueType):
-            self.init(parameters: [], results: [valueType])
-        case .empty:
-            self.init(parameters: [], results: [])
-        case .funcType(let typeIndex):
-            let typeIndex = Int(typeIndex)
-            guard typeIndex < typeSection.count else {
-                throw WasmKitError(message: .indexOutOfBounds("type", typeIndex, max: typeSection.count))
-            }
-            let funcType = typeSection[typeIndex]
-            self.init(
-                parameters: funcType.parameters,
-                results: funcType.results
-            )
-        }
-        try checkFitsInterpreter()
     }
 }
 

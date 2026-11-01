@@ -4,28 +4,123 @@ import WasmTypes
 // # Canonical types
 //
 // A concrete heap type in a module, `(ref $t)`, names a type by its index in
-// that module's type section. The typed function references proposal compares
-// such types structurally, also across modules: two indices whose function
-// types are equal (after resolving the concrete types nested in them) are the
-// same type.
+// that module's type section. Types are compared iso-recursively, also across
+// modules: a type is identified by the recursion group it is defined in and its
+// position there, and two groups are the same when they define the same types
+// in the same order, with the same finality and supertypes, where references to
+// a type of the group itself are compared by position and references to types
+// outside it by their own identity.
 //
 // Inside the engine, a concrete heap type therefore carries a canonical type ID
-// instead of a module-relative index: the ID the engine's function type
-// interner gives the type's signature once every nested concrete type in it
-// has itself been made canonical. Because a type may only refer to types
-// defined before it, the type section can be canonicalized in order, and two
-// types are equivalent exactly when their canonical IDs are equal.
+// instead of a module-relative index: the ID the engine's ``TypeRegistry``
+// gives the type when its group is registered. Because a group may only refer
+// to the groups defined before it, the type section can be canonicalized in
+// order, and two types are equivalent exactly when their canonical IDs are
+// equal.
 //
 // Canonical types reuse `HeapType.concrete(typeIndex:)`, so the same Swift
 // value means a module index in parsed `Module` data and a canonical ID in
 // everything the translator and the runtime see: function entities, globals,
-// tables, element segments and `Function.type`. A type without concrete heap
-// types is its own canonical form. Function types given by the host are taken
-// to be canonical already.
+// tables, element segments and `Function.type`. Function types given by the
+// host are taken to be canonical already, and define a final type of a group of
+// their own, as a function type outside a `rec` group does.
 
 extension WasmKitError.Message {
     static func unknownType(_ index: UInt32) -> Self {
         Self("unknown type \(index)")
+    }
+}
+
+/// The definition of a canonical type, with every concrete heap type in it a canonical ID.
+struct DefinedType: Sendable {
+    let composite: CompositeType
+    let isFinal: Bool
+    /// The type's supertypes from the root of its hierarchy down to the type itself.
+    let supertypeChain: [UInt32]
+
+    /// The declared supertype, if any.
+    var supertype: UInt32? {
+        supertypeChain.count > 1 ? supertypeChain[supertypeChain.count - 2] : nil
+    }
+
+    /// How many supertypes the type has above it.
+    var depth: Int { supertypeChain.count - 1 }
+}
+
+/// The engine-wide set of canonical types, which gives each recursion group of
+/// type definitions its identity. Thread-safe like the rest of ``Engine``.
+final class TypeRegistry: Sendable {
+    /// A concrete type index in a group's key refers to the type at this offset
+    /// within the group when the flag is set, and to a canonical ID otherwise.
+    fileprivate static let groupRelativeFlag: UInt32 = 1 << 31
+
+    private struct State {
+        var definitions: [DefinedType] = []
+        /// The first canonical ID of each group, by the group's key.
+        var groups: [[SubType]: UInt32] = [:]
+    }
+
+    // `var` because the single-threaded PlatformMutex fallback mutates in
+    // place; the mutex itself guarantees exclusivity, which Sendable checking
+    // cannot see.
+    nonisolated(unsafe) private var state = PlatformMutex(State())
+
+    /// The canonical ID of a final function type outside any `rec` group.
+    func intern(_ type: FunctionType) -> InternedFuncType {
+        let first = register(group: [SubType(isFinal: true, supertypes: [], body: .function(type))])
+        return InternedFuncType(id: first)
+    }
+
+    /// The signature of a canonical function type.
+    func resolve(_ type: InternedFuncType) -> FunctionType {
+        guard case .function(let functionType) = definition(of: type.id).composite else {
+            preconditionFailure("canonical type \(type.id) is not a function type")
+        }
+        return functionType
+    }
+
+    func definition(of id: UInt32) -> DefinedType {
+        state.withLock { $0.definitions[Int(id)] }
+    }
+
+    /// Whether the canonical type `sub` is `sup` or declares it as a supertype, directly or not.
+    func isSubtype(_ sub: UInt32, of sup: UInt32) -> Bool {
+        if sub == sup { return true }
+        return state.withLock { state in
+            let subChain = state.definitions[Int(sub)].supertypeChain
+            let supDepth = state.definitions[Int(sup)].depth
+            return supDepth < subChain.count && subChain[supDepth] == sup
+        }
+    }
+
+    /// Registers a group given by its key, and returns the canonical ID of its first type; the
+    /// others follow in order.
+    ///
+    /// In the key, a concrete type index with ``groupRelativeFlag`` set refers to a type of the
+    /// group itself, and one without it to a canonical ID. A supertype must come before its subtype.
+    fileprivate func register(group key: [SubType]) -> UInt32 {
+        state.withLock { state in
+            if let first = state.groups[key] {
+                return first
+            }
+            let first = UInt32(state.definitions.count)
+            precondition(UInt64(first) + UInt64(key.count) < UInt64(Self.groupRelativeFlag), "too many canonical types")
+            func resolve(_ index: UInt32) -> UInt32 {
+                index & Self.groupRelativeFlag != 0 ? first + (index & ~Self.groupRelativeFlag) : index
+            }
+            for type in key {
+                let chain: [UInt32]
+                if let supertype = type.supertypes.first {
+                    chain = state.definitions[Int(resolve(supertype))].supertypeChain + [UInt32(state.definitions.count)]
+                } else {
+                    chain = [UInt32(state.definitions.count)]
+                }
+                state.definitions.append(
+                    DefinedType(composite: type.body.mapTypeIndices(resolve), isFinal: type.isFinal, supertypeChain: chain))
+            }
+            state.groups[key] = first
+            return first
+        }
     }
 }
 
@@ -34,37 +129,42 @@ struct TypeCanonicalizer {
     /// The canonical ID of each type in the module's type section.
     let typeIDs: [InternedFuncType]
 
-    /// Canonicalizes a module's type section.
+    /// Canonicalizes and validates a module's type section, registering its groups in `registry`.
     ///
-    /// Throws "unknown type" if a type refers to a later type, or to itself without `gc`.
-    ///
-    /// A function type is canonical by its signature alone. GC types are canonical by the
-    /// recursion group they are defined in, with their finality and supertypes, which this does
-    /// not model yet. So it rejects whatever would make two types with one signature distinct, or
-    /// relate types other than by equality: recursion groups of more than one type, a type
-    /// referring to itself, and a type that is not final or declares supertypes.
-    init(typeSection: TypeSection, features: WasmFeatureSet, interner: Interner<FunctionType>) throws(WasmKitError) {
+    /// Throws "unknown type" if a type refers to a type after its own group, or names a
+    /// supertype that is not defined before it.
+    init(typeSection: TypeSection, features: WasmFeatureSet, registry: TypeRegistry) throws(WasmKitError) {
         var typeIDs: [InternedFuncType] = []
         typeIDs.reserveCapacity(typeSection.count)
         for group in typeSection.recursiveGroups {
-            guard group.types.count <= 1 else {
-                throw WasmKitError("recursion groups of more than one type are not supported yet")
+            let groupStart = UInt32(typeIDs.count)
+            let groupEnd = groupStart + UInt32(group.types.count)
+            let earlier = typeIDs
+            func keyIndex(_ index: UInt32) throws(WasmKitError) -> UInt32 {
+                if index < groupStart { return earlier[Int(index)].id }
+                guard index < groupEnd else { throw WasmKitError(message: .unknownType(index)) }
+                return TypeRegistry.groupRelativeFlag | (index - groupStart)
             }
-            for type in group.types {
-                guard type.isFinal, type.supertypes.isEmpty else {
-                    throw WasmKitError("subtype declarations are not supported yet")
+            var key: [SubType] = []
+            key.reserveCapacity(group.types.count)
+            for (offset, type) in group.types.enumerated() {
+                let ownIndex = groupStart + UInt32(offset)
+                guard type.supertypes.count <= 1 else {
+                    throw WasmKitError("a type may declare at most one supertype")
                 }
-                guard case .function(let functionType) = type.body else {
-                    throw WasmKitError("GC type definitions are not supported yet")
+                var supertypes: [UInt32] = []
+                for supertype in type.supertypes {
+                    guard supertype < ownIndex else { throw WasmKitError(message: .unknownType(supertype)) }
+                    supertypes.append(try keyIndex(supertype))
                 }
-                // With GC, a type may refer to the types of its own recursion group.
-                let ownIndex = TypeIndex(typeIDs.count)
-                if features.contains(.gc), (functionType.parameters + functionType.results).contains(where: { $0.concreteTypeIndex == ownIndex }) {
-                    throw WasmKitError("recursive types are not supported yet")
-                }
-                // Only the types defined so far are visible to this one.
-                let canonical = try TypeCanonicalizer(typeIDs: typeIDs).canonicalize(functionType)
-                typeIDs.append(interner.intern(canonical))
+                key.append(SubType(isFinal: type.isFinal, supertypes: supertypes, body: try type.body.mapTypeIndices(keyIndex)))
+            }
+            let first = registry.register(group: key)
+            for offset in 0..<UInt32(group.types.count) {
+                typeIDs.append(InternedFuncType(id: first + offset))
+            }
+            for id in first..<first + UInt32(group.types.count) {
+                try registry.validateSupertype(of: id)
             }
         }
         self.typeIDs = typeIDs
@@ -125,15 +225,60 @@ struct TypeCanonicalizer {
     }
 }
 
+extension TypeRegistry {
+    /// Checks that a canonical type may declare the supertype it does: one that is not final,
+    /// and of which it is a structural subtype.
+    fileprivate func validateSupertype(of id: UInt32) throws(WasmKitError) {
+        let type = definition(of: id)
+        guard let supertypeID = type.supertype else { return }
+        let supertype = definition(of: supertypeID)
+        guard !supertype.isFinal else {
+            throw WasmKitError("sub type \(id) declares a final supertype")
+        }
+        guard isSubtype(type.composite, of: supertype.composite) else {
+            throw WasmKitError("sub type \(id) does not match its supertype")
+        }
+    }
+}
+
 extension ValueType {
     /// Whether the type refers to a type in a type section.
     fileprivate var hasConcreteHeapType: Bool {
-        concreteTypeIndex != nil
+        guard case .ref(let referenceType) = self, case .concrete = referenceType.heapType else { return false }
+        return true
     }
 
-    /// The index of the type in a type section the type refers to, if any.
-    fileprivate var concreteTypeIndex: TypeIndex? {
-        guard case .ref(let referenceType) = self, case .concrete(let index) = referenceType.heapType else { return nil }
-        return index
+    fileprivate func mapTypeIndices<E: Error>(_ transform: (UInt32) throws(E) -> UInt32) throws(E) -> ValueType {
+        guard case .ref(let referenceType) = self, case .concrete(let index) = referenceType.heapType else { return self }
+        return .ref(ReferenceType(isNullable: referenceType.isNullable, heapType: .concrete(typeIndex: try transform(index))))
+    }
+}
+
+extension FieldType {
+    fileprivate func mapTypeIndices<E: Error>(_ transform: (UInt32) throws(E) -> UInt32) throws(E) -> FieldType {
+        guard case .value(let valueType) = storage else { return self }
+        return FieldType(storage: .value(try valueType.mapTypeIndices(transform)), isMutable: isMutable)
+    }
+}
+
+extension CompositeType {
+    fileprivate func mapTypeIndices<E: Error>(_ transform: (UInt32) throws(E) -> UInt32) throws(E) -> CompositeType {
+        switch self {
+        case .function(let type):
+            var parameters: [ValueType] = []
+            parameters.reserveCapacity(type.parameters.count)
+            for parameter in type.parameters { parameters.append(try parameter.mapTypeIndices(transform)) }
+            var results: [ValueType] = []
+            results.reserveCapacity(type.results.count)
+            for result in type.results { results.append(try result.mapTypeIndices(transform)) }
+            return .function(FunctionType(parameters: parameters, results: results))
+        case .structType(let type):
+            var fields: [FieldType] = []
+            fields.reserveCapacity(type.fields.count)
+            for field in type.fields { fields.append(try field.mapTypeIndices(transform)) }
+            return .structType(StructType(fields: fields))
+        case .arrayType(let type):
+            return .arrayType(ArrayType(element: try type.element.mapTypeIndices(transform)))
+        }
     }
 }

@@ -100,7 +100,7 @@ public struct Function: Equatable {
             }
             for index in 0..<produced.count {
                 do {
-                    try produced[index].checkType(results[index])
+                    try produced[index].checkType(results[index], in: caller.engine.typeRegistry)
                 } catch {
                     throw Trap(.resultTypesMismatch(expected: results, got: produced))
                 }
@@ -124,7 +124,7 @@ public struct Function: Equatable {
 
     /// The signature type of the function.
     public var type: FunctionType {
-        store.allocator.funcTypeInterner.resolve(handle.type)
+        store.allocator.typeRegistry.resolve(handle.type)
     }
 
     /// Invokes a function of the given address with the given parameters.
@@ -234,7 +234,7 @@ extension InternalFunction {
         if isWasm {
             let entity = wasm
             let resolvedType = store.engine.resolveType(entity.type)
-            try check(functionType: resolvedType, parameters: arguments)
+            try check(functionType: resolvedType, parameters: arguments, store: store)
             return try executeWasm(
                 store: store,
                 function: self,
@@ -251,7 +251,7 @@ extension InternalFunction {
     func invokeHost(_ arguments: [Value], store: Store) throws -> [Value] {
         let entity = host
         let resolvedType = store.engine.resolveType(entity.type)
-        try check(functionType: resolvedType, parameters: arguments)
+        try check(functionType: resolvedType, parameters: arguments, store: store)
         let caller = Caller(instanceHandle: nil, store: store)
         var results = [Value](repeating: .i32(0), count: resolvedType.results.count)
         let implementation = entity.implementation
@@ -260,23 +260,23 @@ extension InternalFunction {
                 try implementation(caller, parameters, out)
             }
         }
-        try check(functionType: resolvedType, results: results)
+        try check(functionType: resolvedType, results: results, store: store)
         return results
     }
 
-    private func check(expectedTypes: [ValueType], values: [Value]) -> Bool {
+    private func check(expectedTypes: [ValueType], values: [Value], store: Store) -> Bool {
         guard expectedTypes.count == values.count else { return false }
-        return zip(values, expectedTypes).allSatisfy { $0.matches($1) }
+        return zip(values, expectedTypes).allSatisfy { $0.matches($1, in: store.engine.typeRegistry) }
     }
 
-    private func check(functionType: FunctionType, parameters: [Value]) throws {
-        guard check(expectedTypes: functionType.parameters, values: parameters) else {
+    private func check(functionType: FunctionType, parameters: [Value], store: Store) throws {
+        guard check(expectedTypes: functionType.parameters, values: parameters, store: store) else {
             throw Trap(.parameterTypesMismatch(expected: functionType.parameters, got: parameters))
         }
     }
 
-    private func check(functionType: FunctionType, results: [Value]) throws {
-        guard check(expectedTypes: functionType.results, values: results) else {
+    private func check(functionType: FunctionType, results: [Value], store: Store) throws {
+        guard check(expectedTypes: functionType.results, values: results, store: store) else {
             throw Trap(.resultTypesMismatch(expected: functionType.results, got: results))
         }
     }
@@ -347,7 +347,7 @@ struct WasmFunctionEntity {
             try InstructionTranslator(
                 allocator: store.allocator.iseqAllocator,
                 engineConfiguration: engine.configuration,
-                funcTypeInterner: engine.funcTypeInterner,
+                typeRegistry: engine.typeRegistry,
                 module: instance,
                 type: engine.resolveType(type),
                 locals: code.locals,

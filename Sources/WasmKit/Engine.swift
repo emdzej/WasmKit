@@ -13,7 +13,7 @@ public final class Engine {
     /// The engine configuration.
     public let configuration: EngineConfiguration
     let interceptor: EngineInterceptor?
-    let funcTypeInterner: Interner<FunctionType>
+    let typeRegistry: TypeRegistry
 
     /// The head slot of the `returnCrossInstance` handler under this engine's
     /// threading model.
@@ -60,7 +60,7 @@ public final class Engine {
 
         self.configuration = configuration
         self.interceptor = interceptor
-        self.funcTypeInterner = Interner()
+        self.typeRegistry = TypeRegistry()
         self.crossInstanceReturnSlot = Instruction.returnCrossInstance(.init()).headSlot(
             threadingModel: configuration.threadingModel
         )
@@ -71,7 +71,7 @@ public final class Engine {
     public func instantiate(module: Module) -> Instance { fatalError() }
 }
 
-// `configuration` is immutable and `funcTypeInterner` synchronizes its mutable
+// `configuration` is immutable and `typeRegistry` synchronizes its mutable
 // state. Concurrent clients must reject engines with interceptors, whose
 // implementations are not currently Sendable.
 extension Engine: @unchecked Sendable {}
@@ -235,9 +235,9 @@ public struct EngineConfiguration: Sendable {
 
 extension Engine {
     func resolveType(_ type: InternedFuncType) -> FunctionType {
-        return funcTypeInterner.resolve(type)
+        return typeRegistry.resolve(type)
     }
     func internType(_ type: FunctionType) -> InternedFuncType {
-        return funcTypeInterner.intern(type)
+        return typeRegistry.intern(type)
     }
 }

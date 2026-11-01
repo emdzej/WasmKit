@@ -22,10 +22,11 @@ wabt 1.0.42.
   instead, and the two cannot be told apart, as `0x00` and `0x01` are type indices too. Value
   imports are not standard yet; if wasm-tools moves to `Binary.md`'s form, so should
   `parseValueBound` in `ComponentParser.swift`.
-- **GC types:** `TypeCanonicalizer` (`Sources/WasmKit/TypeCanonicalization.swift`) identifies a
-  type by its function signature, so it rejects recursion groups of several types, types that
-  refer to themselves, and non-final types or declared supertypes. GC execution will need
-  iso-recursive canonicalization and declared subtyping in `TypeMatching.swift` instead.
+- **GC types:** type definitions are canonical iso-recursively, by recursion group, in the
+  engine's `TypeRegistry` (`Sources/WasmKit/TypeCanonicalization.swift`), which also records each
+  type's declared supertypes for `TypeMatching.swift`. Struct and array values, `i31` and casts
+  are not implemented yet, so the spec files and directives that need them stay in
+  `UnsupportedSpectests` (`Sources/WASTRunner/Spectest.swift`).
 - **Nesting limits:** components may nest 32 deep (`maxComponentNestingDepth` in
   `ParsedComponentBuilder.swift`), and instantiations 32 deep (`maxInstantiationDepth` in
   `ComponentLoader.swift`), which nesting does not bound: a component can instantiate one defined

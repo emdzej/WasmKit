@@ -29,7 +29,7 @@ struct InstructionValidator {
     func validateTableInit(elemIndex: UInt32, table: UInt32) throws(WasmKitError) {
         let tableType = try context.tableType(table)
         let elementType = try context.elementType(elemIndex)
-        guard elementType.isSubtype(of: tableType.elementType) else {
+        guard context.typeRegistry.isSubtype(elementType, of: tableType.elementType) else {
             throw WasmKitError(
                 message: .tableElementTypeMismatch(tableType: "\(tableType.elementType)", elementType: "\(elementType)")
             )
@@ -39,7 +39,7 @@ struct InstructionValidator {
     func validateTableCopy(dest: UInt32, source: UInt32) throws(WasmKitError) {
         let tableType1 = try context.tableType(source)
         let tableType2 = try context.tableType(dest)
-        guard tableType1.elementType.isSubtype(of: tableType2.elementType) else {
+        guard context.typeRegistry.isSubtype(tableType1.elementType, of: tableType2.elementType) else {
             throw WasmKitError(
                 message:
                     .tableElementTypeMismatch(
@@ -53,7 +53,7 @@ struct InstructionValidator {
     /// Checks that `call_indirect` can call through the table's elements.
     func validateCallIndirectTable(_ table: UInt32) throws(WasmKitError) {
         let elementType = try context.tableType(table).elementType
-        guard elementType.isSubtype(of: .funcRef) else {
+        guard context.typeRegistry.isSubtype(elementType, of: .funcRef) else {
             throw WasmKitError(message: .tableElementTypeMismatch(tableType: "\(elementType)", elementType: "funcref"))
         }
     }
@@ -72,7 +72,7 @@ struct InstructionValidator {
     }
 
     func validateReturnCallLike(calleeType: FunctionType, callerType: FunctionType) throws(WasmKitError) {
-        guard calleeType.results.isSubtype(of: callerType.results) else {
+        guard context.typeRegistry.isSubtype(calleeType.results, of: callerType.results) else {
             throw WasmKitError(
                 message: .typeMismatchOnReturnCall(expected: callerType.results, actual: calleeType.results)
             )
@@ -187,7 +187,7 @@ struct ModuleValidator {
 
 extension WasmTypes.Reference {
     /// Whether the reference is a value of the given canonical reference type.
-    func matches(_ type: WasmTypes.ReferenceType) -> Bool {
+    func matches(_ type: WasmTypes.ReferenceType, in registry: TypeRegistry) -> Bool {
         switch (self, type.heapType) {
         case (.function(let address), .abstract(.funcRef)),
             (.extern(let address), .abstract(.externRef)),
@@ -195,15 +195,15 @@ extension WasmTypes.Reference {
             return address != nil || type.isNullable
         case (.function(let address), .concrete(let typeID)):
             guard let address else { return type.isNullable }
-            return InternalFunction(bitPattern: address).type.id == typeID
+            return registry.isSubtype(InternalFunction(bitPattern: address).type.id, of: typeID)
         default:
             return false
         }
     }
 
     /// Checks if the reference type matches the expected type.
-    func checkType(_ type: WasmTypes.ReferenceType) throws(WasmKitError) {
-        guard matches(type) else {
+    func checkType(_ type: WasmTypes.ReferenceType, in registry: TypeRegistry) throws(WasmKitError) {
+        guard matches(type, in: registry) else {
             throw WasmKitError(message: .expectTypeButGot(expected: "\(type)", got: "\(self)"))
         }
     }
@@ -211,17 +211,17 @@ extension WasmTypes.Reference {
 
 extension Value {
     /// Whether the value is a value of the given canonical type.
-    func matches(_ type: WasmTypes.ValueType) -> Bool {
+    func matches(_ type: WasmTypes.ValueType, in registry: TypeRegistry) -> Bool {
         switch (self, type) {
         case (.i32, .i32), (.i64, .i64), (.f32, .f32), (.f64, .f64), (.v128, .v128): return true
-        case (.ref(let ref), .ref(let refType)): return ref.matches(refType)
+        case (.ref(let ref), .ref(let refType)): return ref.matches(refType, in: registry)
         default: return false
         }
     }
 
     /// Checks if the value type matches the expected type.
-    func checkType(_ type: WasmTypes.ValueType) throws(WasmKitError) {
-        guard matches(type) else {
+    func checkType(_ type: WasmTypes.ValueType, in registry: TypeRegistry) throws(WasmKitError) {
+        guard matches(type, in: registry) else {
             throw WasmKitError(message: .expectTypeButGot(expected: "\(type)", got: "\(self)"))
         }
     }

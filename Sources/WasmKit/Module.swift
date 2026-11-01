@@ -265,7 +265,7 @@ public struct Module: Sendable {
             let table = try instance.tables[validating: Int(tableIndex)]
             let tableType = table.tableType
             let elementType = try instance.typeCanonicalizer.canonicalize(element.type)
-            guard elementType.isSubtype(of: tableType.elementType) else {
+            guard instance.typeRegistry.isSubtype(elementType, of: tableType.elementType) else {
                 throw WasmKitError(
                     kind: .message(
                         .elementSegmentTypeMismatch(elementType: elementType, tableElementType: tableType.elementType)))
@@ -301,7 +301,7 @@ public struct Module: Sendable {
                     )
                 }
                 let elementType = try instance.typeCanonicalizer.canonicalize(element.type)
-                guard elementType.isSubtype(of: table.tableType.elementType) else {
+                guard instance.typeRegistry.isSubtype(elementType, of: table.tableType.elementType) else {
                     throw WasmKitError(
                         kind: .message(
                             .elementSegmentTypeMismatch(
@@ -423,6 +423,8 @@ struct TypeSection: Sendable {
 /// > Note:
 /// <https://webassembly.github.io/spec/core/syntax/modules.html#functions>
 struct GuestFunction: Sendable {
+    /// The index of the function's type in the module's type section.
+    let typeIndex: TypeIndex
     let type: FunctionType
     let code: Code
 }

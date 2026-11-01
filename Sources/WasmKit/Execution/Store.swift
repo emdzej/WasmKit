@@ -103,7 +103,7 @@ public final class Store {
     /// Create a new store associated with the given engine.
     public init(engine: Engine) {
         self.engine = engine
-        self.allocator = StoreAllocator(funcTypeInterner: engine.funcTypeInterner)
+        self.allocator = StoreAllocator(typeRegistry: engine.typeRegistry)
         self.executionStacks = ExecutionStackPool(engine: engine)
         self.isFuelMetered = engine.configuration.fuelMetering
         self.epochCounter = UnsafePointer(engine.epochTicker.counter.address)

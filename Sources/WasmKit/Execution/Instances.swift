@@ -68,10 +68,12 @@ extension EntityHandle: ValidatableEntity where T: ValidatableEntity, T: ~Copyab
 }
 
 package struct InstanceEntity /* : ~Copyable */ {
-    /// The canonical signature of each type in the module's type section.
-    var types: [FunctionType]
+    /// The canonical definition of each type in the module's type section.
+    var types: [CompositeType]
     /// The canonical type ID of each type in the module's type section.
     var typeIDs: [InternedFuncType]
+    /// The registry the type IDs are canonical in: the engine's.
+    var typeRegistry: TypeRegistry
     var functions: ImmutableArray<InternalFunction>
     var tables: ImmutableArray<InternalTable>
     var memories: ImmutableArray<InternalMemory>
@@ -94,6 +96,7 @@ package struct InstanceEntity /* : ~Copyable */ {
         InstanceEntity(
             types: [],
             typeIDs: [],
+            typeRegistry: TypeRegistry(),
             functions: ImmutableArray(),
             tables: ImmutableArray(),
             memories: ImmutableArray(),
@@ -241,7 +244,7 @@ public struct Instance {
                 // Print slot space information
                 let localTypes = code.withValue { $0.locals }
                 let stackLayout = try StackLayout(
-                    type: store.engine.funcTypeInterner.resolve(function.type),
+                    type: store.engine.typeRegistry.resolve(function.type),
                     locals: localTypes,
                     codeSize: code.expression.count
                 )
@@ -1171,8 +1174,8 @@ struct GlobalEntity /* : ~Copyable */ {
         }
     }
 
-    init(globalType: GlobalType, initialValue: Value) throws {
-        try initialValue.checkType(globalType.valueType)
+    init(globalType: GlobalType, initialValue: Value, typeRegistry: TypeRegistry) throws {
+        try initialValue.checkType(globalType.valueType, in: typeRegistry)
         self.rawStorage = GlobalEntity.rawStorage(of: initialValue)
         self.globalType = globalType
     }
@@ -1207,7 +1210,7 @@ public struct Global: Equatable {
             guard global.globalType.mutability == .variable else {
                 throw Trap(.cannotAssignToImmutableGlobal)
             }
-            try value.checkType(global.globalType.valueType)
+            try value.checkType(global.globalType.valueType, in: allocator.typeRegistry)
             global.value = value
         }
     }
@@ -1373,8 +1376,9 @@ enum InternalExternalValue {
 
 extension InternalInstance {
     var instructionMapping: DebuggerInstructionMapping { withValue { $0.instructionMapping } }
-    var types: [FunctionType] { withValue { $0.types } }
+    var types: [CompositeType] { withValue { $0.types } }
     var typeCanonicalizer: TypeCanonicalizer { TypeCanonicalizer(typeIDs: withValue { $0.typeIDs }) }
+    var typeRegistry: TypeRegistry { withValue { $0.typeRegistry } }
     var functions: ImmutableArray<InternalFunction> { withValue { $0.functions } }
     var tables: ImmutableArray<InternalTable> { withValue { $0.tables } }
     var memories: ImmutableArray<InternalMemory> { withValue { $0.memories } }
