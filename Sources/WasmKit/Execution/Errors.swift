@@ -170,6 +170,13 @@ package enum TrapReason: Error, CustomStringConvertible, Sendable {
 }
 
 extension TrapReason.Message {
+    static var nullStructReference: Self { Self("null structure reference") }
+    static var nullArrayReference: Self { Self("null array reference") }
+    static var nullI31Reference: Self { Self("null i31 reference") }
+    static var arrayOutOfBounds: Self { Self("out of bounds array access") }
+    static var castFailure: Self { Self("cast failure") }
+    static var gcAllocationTooLarge: Self { Self("out of memory: the store's structs and arrays would take more than \(GCHeap.byteLimit) bytes") }
+
     static func initialTableSizeExceedsLimit(numberOfElements: Int) -> Self {
         Self("initial table size exceeds the resource limit: \(numberOfElements) elements")
     }

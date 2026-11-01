@@ -29,6 +29,7 @@ add_wasmkit_library(WasmKit
   Execution/Instructions/Epoch.swift
   Execution/Instructions/ExceptionHandling.swift
   Execution/Instructions/Fuel.swift
+  Execution/Instructions/GarbageCollection.swift
   Execution/Instructions/Instruction.swift
   Execution/Instructions/Table.swift
   Execution/Instructions/Memory.swift
@@ -36,6 +37,7 @@ add_wasmkit_library(WasmKit
   Execution/Instructions/InstructionSupport.swift
   Execution/Instructions/SIMD.swift
   Execution/ConstEvaluation.swift
+  Execution/GC.swift
   Execution/DispatchInstruction.swift
   Execution/EngineInterceptor.swift
   Execution/Errors.swift

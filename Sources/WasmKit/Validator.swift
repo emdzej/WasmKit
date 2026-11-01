@@ -188,16 +188,28 @@ struct ModuleValidator {
 extension WasmTypes.Reference {
     /// Whether the reference is a value of the given canonical reference type.
     func matches(_ type: WasmTypes.ReferenceType, in registry: TypeRegistry) -> Bool {
-        switch (self, type.heapType) {
-        case (.function(let address), .abstract(.funcRef)),
-            (.extern(let address), .abstract(.externRef)),
-            (.exception(let address), .abstract(.exnRef)):
-            return address != nil || type.isNullable
-        case (.function(let address), .concrete(let typeID)):
-            guard let address else { return type.isNullable }
-            return registry.isSubtype(InternalFunction(bitPattern: address).type.id, of: typeID)
-        default:
-            return false
+        let top = registry.top(of: type.heapType)
+        switch self {
+        case .function(nil), .extern(nil), .exception(nil), .any(nil):
+            // Every hierarchy has the same null, so only the type's hierarchy tells which it is.
+            guard type.isNullable else { return false }
+            switch self {
+            case .function: return top == .funcRef
+            case .exception: return top == .exnRef
+            default: return top == .any || top == .externRef
+            }
+        case .function(let address?):
+            guard top == .funcRef else { return false }
+            let value = UntypedValue(storage: UInt64(UInt(bitPattern: address)))
+            return CastTarget(type, registry: registry).matches(value, registry: registry)
+        case .exception:
+            return top == .exnRef && type.heapType == .abstract(.exnRef)
+        case .extern, .any:
+            // `extern.convert_any` and `any.convert_extern` keep a value as it is, so the value
+            // of either hierarchy is one of the other too.
+            guard top == .any || top == .externRef else { return false }
+            if top == .externRef { return type.heapType == .abstract(.externRef) }
+            return CastTarget(type, registry: registry).matches(UntypedValue(.ref(self)), registry: registry)
         }
     }
 

@@ -37,6 +37,8 @@ struct DefinedType: Sendable {
     let isFinal: Bool
     /// The type's supertypes from the root of its hierarchy down to the type itself.
     let supertypeChain: [UInt32]
+    /// The layout of the type's objects, for a struct or an array type.
+    let gcType: GCTypeInfo?
 
     /// The declared supertype, if any.
     var supertype: UInt32? {
@@ -115,8 +117,15 @@ final class TypeRegistry: Sendable {
                 } else {
                     chain = [UInt32(state.definitions.count)]
                 }
+                let composite = type.body.mapTypeIndices(resolve)
+                let gcType: GCTypeInfo?
+                switch composite {
+                case .function: gcType = nil
+                case .structType, .arrayType:
+                    gcType = GCTypeInfo(typeID: UInt32(state.definitions.count), supertypeChain: chain, composite: composite)
+                }
                 state.definitions.append(
-                    DefinedType(composite: type.body.mapTypeIndices(resolve), isFinal: type.isFinal, supertypeChain: chain))
+                    DefinedType(composite: composite, isFinal: type.isFinal, supertypeChain: chain, gcType: gcType))
             }
             state.groups[key] = first
             return first

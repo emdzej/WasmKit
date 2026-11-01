@@ -84,15 +84,20 @@ import WasmKit
         }
     }
 
-    @Test func refusesRefHostArgument() throws {
+    /// A host value is the same value as the external one of the same number, which an
+    /// `externref` passes through.
+    @Test func passesRefHostArgument() throws {
         let script = """
-            (module (func (export "f")))
-            (invoke "f" (ref.host 1))
+            (module (func (export "f") (param externref) (result externref) (local.get 0)))
+            (assert_return (invoke "f" (ref.host 1)) (ref.host 1))
+            (assert_return (invoke "f" (ref.host 1)) (ref.extern 1))
             """
         try withScript(script) { script in
             let outcome = try SpectestRunner(configuration: EngineConfiguration())
                 .evaluate(test: script, reporter: NullSpectestProgressReporter())
-            #expect(outcome.failures.map { $0.reason } == ["ref.host is not supported yet"])
+            // The module and both assertions.
+            #expect(outcome.passed == 3)
+            #expect(outcome.failures.isEmpty)
         }
     }
 

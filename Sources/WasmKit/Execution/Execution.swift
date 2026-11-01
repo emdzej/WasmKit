@@ -51,6 +51,9 @@ struct Execution: ~Copyable {
         body: (inout Execution, Sp) throws -> T
     ) rethrows -> T {
         var context = Execution(store: store, stackEnd: stack.slots.advanced(by: stack.count))
+        let gcHeap = store.value.gcHeap
+        gcHeap.addStack(stack.slots, count: stack.count)
+        defer { gcHeap.removeStack(stack.slots) }
         return try body(&context, stack.slots)
     }
 
@@ -353,14 +356,14 @@ extension Sp {
         nonmutating set { write(index, .f64(newValue)) }
     }
 
-    func loadValue(at reg: VReg, type: ValueType) -> Value {
+    func loadValue(at reg: VReg, type: ValueType, in registry: TypeRegistry) -> Value {
         switch type {
         case .v128:
             let lo = self[reg].storage
             let hi = self[reg.nextSlot].storage
             return .v128(V128Storage(lo: lo, hi: hi).value)
         case .i32, .i64, .f32, .f64, .ref:
-            return self[reg].cast(to: type)
+            return self[reg].cast(to: type, in: registry)
         }
     }
 
@@ -469,7 +472,7 @@ private func runRoot(
             type: type
         )
     }
-    return Execution.readRootResults(sp: sp, type: type)
+    return Execution.readRootResults(sp: sp, type: type, in: store.value.engine.typeRegistry)
 }
 
 /// As above, on a stack the caller owns and can use again.
@@ -537,10 +540,10 @@ extension Execution {
     }
 
     /// Reads the results a call of `type` left in the root frame at `sp`.
-    static func readRootResults(sp: Sp, type: FunctionType) -> [Value] {
+    static func readRootResults(sp: Sp, type: FunctionType, in registry: TypeRegistry) -> [Value] {
         let layout = ParameterAreaLayout(type: type)
         return type.results.enumerated().map { (i, resultType) in
-            sp.loadValue(at: layout.resultReg(i), type: resultType)
+            sp.loadValue(at: layout.resultReg(i), type: resultType, in: registry)
         }
     }
 
@@ -1111,7 +1114,7 @@ extension Execution {
                 parameters.initializeElement(
                     at: index,
                     to: parameterArea.loadValue(
-                        at: layout.paramReg(index), type: parameterTypes[index]))
+                        at: layout.paramReg(index), type: parameterTypes[index], in: caller.engine.typeRegistry))
             }
             defer { parameters.deinitialize() }
 

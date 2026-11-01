@@ -224,9 +224,49 @@ public enum Reference: Hashable, Sendable {
     /// A reference to a function.
     case function(FunctionAddress?)
     /// A reference to an external entity.
+    ///
+    /// The same value stands for an external entity in the `any` hierarchy, as
+    /// `any.convert_extern` makes it; `nil` is the null of the `extern` hierarchy.
     case extern(ExternAddress?)
     /// A reference to an exception.
     case exception(ExceptionAddress?)
+    /// A reference to an `i31`, a struct or an array, the values of the `any` hierarchy that
+    /// WebAssembly code creates.
+    ///
+    /// The same value stands for its conversion to the `extern` hierarchy, as
+    /// `extern.convert_any` makes it; `nil` is the null of the `any` hierarchy.
+    case any(AnyReference?)
+}
+
+/// An `i31`, a struct or an array.
+///
+/// A struct or an array stays alive at least as long as a reference to it does.
+public struct AnyReference: Hashable, @unchecked Sendable {
+    /// The value as the engine stores it.
+    package let bits: UInt64
+    /// The struct or array the value refers to, which this keeps alive.
+    package let object: AnyObject?
+
+    package init(bits: UInt64, object: AnyObject?) {
+        self.bits = bits
+        self.object = object
+    }
+
+    /// An `i31` of the low 31 bits of `value`.
+    public static func i31(_ value: UInt32) -> AnyReference {
+        AnyReference(bits: AnyReference.anyTag | (UInt64(value & 0x7FFF_FFFF) << 1) | 1, object: nil)
+    }
+
+    /// The value of an `i31`, zero-extended, or `nil` for a struct or an array.
+    public var i31: UInt32? {
+        bits & 1 == 1 ? UInt32(truncatingIfNeeded: (bits >> 1) & 0x7FFF_FFFF) : nil
+    }
+
+    /// The bit every value of the `any` and `extern` hierarchies but their nulls has set.
+    package static let anyTag: UInt64 = 1 << 62
+
+    public static func == (lhs: AnyReference, rhs: AnyReference) -> Bool { lhs.bits == rhs.bits }
+    public func hash(into hasher: inout Hasher) { hasher.combine(bits) }
 }
 
 /// Runtime representation of a value.

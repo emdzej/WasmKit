@@ -166,7 +166,7 @@ extension Execution {
         guard rawBitPattern != 0 else {
             throw Trap(.indirectCallToNull(elementIndex))
         }
-        let function = InternalFunction(bitPattern: rawBitPattern)
+        let function = InternalFunction(bitPattern: Int(truncatingIfNeeded: rawBitPattern))
         guard function.type == expectedType || store.value.engine.typeRegistry.isSubtype(function.type.id, of: expectedType.id) else {
             throw Trap(
                 .typeMismatchCall(

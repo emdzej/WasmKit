@@ -700,8 +700,31 @@ extension Execution {
         case 985: return try self.execute_refAsNonNull(sp: &sp, pc: &pc, md: &md, ms: &ms)
         case 986: return self.execute_brIfNull(sp: &sp, pc: &pc, md: &md, ms: &ms)
         case 987: return self.execute_brIfNotNull(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 988: return self.execute_selectMemory(sp: &sp, pc: &pc, md: &md, ms: &ms)
-        case 989: return self.execute_selectSharedMemory(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 988: return self.execute_refI31(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 989: return try self.execute_i31GetS(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 990: return try self.execute_i31GetU(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 991: return try self.execute_structNew(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 992: return try self.execute_structNewDefault(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 993: return try self.execute_structGet(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 994: return try self.execute_structSet(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 995: return try self.execute_arrayNew(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 996: return try self.execute_arrayNewDefault(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 997: return try self.execute_arrayNewFixed(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 998: return try self.execute_arrayNewData(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 999: return try self.execute_arrayNewElem(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 1000: return try self.execute_arrayGet(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 1001: return try self.execute_arraySet(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 1002: return try self.execute_arrayLen(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 1003: return try self.execute_arrayFill(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 1004: return try self.execute_arrayCopy(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 1005: return try self.execute_arrayInitData(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 1006: return try self.execute_arrayInitElem(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 1007: return self.execute_refTest(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 1008: return try self.execute_refCast(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 1009: return self.execute_brIfCast(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 1010: return self.execute_brIfNotCast(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 1011: return self.execute_selectMemory(sp: &sp, pc: &pc, md: &md, ms: &ms)
+        case 1012: return self.execute_selectSharedMemory(sp: &sp, pc: &pc, md: &md, ms: &ms)
         default: preconditionFailure("Unknown instruction!?")
 
         }
@@ -9482,6 +9505,188 @@ extension Execution {
         let immediate = Instruction.BrIfOperand.load(from: &pc.pointee)
         let next: CodeSlot
         (pc.pointee, next) = self.brIfNotNull(sp: sp.pointee, pc: pc.pointee, immediate: immediate)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_refI31") @inline(__always)
+    mutating func execute_refI31(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.RefI31Operand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        self.refI31(sp: sp.pointee, immediate: immediate)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i31GetS") @inline(__always)
+    mutating func execute_i31GetS(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.I31GetSOperand.load(from: &pc.pointee)
+        try self.i31GetS(sp: sp.pointee, immediate: immediate)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_i31GetU") @inline(__always)
+    mutating func execute_i31GetU(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.I31GetUOperand.load(from: &pc.pointee)
+        try self.i31GetU(sp: sp.pointee, immediate: immediate)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_structNew") @inline(__always)
+    mutating func execute_structNew(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.StructNewOperand.load(from: &pc.pointee)
+        try self.structNew(sp: sp.pointee, immediate: immediate)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_structNewDefault") @inline(__always)
+    mutating func execute_structNewDefault(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.StructNewDefaultOperand.load(from: &pc.pointee)
+        try self.structNewDefault(sp: sp.pointee, immediate: immediate)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_structGet") @inline(__always)
+    mutating func execute_structGet(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.StructGetOperand.load(from: &pc.pointee)
+        try self.structGet(sp: sp.pointee, immediate: immediate)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_structSet") @inline(__always)
+    mutating func execute_structSet(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.StructSetOperand.load(from: &pc.pointee)
+        try self.structSet(sp: sp.pointee, immediate: immediate)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_arrayNew") @inline(__always)
+    mutating func execute_arrayNew(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.ArrayNewOperand.load(from: &pc.pointee)
+        try self.arrayNew(sp: sp.pointee, pc: pc.pointee, immediate: immediate)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_arrayNewDefault") @inline(__always)
+    mutating func execute_arrayNewDefault(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.ArrayNewDefaultOperand.load(from: &pc.pointee)
+        try self.arrayNewDefault(sp: sp.pointee, pc: pc.pointee, immediate: immediate)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_arrayNewFixed") @inline(__always)
+    mutating func execute_arrayNewFixed(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.ArrayNewFixedOperand.load(from: &pc.pointee)
+        try self.arrayNewFixed(sp: sp.pointee, immediate: immediate)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_arrayNewData") @inline(__always)
+    mutating func execute_arrayNewData(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.ArrayNewDataOperand.load(from: &pc.pointee)
+        try self.arrayNewData(sp: sp.pointee, pc: pc.pointee, immediate: immediate)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_arrayNewElem") @inline(__always)
+    mutating func execute_arrayNewElem(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.ArrayNewElemOperand.load(from: &pc.pointee)
+        try self.arrayNewElem(sp: sp.pointee, pc: pc.pointee, immediate: immediate)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_arrayGet") @inline(__always)
+    mutating func execute_arrayGet(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.ArrayGetOperand.load(from: &pc.pointee)
+        try self.arrayGet(sp: sp.pointee, immediate: immediate)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_arraySet") @inline(__always)
+    mutating func execute_arraySet(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.ArraySetOperand.load(from: &pc.pointee)
+        try self.arraySet(sp: sp.pointee, immediate: immediate)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_arrayLen") @inline(__always)
+    mutating func execute_arrayLen(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.ArrayLenOperand.load(from: &pc.pointee)
+        try self.arrayLen(sp: sp.pointee, immediate: immediate)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_arrayFill") @inline(__always)
+    mutating func execute_arrayFill(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.ArrayFillOperand.load(from: &pc.pointee)
+        try self.arrayFill(sp: sp.pointee, pc: pc.pointee, immediate: immediate)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_arrayCopy") @inline(__always)
+    mutating func execute_arrayCopy(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.ArrayCopyOperand.load(from: &pc.pointee)
+        try self.arrayCopy(sp: sp.pointee, pc: pc.pointee, immediate: immediate)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_arrayInitData") @inline(__always)
+    mutating func execute_arrayInitData(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.ArrayInitDataOperand.load(from: &pc.pointee)
+        try self.arrayInitData(sp: sp.pointee, pc: pc.pointee, immediate: immediate)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_arrayInitElem") @inline(__always)
+    mutating func execute_arrayInitElem(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.ArrayInitElemOperand.load(from: &pc.pointee)
+        try self.arrayInitElem(sp: sp.pointee, pc: pc.pointee, immediate: immediate)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_refTest") @inline(__always)
+    mutating func execute_refTest(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.RefTestOperand.load(from: &pc.pointee)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        self.refTest(sp: sp.pointee, immediate: immediate)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_refCast") @inline(__always)
+    mutating func execute_refCast(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) throws -> CodeSlot {
+        let immediate = Instruction.RefCastOperand.load(from: &pc.pointee)
+        try self.refCast(sp: sp.pointee, immediate: immediate)
+        let next = pc.pointee.pointee
+        pc.pointee = pc.pointee.advanced(by: 1)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_brIfCast") @inline(__always)
+    mutating func execute_brIfCast(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.BrIfCastOperand.load(from: &pc.pointee)
+        let next: CodeSlot
+        (pc.pointee, next) = self.brIfCast(sp: sp.pointee, pc: pc.pointee, immediate: immediate)
+        return next
+    }
+    @_silgen_name("wasmkit_execute_brIfNotCast") @inline(__always)
+    mutating func execute_brIfNotCast(sp: UnsafeMutablePointer<Sp>, pc: UnsafeMutablePointer<Pc>, md: UnsafeMutablePointer<Md>, ms: UnsafeMutablePointer<Ms>) -> CodeSlot {
+        let immediate = Instruction.BrIfNotCastOperand.load(from: &pc.pointee)
+        let next: CodeSlot
+        (pc.pointee, next) = self.brIfNotCast(sp: sp.pointee, pc: pc.pointee, immediate: immediate)
         return next
     }
     @_silgen_name("wasmkit_execute_selectMemory") @inline(__always)

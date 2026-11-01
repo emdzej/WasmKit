@@ -15,7 +15,7 @@ extension Execution {
     mutating func tableSet(sp: Sp, immediate: Instruction.TableSetOperand) throws {
         let table = getTable(immediate.tableIndex, sp: sp, store: store.value)
 
-        let reference = sp.getReference(immediate.value, type: table.tableType)
+        let reference = sp.getReference(immediate.value, table: table)
         let elementIndex = try getElementIndex(sp: sp, immediate.index, table)
         setTableElement(table: table, Int(elementIndex), reference)
     }
@@ -28,7 +28,7 @@ extension Execution {
         let table = getTable(immediate.tableIndex, sp: sp, store: store.value)
 
         let growthSize = sp[immediate.delta].asAddressOffset(table.limits.isMemory64)
-        let growthValue = sp.getReference(immediate.value, type: table.tableType)
+        let growthValue = sp.getReference(immediate.value, table: table)
 
         let oldSize = table.elementCount
         // A growth the limits refuse does no work and costs nothing, so it must not suspend for fuel.
@@ -47,7 +47,7 @@ extension Execution {
     mutating func tableFill(sp: Sp, pc: Pc, immediate: Instruction.TableFillOperand) throws {
         let table = getTable(immediate.tableIndex, sp: sp, store: store.value)
         let fillCounter = sp[immediate.size].asAddressOffset(table.limits.isMemory64)
-        let fillValue = sp.getReference(immediate.value, type: table.tableType)
+        let fillValue = sp.getReference(immediate.value, table: table)
         let startIndex = sp[immediate.destOffset].asAddressOffset(table.limits.isMemory64)
 
         try reserveElementsCopied(fillCounter, sp: sp, pc: pc, for: Instruction.TableFillOperand.self)
@@ -139,7 +139,7 @@ extension Execution {
 }
 
 extension Sp {
-    fileprivate func getReference(_ register: VReg, type: TableType) -> Reference {
-        return self[register].asReference(type.elementType)
+    fileprivate func getReference(_ register: VReg, table: InternalTable) -> Reference {
+        return self[register].asReference(table.tableType.elementType, top: table.elementTop)
     }
 }

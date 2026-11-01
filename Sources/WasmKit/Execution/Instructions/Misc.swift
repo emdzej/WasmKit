@@ -48,18 +48,8 @@ extension Execution {
 /// <https://webassembly.github.io/spec/core/exec/instructions.html#reference-instructions>
 extension Execution {
     mutating func refNull(sp: Sp, immediate: Instruction.RefNullOperand) {
-        let value: Value
-        switch immediate.type {
-        case .externRef:
-            value = .ref(.extern(nil))
-        case .funcRef:
-            value = .ref(.function(nil))
-        case .exnRef:
-            value = .ref(.exception(nil))
-        case .any, .eq, .i31, .structRef, .arrayRef, .noneRef, .noExtern, .noFunc, .noExn:
-            preconditionFailure("ref.null of GC heap type \(immediate.type) is not supported yet")
-        }
-        sp[immediate.result] = UntypedValue(value)
+        // Every hierarchy has the same null.
+        sp[immediate.result] = .nullReference
     }
     mutating func refIsNull(sp: Sp, immediate: Instruction.RefIsNullOperand) {
         let value = sp[immediate.value]

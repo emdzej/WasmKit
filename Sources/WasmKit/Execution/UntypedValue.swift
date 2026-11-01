@@ -80,8 +80,12 @@ struct UntypedValue: Equatable, Hashable {
         case .v128:
             assertionFailure("v128 cannot be represented in UntypedValue; use stack-slot based storage")
             storage = 0
-        case .ref(.function(let value)), .ref(.extern(let value)), .ref(.exception(let value)):
+        case .ref(.function(let value)), .ref(.exception(let value)):
             storage = encodeOptionalInt(value)
+        case .ref(.extern(let value)):
+            storage = value.map(GCBits.extern) ?? Self.isNullMaskPattern
+        case .ref(.any(let value)):
+            storage = value?.bits ?? Self.isNullMaskPattern
         }
     }
 
@@ -115,24 +119,30 @@ struct UntypedValue: Equatable, Hashable {
         return storage & Self.isNullMaskPattern != 0
     }
 
-    /// Returns the value as a reference of the given type.
-    func asReference(_ type: ReferenceType) -> Reference {
-        func decodeOptionalInt() -> Int? {
-            guard storage & Self.isNullMaskPattern == 0 else { return nil }
-            return Int(storage)
+    /// Returns the value as a reference of the given type, whose hierarchy has the top type `top`.
+    ///
+    /// A non-null value says what it refers to; a null needs the hierarchy, which a concrete heap
+    /// type does not tell without its definition.
+    func asReference(_ type: ReferenceType, top: AbstractHeapType) -> Reference {
+        guard !isNullRef else {
+            switch top {
+            case .funcRef: return .function(nil)
+            case .externRef: return .extern(nil)
+            case .exnRef: return .exception(nil)
+            default: return .any(nil)
+            }
         }
-        switch type.heapType {
-        case .abstract(.funcRef), .concrete:
-            // A concrete heap type is always a function type.
-            return .function(decodeOptionalInt())
-        case .abstract(.externRef):
-            return .extern(decodeOptionalInt())
-        case .abstract(.exnRef):
-            return .exception(decodeOptionalInt())
-        case .abstract(.any), .abstract(.eq), .abstract(.i31), .abstract(.structRef), .abstract(.arrayRef),
-            .abstract(.noneRef), .abstract(.noExtern), .abstract(.noFunc), .abstract(.noExn):
-            preconditionFailure("GC reference type \(type) is not supported yet")
+        if GCBits.isAnyOrExtern(storage) {
+            return GCBits.reference(storage)
         }
+        if top == .exnRef {
+            return .exception(Int(storage))
+        }
+        return .function(Int(storage))
+    }
+
+    func asReference(_ type: ReferenceType, in registry: TypeRegistry) -> Reference {
+        asReference(type, top: registry.top(of: type.heapType))
     }
 
     /// Returns the value as an address offset.
@@ -149,7 +159,14 @@ struct UntypedValue: Equatable, Hashable {
     }
 
     /// Returns the value as a typed WebAssembly value.
-    func cast(to type: ValueType) -> Value {
+    func cast(to type: ValueType, in registry: TypeRegistry) -> Value {
+        guard case .ref(let referenceType) = type else { return cast(to: type, top: .funcRef) }
+        return .ref(asReference(referenceType, in: registry))
+    }
+
+    /// Returns the value as a typed WebAssembly value; a reference type must be in the hierarchy
+    /// with the top type `top`.
+    func cast(to type: ValueType, top: AbstractHeapType) -> Value {
         switch type {
         case .i32: return .i32(i32)
         case .i64: return .i64(i64)
@@ -158,7 +175,7 @@ struct UntypedValue: Equatable, Hashable {
         case .v128:
             fatalError("v128 value type is not supported yet.")
         case .ref(let referenceType):
-            return .ref(asReference(referenceType))
+            return .ref(asReference(referenceType, top: top))
         }
     }
 }

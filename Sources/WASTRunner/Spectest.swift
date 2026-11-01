@@ -28,74 +28,14 @@ package struct SpectestDiscovery {
 
 /// What WasmKit cannot run yet in the spec testsuite, by path relative to its root.
 package enum UnsupportedSpectests {
-    private static let garbageCollection = "needs garbage collection"
     private static let branchHinting = "needs branch hinting"
 
     /// Files with nothing WasmKit can run.
-    package static let files: [String] =
-        // Garbage collection
-        [
-            "array.wast", "array_copy.wast", "array_fill.wast", "array_init_data.wast", "array_init_elem.wast",
-            "array_new_data.wast", "array_new_elem.wast", "extern.wast", "ref_cast.wast", "ref_null.wast",
-            "ref_test.wast", "type-subtyping.wast",
-        ]
+    package static let files: [String] = []
 
     /// Directives to skip in the other files, by the line they start on. Skipping a module also
     /// skips the directives that use it.
     package static let directives: [String: [Int: String]] = [
-        "br_on_cast.wast": [
-            3: garbageCollection,  // Struct and array types
-            104: garbageCollection,  // Subtypes of struct types
-            211: garbageCollection,  // A struct type
-            225: garbageCollection,  // A struct type, in a module that must be invalid
-            234: garbageCollection,  // A struct type, in a module that must be invalid
-            243: garbageCollection,  // A struct type, in a module that must be invalid
-            252: garbageCollection,  // `eqref` and `anyref`, in a module that must be invalid
-            260: garbageCollection,  // `structref` and `arrayref`, in a module that must be invalid
-        ],
-        "br_on_cast_fail.wast": [
-            3: garbageCollection,  // Struct and array types
-            104: garbageCollection,  // Subtypes of struct types
-            226: garbageCollection,  // A struct type
-            240: garbageCollection,  // A struct type, in a module that must be invalid
-            249: garbageCollection,  // A struct type, in a module that must be invalid
-            258: garbageCollection,  // A struct type, in a module that must be invalid
-            267: garbageCollection,  // `eqref` and `anyref`, in a module that must be invalid
-            275: garbageCollection,  // `structref` and `arrayref`, in a module that must be invalid
-        ],
-        "i31.wast": [
-            1: garbageCollection,  // `ref.i31` and `(ref i31)`
-            33: garbageCollection,  // A `(ref.i31)` result, which the WAST parser does not read
-            61: garbageCollection,  // A table of `i31ref`
-            128: garbageCollection,  // A table of `(ref i31)` initialized from an imported global
-            140: garbageCollection,  // A global of `i31ref` initialized from an imported global
-            150: garbageCollection,  // Globals of `anyref` holding `i31ref` values
-            168: garbageCollection,  // A table of `anyref` holding `i31ref` values
-        ],
-        "ref_eq.wast": [
-            1: garbageCollection,  // Struct types and `eqref`
-            121: garbageCollection,  // `(ref any)`, in a module that must be invalid
-            129: garbageCollection,  // `(ref null any)`, in a module that must be invalid
-        ],
-        "struct.wast": [
-            3: garbageCollection,  // Struct types
-            25: garbageCollection,  // A recursion group of struct types
-            36: garbageCollection,  // A struct type, in a module that must be invalid
-            40: garbageCollection,  // A struct type, in a module that must be invalid
-            48: garbageCollection,  // Struct types with named fields
-            58: garbageCollection,  // A struct type, in a module that must be invalid
-            70: garbageCollection,  // A struct type and the `struct.*` instructions
-            122: garbageCollection,  // A `(ref.struct)` result, which the WAST parser does not read
-            132: garbageCollection,  // A struct type, in a module that must be invalid
-            145: garbageCollection,  // A struct type and `struct.get` on null
-            160: garbageCollection,  // A struct type with packed fields
-        ],
-        "table_init.wast": [
-            2272: garbageCollection  // A table of `arrayref`
-        ],
-        "table_init64.wast": [
-            2457: garbageCollection  // A table of `arrayref`
-        ],
         "custom/branch_hint.wast": [
             50: branchHinting,  // Two hints on one instruction, which must be malformed
             67: branchHinting,  // A hint outside a function, which must be malformed

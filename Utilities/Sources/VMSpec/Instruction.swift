@@ -1859,6 +1859,141 @@ extension VMGen {
                 name: "brIfNotNull", documentation: "Conditional pc-relative branch if the condition is not a null reference",
                 isControl: true, mayUpdateFrame: false, immediateLayout: .brIfOperand),
         ]
+        // Garbage collection
+        //
+        // A `rawType` is the address of the `GCTypeInfo` of the struct or array type an instruction
+        // creates, and a `rawTarget` the `CastTarget` an instruction tests against. An access
+        // `kind` says how the field or element is stored: see `GCStorageKind`.
+        instructions += [
+            Instruction(name: "refI31", documentation: "WebAssembly Core Instruction `ref.i31`") {
+                $0.field(name: "value", type: .LVReg)
+                $0.field(name: "result", type: .LVReg)
+            },
+            Instruction(name: "i31GetS", documentation: "WebAssembly Core Instruction `i31.get_s`", mayThrow: true) {
+                $0.field(name: "value", type: .LVReg)
+                $0.field(name: "result", type: .LVReg)
+            },
+            Instruction(name: "i31GetU", documentation: "WebAssembly Core Instruction `i31.get_u`", mayThrow: true) {
+                $0.field(name: "value", type: .LVReg)
+                $0.field(name: "result", type: .LVReg)
+            },
+            Instruction(name: "structNew", documentation: "WebAssembly Core Instruction `struct.new`; the fields are in consecutive slots from `fields`", mayThrow: true) {
+                $0.field(name: "result", type: .VReg)
+                $0.field(name: "fields", type: .VReg)
+                $0.field(name: "rawType", type: .UInt64)
+            },
+            Instruction(name: "structNewDefault", documentation: "WebAssembly Core Instruction `struct.new_default`", mayThrow: true) {
+                $0.field(name: "result", type: .LVReg)
+                $0.field(name: "rawType", type: .UInt64)
+            },
+            Instruction(name: "structGet", documentation: "WebAssembly Core Instructions `struct.get`, `struct.get_s` and `struct.get_u`", mayThrow: true) {
+                $0.field(name: "object", type: .VReg)
+                $0.field(name: "result", type: .VReg)
+                $0.field(name: "kind", type: .UInt8)
+                $0.field(name: "offset", type: .UInt32)
+            },
+            Instruction(name: "structSet", documentation: "WebAssembly Core Instruction `struct.set`", mayThrow: true) {
+                $0.field(name: "object", type: .VReg)
+                $0.field(name: "value", type: .VReg)
+                $0.field(name: "kind", type: .UInt8)
+                $0.field(name: "offset", type: .UInt32)
+            },
+            Instruction(name: "arrayNew", documentation: "WebAssembly Core Instruction `array.new`", mayThrow: true, receivesPc: true) {
+                $0.field(name: "result", type: .VReg)
+                $0.field(name: "value", type: .VReg)
+                $0.field(name: "length", type: .VReg)
+                $0.field(name: "rawType", type: .UInt64)
+            },
+            Instruction(name: "arrayNewDefault", documentation: "WebAssembly Core Instruction `array.new_default`", mayThrow: true, receivesPc: true) {
+                $0.field(name: "result", type: .VReg)
+                $0.field(name: "length", type: .VReg)
+                $0.field(name: "rawType", type: .UInt64)
+            },
+            Instruction(name: "arrayNewFixed", documentation: "WebAssembly Core Instruction `array.new_fixed`; the elements are in consecutive slots from `values`", mayThrow: true) {
+                $0.field(name: "result", type: .VReg)
+                $0.field(name: "values", type: .VReg)
+                $0.field(name: "count", type: .UInt32)
+                $0.field(name: "rawType", type: .UInt64)
+            },
+            Instruction(name: "arrayNewData", documentation: "WebAssembly Core Instruction `array.new_data`", mayThrow: true, receivesPc: true) {
+                $0.field(name: "result", type: .VReg)
+                $0.field(name: "offset", type: .VReg)
+                $0.field(name: "length", type: .VReg)
+                $0.field(name: "dataIndex", type: .UInt32)
+                $0.field(name: "rawType", type: .UInt64)
+            },
+            Instruction(name: "arrayNewElem", documentation: "WebAssembly Core Instruction `array.new_elem`", mayThrow: true, receivesPc: true) {
+                $0.field(name: "result", type: .VReg)
+                $0.field(name: "offset", type: .VReg)
+                $0.field(name: "length", type: .VReg)
+                $0.field(name: "elemIndex", type: .UInt32)
+                $0.field(name: "rawType", type: .UInt64)
+            },
+            Instruction(name: "arrayGet", documentation: "WebAssembly Core Instructions `array.get`, `array.get_s` and `array.get_u`", mayThrow: true) {
+                $0.field(name: "array", type: .VReg)
+                $0.field(name: "index", type: .VReg)
+                $0.field(name: "result", type: .VReg)
+                $0.field(name: "kind", type: .UInt8)
+            },
+            Instruction(name: "arraySet", documentation: "WebAssembly Core Instruction `array.set`", mayThrow: true) {
+                $0.field(name: "array", type: .VReg)
+                $0.field(name: "index", type: .VReg)
+                $0.field(name: "value", type: .VReg)
+                $0.field(name: "kind", type: .UInt8)
+            },
+            Instruction(name: "arrayLen", documentation: "WebAssembly Core Instruction `array.len`", mayThrow: true) {
+                $0.field(name: "array", type: .LVReg)
+                $0.field(name: "result", type: .LVReg)
+            },
+            Instruction(name: "arrayFill", documentation: "WebAssembly Core Instruction `array.fill`", mayThrow: true, receivesPc: true) {
+                $0.field(name: "array", type: .VReg)
+                $0.field(name: "offset", type: .VReg)
+                $0.field(name: "value", type: .VReg)
+                $0.field(name: "size", type: .VReg)
+                $0.field(name: "kind", type: .UInt8)
+            },
+            Instruction(name: "arrayCopy", documentation: "WebAssembly Core Instruction `array.copy`", mayThrow: true, receivesPc: true) {
+                $0.field(name: "destArray", type: .VReg)
+                $0.field(name: "destOffset", type: .VReg)
+                $0.field(name: "sourceArray", type: .VReg)
+                $0.field(name: "sourceOffset", type: .VReg)
+                $0.field(name: "size", type: .VReg)
+            },
+            Instruction(name: "arrayInitData", documentation: "WebAssembly Core Instruction `array.init_data`", mayThrow: true, receivesPc: true) {
+                $0.field(name: "array", type: .VReg)
+                $0.field(name: "destOffset", type: .VReg)
+                $0.field(name: "sourceOffset", type: .VReg)
+                $0.field(name: "size", type: .VReg)
+                $0.field(name: "dataIndex", type: .UInt32)
+            },
+            Instruction(name: "arrayInitElem", documentation: "WebAssembly Core Instruction `array.init_elem`", mayThrow: true, receivesPc: true) {
+                $0.field(name: "array", type: .VReg)
+                $0.field(name: "destOffset", type: .VReg)
+                $0.field(name: "sourceOffset", type: .VReg)
+                $0.field(name: "size", type: .VReg)
+                $0.field(name: "elemIndex", type: .UInt32)
+            },
+            Instruction(name: "refTest", documentation: "WebAssembly Core Instruction `ref.test`") {
+                $0.field(name: "value", type: .VReg)
+                $0.field(name: "result", type: .VReg)
+                $0.field(name: "rawTarget", type: .UInt64)
+            },
+            Instruction(name: "refCast", documentation: "WebAssembly Core Instruction `ref.cast`", mayThrow: true) {
+                $0.field(name: "value", type: .VReg)
+                $0.field(name: "result", type: .VReg)
+                $0.field(name: "rawTarget", type: .UInt64)
+            },
+            Instruction(name: "brIfCast", documentation: "Conditional pc-relative branch if the reference in `value` is of the target type", isControl: true) {
+                $0.field(name: "value", type: .LVReg)
+                $0.field(name: "offset", type: .Int32)
+                $0.field(name: "rawTarget", type: .UInt64)
+            },
+            Instruction(name: "brIfNotCast", documentation: "Conditional pc-relative branch if the reference in `value` is not of the target type", isControl: true) {
+                $0.field(name: "value", type: .LVReg)
+                $0.field(name: "offset", type: .Int32)
+                $0.field(name: "rawTarget", type: .UInt64)
+            },
+        ]
         // Multi-memory
         instructions += [
             Instruction(

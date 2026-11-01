@@ -22,11 +22,22 @@ wabt 1.0.42.
   instead, and the two cannot be told apart, as `0x00` and `0x01` are type indices too. Value
   imports are not standard yet; if wasm-tools moves to `Binary.md`'s form, so should
   `parseValueBound` in `ComponentParser.swift`.
-- **GC types:** type definitions are canonical iso-recursively, by recursion group, in the
-  engine's `TypeRegistry` (`Sources/WasmKit/TypeCanonicalization.swift`), which also records each
-  type's declared supertypes for `TypeMatching.swift`. Struct and array values, `i31` and casts
-  are not implemented yet, so the spec files and directives that need them stay in
-  `UnsupportedSpectests` (`Sources/WASTRunner/Spectest.swift`).
+- **GC:** type definitions are canonical iso-recursively, by recursion group, in the engine's
+  `TypeRegistry` (`Sources/WasmKit/TypeCanonicalization.swift`). Structs and arrays are
+  `GCObject`s in their store's `GCHeap` (`Sources/WasmKit/Execution/GC.swift`), which a
+  mark-and-sweep collection frees once no root reaches them. It scans the slots of every stack in
+  use conservatively, and reads globals and tables, and fields, precisely; an object the host
+  holds an `AnyReference` to stays alive through its reference count. The direct-threaded
+  interpreter's accumulator registers are not scanned: the translator hands a value through one
+  only to the instruction right after the one producing it (`AccRecords` in `Translator.swift`),
+  and no GC instruction reads or writes one, so none is live across an allocation. Not done:
+  - The heap of a store is capped at 4 GiB (`GCHeap.byteLimit`) rather than asking the store's
+    `ResourceLimiter`, which only has hooks for memories and tables.
+  - `Reference.any` is a new case of a public enum, which breaks an exhaustive `switch` over it,
+    and an `ExternAddress` must now be below 2^60 rather than 2^63, as the `any` and `extern`
+    hierarchies share their values: see `GCBits`.
+  - Embedded Swift builds of the collector (`ManagedBuffer`, `isKnownUniquelyReferenced`) are only
+    checked by CI.
 - **Nesting limits:** components may nest 32 deep (`maxComponentNestingDepth` in
   `ParsedComponentBuilder.swift`), and instantiations 32 deep (`maxInstantiationDepth` in
   `ComponentLoader.swift`), which nesting does not bound: a component can instantiate one defined

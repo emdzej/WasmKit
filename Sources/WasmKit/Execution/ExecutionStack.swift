@@ -19,7 +19,7 @@ public struct ExecutionStack: ~Copyable {
     /// size that is right for an engine is already part of its configuration.
     public init(engine: Engine) {
         count = Self.slotCount(engine: engine)
-        slots = .allocate(capacity: count)
+        slots = Self.allocateSlots(count: count)
         pool = nil
     }
 
@@ -28,7 +28,7 @@ public struct ExecutionStack: ~Copyable {
         // Initialized through another `init` rather than property by property: with the
         // latter, optimized builds over-released `pool` here (Swift 6.4), and freed it.
         let count = pool.slotCount
-        let slots = pool.take() ?? .allocate(capacity: count)
+        let slots = pool.take() ?? Self.allocateSlots(count: count)
         self.init(slots: slots, count: count, pool: pool)
     }
 
@@ -36,6 +36,13 @@ public struct ExecutionStack: ~Copyable {
         self.slots = slots
         self.count = count
         self.pool = pool
+    }
+
+    /// Zeroed, as a garbage collection scans every slot of a stack in use: see ``GCHeap``.
+    static func allocateSlots(count: Int) -> UnsafeMutablePointer<StackSlot> {
+        let slots = UnsafeMutablePointer<StackSlot>.allocate(capacity: count)
+        slots.initialize(repeating: 0, count: count)
+        return slots
     }
 
     static func slotCount(engine: Engine) -> Int {

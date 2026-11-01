@@ -287,11 +287,11 @@ public typealias ModuleInstance = Instance
 /// to every slot. Keeping only the address means the storage is correct when
 /// zero-filled, so it never has to be written on creation.
 struct TableElements: ~Copyable {
-    private var base: UnsafeMutablePointer<Int>?
+    private var base: UnsafeMutablePointer<UInt64>?
     private(set) var count: Int
 
     init(count: Int) throws(Trap) {
-        let (byteCount, overflow) = count.multipliedReportingOverflow(by: MemoryLayout<Int>.stride)
+        let (byteCount, overflow) = count.multipliedReportingOverflow(by: MemoryLayout<UInt64>.stride)
         guard !overflow else {
             throw Trap(.initialTableSizeExceedsLimit(numberOfElements: count))
         }
@@ -303,7 +303,7 @@ struct TableElements: ~Copyable {
         guard let raw = FailableAllocation.allocateZeroed(byteCount: byteCount) else {
             throw Trap(.initialTableSizeExceedsLimit(numberOfElements: count))
         }
-        self.base = raw.bindMemory(to: Int.self, capacity: count)
+        self.base = raw.bindMemory(to: UInt64.self, capacity: count)
         self.count = count
     }
 
@@ -311,7 +311,7 @@ struct TableElements: ~Copyable {
         FailableAllocation.deallocate(base)
     }
 
-    subscript(index: Int) -> Int {
+    subscript(index: Int) -> UInt64 {
         get { base.unsafelyUnwrapped.advanced(by: index).pointee }
         set { base.unsafelyUnwrapped.advanced(by: index).pointee = newValue }
     }
@@ -326,11 +326,11 @@ struct TableElements: ~Copyable {
         return true
     }
 
-    func withUnsafeBufferPointer<R>(_ body: (UnsafeBufferPointer<Int>) throws -> R) rethrows -> R {
+    func withUnsafeBufferPointer<R>(_ body: (UnsafeBufferPointer<UInt64>) throws -> R) rethrows -> R {
         try body(UnsafeBufferPointer(start: base, count: count))
     }
 
-    mutating func withUnsafeMutableBufferPointer<R>(_ body: (UnsafeMutableBufferPointer<Int>) throws -> R) rethrows -> R {
+    mutating func withUnsafeMutableBufferPointer<R>(_ body: (UnsafeMutableBufferPointer<UInt64>) throws -> R) rethrows -> R {
         try body(UnsafeMutableBufferPointer(start: base, count: count))
     }
 }
@@ -340,6 +340,8 @@ struct TableElements: ~Copyable {
 struct TableEntity: ~Copyable {
     var elements: TableElements
     let tableType: TableType
+    /// The top of the hierarchy of the table's element type.
+    let elementTop: AbstractHeapType
     var limits: Limits { tableType.limits }
 
     static func maxSize(isMemory64: Bool) -> UInt64 {
@@ -348,42 +350,37 @@ struct TableEntity: ~Copyable {
 
     /// The raw slot value for a reference, where `0` is always null.
     ///
-    /// A function address is a live `EntityHandle` pointer and so is never `0`,
-    /// which leaves `0` free to mean null without any encoding. An extern or
-    /// exception address is an embedder-chosen integer and `0` is a valid one --
-    /// the spec suite stores `(ref.extern 0)` -- so those are biased by one.
-    /// ``UntypedValue`` already reserves the top bit for null, so a valid
-    /// address is below `1 << 63` and the bias cannot wrap onto `0`.
-    static func rawValue(_ reference: Reference) -> Int {
+    /// A non-null slot holds the reference's ``UntypedValue``, which is never `0`: a function
+    /// address is a live `EntityHandle` pointer, and a value of the `any` and `extern`
+    /// hierarchies has ``AnyReference/anyTag`` set. An exception address is an embedder-chosen
+    /// integer, and `0` is a valid one, so those are biased by one.
+    static func rawValue(_ reference: Reference) -> UInt64 {
         switch reference {
-        case .function(let address):
-            return address ?? 0
-        case .extern(let address), .exception(let address):
-            return address.map { $0 &+ 1 } ?? 0
+        case .exception(let address):
+            return address.map { UInt64($0) &+ 1 } ?? 0
+        case .function(nil), .extern(nil), .any(nil):
+            return 0
+        case .function, .extern, .any:
+            return UntypedValue(.ref(reference)).storage
         }
     }
 
-    /// Rebuilds a typed reference from a raw slot, using the table's element type.
-    static func reference(_ raw: Int, type: ReferenceType) -> Reference {
-        switch type.heapType {
-        case .abstract(.externRef):
-            return .extern(raw == 0 ? nil : raw &- 1)
-        case .abstract(.exnRef):
-            return .exception(raw == 0 ? nil : raw &- 1)
-        case .abstract(.funcRef), .concrete:
-            return .function(raw == 0 ? nil : raw)
-        case .abstract(.any), .abstract(.eq), .abstract(.i31), .abstract(.structRef), .abstract(.arrayRef),
-            .abstract(.noneRef), .abstract(.noExtern), .abstract(.noFunc), .abstract(.noExn):
-            preconditionFailure("GC reference type \(type) is not supported yet")
+    /// Rebuilds a typed reference from a raw slot of a table whose element type is in the
+    /// hierarchy with the top type `top`.
+    static func reference(_ raw: UInt64, top: AbstractHeapType) -> Reference {
+        if top == .exnRef {
+            return .exception(raw == 0 ? nil : Int(raw &- 1))
         }
+        let value = raw == 0 ? UntypedValue.nullReference : UntypedValue(storage: raw)
+        return value.asReference(.funcRef, top: top)
     }
 
     func reference(at index: Int) -> Reference {
-        Self.reference(elements[index], type: tableType.elementType)
+        Self.reference(elements[index], top: elementTop)
     }
 
     /// Creates a table whose elements start as `initialValue`, or null.
-    init(_ tableType: TableType, initialValue: Reference? = nil, resourceLimiter: any ResourceLimiter) throws {
+    init(_ tableType: TableType, elementTop: AbstractHeapType, initialValue: Reference? = nil, resourceLimiter: any ResourceLimiter) throws {
         // The validator caps a declared table size at `UInt32.max`, which still
         // exceeds `Int` on a 32-bit host, so the conversion has to be checked.
         guard let numberOfElements = Int(exactly: tableType.limits.min) else {
@@ -401,6 +398,7 @@ struct TableEntity: ~Copyable {
         }
         self.elements = elements
         self.tableType = tableType
+        self.elementTop = elementTop
     }
 
     /// > Note: https://webassembly.github.io/spec/core/exec/modules.html#grow-table
@@ -476,8 +474,8 @@ struct TableEntity: ~Copyable {
     }
 
     static func copy(
-        _ sourceTable: UnsafeBufferPointer<Int>,
-        _ destinationTable: UnsafeMutableBufferPointer<Int>,
+        _ sourceTable: UnsafeBufferPointer<UInt64>,
+        _ destinationTable: UnsafeMutableBufferPointer<UInt64>,
         from source: Int, to destination: Int, count: Int
     ) throws {
         let (destinationEnd, destinationOverflow) = destination.addingReportingOverflow(count)
@@ -501,7 +499,7 @@ struct TableEntity: ~Copyable {
         let destination = UnsafeMutableRawPointer(destinationBase.advanced(by: destination))
         destination.copyMemory(
             from: sourceBase.advanced(by: source),
-            byteCount: count * MemoryLayout<Int>.stride
+            byteCount: count * MemoryLayout<UInt64>.stride
         )
     }
 }
@@ -1156,7 +1154,10 @@ struct GlobalEntity /* : ~Copyable */ {
             case .v128:
                 return .v128(rawStorage.value)
             case .i32, .i64, .f32, .f64, .ref:
-                return UntypedValue(storage: rawStorage.lo).cast(to: globalType.valueType)
+                guard case .ref(let referenceType) = globalType.valueType else {
+                    return UntypedValue(storage: rawStorage.lo).cast(to: globalType.valueType, top: .funcRef)
+                }
+                return .ref(UntypedValue(storage: rawStorage.lo).asReference(referenceType, top: referenceTop))
             }
         }
         set {
@@ -1164,6 +1165,8 @@ struct GlobalEntity /* : ~Copyable */ {
         }
     }
     let globalType: GlobalType
+    /// The top of the hierarchy of the global's type, if it is a reference type.
+    let referenceTop: AbstractHeapType
 
     private static func rawStorage(of value: Value) -> V128Storage {
         switch value {
@@ -1178,6 +1181,11 @@ struct GlobalEntity /* : ~Copyable */ {
         try initialValue.checkType(globalType.valueType, in: typeRegistry)
         self.rawStorage = GlobalEntity.rawStorage(of: initialValue)
         self.globalType = globalType
+        if case .ref(let referenceType) = globalType.valueType {
+            self.referenceTop = typeRegistry.top(of: referenceType.heapType)
+        } else {
+            self.referenceTop = .funcRef
+        }
     }
 }
 
@@ -1396,9 +1404,10 @@ extension InternalInstance {
 extension InternalTable {
     var elementCount: Int { withValue { $0.elements.count } }
     /// The raw slot at `index`; `0` is the null reference.
-    func rawElement(at index: Int) -> Int { withValue { $0.elements[index] } }
+    func rawElement(at index: Int) -> UInt64 { withValue { $0.elements[index] } }
     func reference(at index: Int) -> Reference { withValue { $0.reference(at: index) } }
     var tableType: TableType { withValue { $0.tableType } }
+    var elementTop: AbstractHeapType { withValue { $0.elementTop } }
     var limits: Limits { withValue { $0.limits } }
 }
 

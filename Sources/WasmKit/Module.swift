@@ -211,7 +211,7 @@ public struct Module: Sendable {
             try? store.nameRegistry.register(instance: instance, nameSection: nameSection)
         }
 
-        let constEvalContext = ConstEvaluationContext(instance: instance)
+        let constEvalContext = ConstEvaluationContext(instance: instance, gcHeap: store.gcHeap)
 
         // Everything that can reject the module runs before the first write into a table or
         // memory, which may be imported and so outlive a failed instantiation, and before the

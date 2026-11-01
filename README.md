@@ -106,7 +106,7 @@ Proposals are grouped by their [phase](https://github.com/WebAssembly/meetings/b
 | [Branch Hinting](https://github.com/WebAssembly/branch-hinting) | ❌ Not implemented | |
 | [Custom Annotation Syntax in the Text Format](https://github.com/WebAssembly/annotations) | ✅ Implemented | [0.4.2] |
 | [Extended Constant Expressions](https://github.com/WebAssembly/extended-const) | ✅ Implemented | [0.4.0] |
-| [Garbage Collection](https://github.com/WebAssembly/gc) | ❌ Not implemented | |
+| [Garbage Collection](https://github.com/WebAssembly/gc) | ✅ Implemented | Unreleased |
 | [Multiple Memories](https://github.com/WebAssembly/multi-memory) | ✅ Implemented | [0.4.2] |
 | [Relaxed SIMD](https://github.com/WebAssembly/relaxed-simd) | ✅ Implemented | [0.4.0] |
 

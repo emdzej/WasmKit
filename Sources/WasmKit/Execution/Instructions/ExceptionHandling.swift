@@ -16,7 +16,7 @@ extension Execution {
         var slotOffset = VReg.zero
         for paramType in tagType.parameters {
             // A `v128` takes two slots, so read through the typed accessor.
-            payload.append(sp.loadValue(at: immediate.payloadBase + slotOffset, type: paramType))
+            payload.append(sp.loadValue(at: immediate.payloadBase + slotOffset, type: paramType, in: store.value.engine.typeRegistry))
             slotOffset += VReg(slotIndex: paramType.stackSlotCount)
         }
         throw WasmKitException(tag: tag, payload: payload)

@@ -5383,9 +5383,21 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
     private mutating func emitBranchOnNullness(
         relativeDepth: UInt32, frame: ControlStack.ControlFrame, condition: VReg, branchIfNull: Bool
     ) throws(WasmKitError) {
+        try emitConditionalBranch(relativeDepth: relativeDepth, frame: frame) { translator, isTaken, label in
+            translator.emitBranchIf(isNull: isTaken == branchIfNull, condition: condition, to: label)
+        }
+    }
+
+    /// Emits a branch to the label at `relativeDepth` that copies the label's values and ends the
+    /// catch handlers it leaves on the way. `emitBranchIf` emits a branch to a label, taken when
+    /// the condition holds (`true`) or when it does not (`false`).
+    private mutating func emitConditionalBranch(
+        relativeDepth: UInt32, frame: ControlStack.ControlFrame,
+        _ emitBranchIf: (inout Self, Bool, LabelRef) -> Void
+    ) throws(WasmKitError) {
         let handlersToUnwind = try controlStack.catchHandlersToUnwind(relativeDepth: relativeDepth)
         if frame.copySlotCount == 0 && handlersToUnwind == 0 {
-            emitBranchIf(isNull: branchIfNull, condition: condition, to: frame.continuation)
+            emitBranchIf(&self, true, frame.continuation)
             return
         }
         preserveOnStack(depth: valueStack.valueHeight - frame.valueStackHeight)
@@ -5393,7 +5405,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
         // unwinds handlers when the branch is not taken.
         let onBranchNotTaken = iseqBuilder.allocLabel()
         let conditionCheckPC = iseqBuilder.insertingPC
-        emitBranchIf(isNull: !branchIfNull, condition: condition, to: onBranchNotTaken)
+        emitBranchIf(&self, false, onBranchNotTaken)
         let landingPadPC = iseqBuilder.insertingPC
         try copyOnBranch(targetFrame: frame)
         if handlersToUnwind == 0,
@@ -5404,7 +5416,7 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
             iseqBuilder.discardUnpinnedLabel(onBranchNotTaken)
             iseqBuilder.rewind(to: conditionCheckPC)
             self.rewindInstructionMapping(to: conditionCheckPC)
-            emitBranchIf(isNull: branchIfNull, condition: condition, to: frame.continuation)
+            emitBranchIf(&self, true, frame.continuation)
             return
         }
         if handlersToUnwind > 0 {
@@ -5418,96 +5430,406 @@ struct InstructionTranslator: ~Copyable, InstructionVisitor {
 
     // MARK: - Garbage collection
 
-    // Without these, the visitor's defaults would translate each GC instruction to nothing.
+    private func requireGC(_ instruction: String) throws(WasmKitError) {
+        guard module.features.contains(.gc) else {
+            throw WasmKitError("\(instruction) requires the gc feature")
+        }
+    }
+
+    /// The canonical struct type at `typeIndex`.
+    private func structType(_ typeIndex: UInt32) throws(WasmKitError) -> (id: UInt32, type: StructType, info: GCTypeInfo) {
+        let id = try module.typeCanonicalizer.canonicalID(of: typeIndex).id
+        let definition = typeRegistry.definition(of: id)
+        guard case .structType(let type) = definition.composite, let info = definition.gcType else {
+            throw WasmKitError("type \(typeIndex) is not a struct type")
+        }
+        return (id, type, info)
+    }
+
+    /// The canonical array type at `typeIndex`.
+    private func arrayType(_ typeIndex: UInt32) throws(WasmKitError) -> (id: UInt32, element: FieldType, info: GCTypeInfo) {
+        let id = try module.typeCanonicalizer.canonicalID(of: typeIndex).id
+        let definition = typeRegistry.definition(of: id)
+        guard case .arrayType(let type) = definition.composite, let info = definition.gcType else {
+            throw WasmKitError("type \(typeIndex) is not an array type")
+        }
+        return (id, type.element, info)
+    }
+
+    private static func reference(to id: UInt32, isNullable: Bool) -> ValueType {
+        .ref(ReferenceType(isNullable: isNullable, heapType: .concrete(typeIndex: id)))
+    }
+
+    private static func reference(to heapType: AbstractHeapType, isNullable: Bool) -> ValueType {
+        .ref(ReferenceType(isNullable: isNullable, heapType: .abstract(heapType)))
+    }
+
+    /// The access kind of the field `field` of `fields` for a `get` (`signed == nil`) or a `get_s`
+    /// or `get_u`, which only a packed field allows and a plain `get` does not.
+    private static func readKind(_ field: FieldType, signed: Bool?) throws(WasmKitError) -> GCStorageKind {
+        switch (field.storage, signed) {
+        case (.packed, nil):
+            throw WasmKitError("a packed field must be read with get_s or get_u")
+        case (.value, .some):
+            throw WasmKitError("only a packed field can be read with get_s or get_u")
+        default:
+            return GCStorageKind(field.storage, signed: signed ?? false)
+        }
+    }
+
+    /// Pops `types` into consecutive stack slots, the last on top, and returns the first slot, or
+    /// `nil` if some came from an unreachable, polymorphic stack.
+    private mutating func popConsecutive(_ types: [ValueType]) throws(WasmKitError) -> VReg? {
+        var hasAll = true
+        for type in types.reversed() {
+            if try popOnStackOperand(type) == nil {
+                hasAll = false
+            }
+        }
+        guard hasAll else { return nil }
+        return VReg(slotIndex: stackLayout.stackRegBaseSlotIndex + valueStack.slotHeight)
+    }
+
     mutating func visitRefI31() throws(WasmKitError) -> Output {
-        throw WasmKitError("ref.i31 is not supported yet")
+        try requireGC("ref.i31")
+        try popPushEmit(.i32, Self.reference(to: .i31, isNullable: false)) { value, result in
+            .refI31(Instruction.RefI31Operand(value: LVReg(value), result: LVReg(result)))
+        }
     }
     mutating func visitI31GetS() throws(WasmKitError) -> Output {
-        throw WasmKitError("i31.get_s is not supported yet")
+        try requireGC("i31.get_s")
+        try popPushEmit(Self.reference(to: .i31, isNullable: true), .i32) { value, result in
+            .i31GetS(Instruction.I31GetSOperand(value: LVReg(value), result: LVReg(result)))
+        }
     }
     mutating func visitI31GetU() throws(WasmKitError) -> Output {
-        throw WasmKitError("i31.get_u is not supported yet")
+        try requireGC("i31.get_u")
+        try popPushEmit(Self.reference(to: .i31, isNullable: true), .i32) { value, result in
+            .i31GetU(Instruction.I31GetUOperand(value: LVReg(value), result: LVReg(result)))
+        }
     }
     mutating func visitStructNew(typeIndex: UInt32) throws(WasmKitError) -> Output {
-        throw WasmKitError("struct.new is not supported yet")
+        try requireGC("struct.new")
+        let (id, type, info) = try structType(typeIndex)
+        let fields = try popConsecutive(type.fields.map(\.storage.unpacked))
+        let result = valueStack.push(Self.reference(to: id, isNullable: false))
+        guard let fields else { return }
+        emit(.structNew(Instruction.StructNewOperand(result: result, fields: fields, rawType: info.rawValue)))
     }
     mutating func visitStructNewDefault(typeIndex: UInt32) throws(WasmKitError) -> Output {
-        throw WasmKitError("struct.new_default is not supported yet")
+        try requireGC("struct.new_default")
+        let (id, type, info) = try structType(typeIndex)
+        guard type.fields.allSatisfy(\.storage.isDefaultable) else {
+            throw WasmKitError("struct.new_default needs every field of type \(typeIndex) to have a default value")
+        }
+        pushEmit(Self.reference(to: id, isNullable: false)) { result in
+            .structNewDefault(Instruction.StructNewDefaultOperand(result: LVReg(result), rawType: info.rawValue))
+        }
+    }
+    private mutating func visitStructGet(typeIndex: UInt32, fieldIndex: UInt32, signed: Bool?) throws(WasmKitError) {
+        try requireGC("struct.get")
+        let (id, type, info) = try structType(typeIndex)
+        guard Int(fieldIndex) < type.fields.count else {
+            throw WasmKitError("unknown field \(fieldIndex) of type \(typeIndex)")
+        }
+        let field = type.fields[Int(fieldIndex)]
+        let kind = try Self.readKind(field, signed: signed)
+        let offset = UInt32(info.fields[Int(fieldIndex)].offset)
+        try popPushEmit(Self.reference(to: id, isNullable: true), field.storage.unpacked) { object, result in
+            .structGet(Instruction.StructGetOperand(object: object, result: result, kind: kind.rawValue, offset: offset))
+        }
     }
     mutating func visitStructGet(typeIndex: UInt32, fieldIndex: UInt32) throws(WasmKitError) -> Output {
-        throw WasmKitError("struct.get is not supported yet")
+        try visitStructGet(typeIndex: typeIndex, fieldIndex: fieldIndex, signed: nil)
     }
     mutating func visitStructGetS(typeIndex: UInt32, fieldIndex: UInt32) throws(WasmKitError) -> Output {
-        throw WasmKitError("struct.get_s is not supported yet")
+        try visitStructGet(typeIndex: typeIndex, fieldIndex: fieldIndex, signed: true)
     }
     mutating func visitStructGetU(typeIndex: UInt32, fieldIndex: UInt32) throws(WasmKitError) -> Output {
-        throw WasmKitError("struct.get_u is not supported yet")
+        try visitStructGet(typeIndex: typeIndex, fieldIndex: fieldIndex, signed: false)
     }
     mutating func visitStructSet(typeIndex: UInt32, fieldIndex: UInt32) throws(WasmKitError) -> Output {
-        throw WasmKitError("struct.set is not supported yet")
+        try requireGC("struct.set")
+        let (id, type, info) = try structType(typeIndex)
+        guard Int(fieldIndex) < type.fields.count else {
+            throw WasmKitError("unknown field \(fieldIndex) of type \(typeIndex)")
+        }
+        let field = type.fields[Int(fieldIndex)]
+        guard field.isMutable else {
+            throw WasmKitError("field \(fieldIndex) of type \(typeIndex) is immutable")
+        }
+        let value = try popVRegOperand(field.storage.unpacked)
+        let object = try popVRegOperand(Self.reference(to: id, isNullable: true))
+        guard let value, let object else { return }
+        let kind = GCStorageKind(field.storage)
+        emit(.structSet(Instruction.StructSetOperand(object: object, value: value, kind: kind.rawValue, offset: UInt32(info.fields[Int(fieldIndex)].offset))))
     }
     mutating func visitArrayNew(typeIndex: UInt32) throws(WasmKitError) -> Output {
-        throw WasmKitError("array.new is not supported yet")
+        try requireGC("array.new")
+        let (id, element, info) = try arrayType(typeIndex)
+        try pop2PushEmit((.i32, element.storage.unpacked), Self.reference(to: id, isNullable: false)) { popped, result in
+            .arrayNew(Instruction.ArrayNewOperand(result: result, value: popped.1, length: popped.0, rawType: info.rawValue))
+        }
     }
     mutating func visitArrayNewDefault(typeIndex: UInt32) throws(WasmKitError) -> Output {
-        throw WasmKitError("array.new_default is not supported yet")
+        try requireGC("array.new_default")
+        let (id, element, info) = try arrayType(typeIndex)
+        guard element.storage.isDefaultable else {
+            throw WasmKitError("array.new_default needs the element of type \(typeIndex) to have a default value")
+        }
+        try popPushEmit(.i32, Self.reference(to: id, isNullable: false)) { length, result in
+            .arrayNewDefault(Instruction.ArrayNewDefaultOperand(result: result, length: length, rawType: info.rawValue))
+        }
     }
     mutating func visitArrayNewFixed(typeIndex: UInt32, size: UInt32) throws(WasmKitError) -> Output {
-        throw WasmKitError("array.new_fixed is not supported yet")
+        try requireGC("array.new_fixed")
+        let (id, element, info) = try arrayType(typeIndex)
+        // An array.new_fixed of more values than an operand stack could hold is refused up front.
+        guard size <= 10_000 else {
+            throw WasmKitError("array.new_fixed of \(size) values exceeds the limit of 10000")
+        }
+        let values = try popConsecutive(Array(repeating: element.storage.unpacked, count: Int(size)))
+        let result = valueStack.push(Self.reference(to: id, isNullable: false))
+        guard let values else { return }
+        emit(.arrayNewFixed(Instruction.ArrayNewFixedOperand(result: result, values: values, count: size, rawType: info.rawValue)))
+    }
+    mutating func visitArrayGet(typeIndex: UInt32, signed: Bool?) throws(WasmKitError) {
+        try requireGC("array.get")
+        let (id, element, _) = try arrayType(typeIndex)
+        let kind = try Self.readKind(element, signed: signed)
+        try pop2PushEmit((.i32, Self.reference(to: id, isNullable: true)), element.storage.unpacked) { popped, result in
+            .arrayGet(Instruction.ArrayGetOperand(array: popped.1, index: popped.0, result: result, kind: kind.rawValue))
+        }
     }
     mutating func visitArrayGet(typeIndex: UInt32) throws(WasmKitError) -> Output {
-        throw WasmKitError("array.get is not supported yet")
+        try visitArrayGet(typeIndex: typeIndex, signed: nil)
     }
     mutating func visitArrayGetS(typeIndex: UInt32) throws(WasmKitError) -> Output {
-        throw WasmKitError("array.get_s is not supported yet")
+        try visitArrayGet(typeIndex: typeIndex, signed: true)
     }
     mutating func visitArrayGetU(typeIndex: UInt32) throws(WasmKitError) -> Output {
-        throw WasmKitError("array.get_u is not supported yet")
+        try visitArrayGet(typeIndex: typeIndex, signed: false)
+    }
+    /// The array type at `typeIndex`, which `instruction` writes to.
+    private func mutableArrayType(_ typeIndex: UInt32, _ instruction: String) throws(WasmKitError) -> (id: UInt32, element: FieldType, info: GCTypeInfo) {
+        try requireGC(instruction)
+        let type = try arrayType(typeIndex)
+        guard type.element.isMutable else {
+            throw WasmKitError("\(instruction) needs the elements of type \(typeIndex) to be mutable")
+        }
+        return type
     }
     mutating func visitArraySet(typeIndex: UInt32) throws(WasmKitError) -> Output {
-        throw WasmKitError("array.set is not supported yet")
+        let (id, element, _) = try mutableArrayType(typeIndex, "array.set")
+        let value = try popVRegOperand(element.storage.unpacked)
+        let index = try popVRegOperand(.i32)
+        let array = try popVRegOperand(Self.reference(to: id, isNullable: true))
+        guard let value, let index, let array else { return }
+        emit(.arraySet(Instruction.ArraySetOperand(array: array, index: index, value: value, kind: GCStorageKind(element.storage).rawValue)))
     }
     mutating func visitArrayLen() throws(WasmKitError) -> Output {
-        throw WasmKitError("array.len is not supported yet")
+        try requireGC("array.len")
+        try popPushEmit(Self.reference(to: .arrayRef, isNullable: true), .i32) { array, result in
+            .arrayLen(Instruction.ArrayLenOperand(array: LVReg(array), result: LVReg(result)))
+        }
     }
     mutating func visitRefEq() throws(WasmKitError) -> Output {
-        throw WasmKitError("ref.eq is not supported yet")
+        try requireGC("ref.eq")
+        // References are equal exactly when their values are, and every null is the same value.
+        let eqref = Self.reference(to: .eq, isNullable: true)
+        try pop2PushEmit((eqref, eqref), .i32) { popped, result in
+            .i64Eq(Instruction.BinaryOperand(lhs: popped.1, rhs: popped.0, result: LVReg(result)))
+        }
+    }
+    /// Converts between the `any` and `extern` hierarchies, which share their values.
+    private mutating func visitConvert(from: AbstractHeapType, to: AbstractHeapType, _ instruction: String) throws(WasmKitError) {
+        try requireGC(instruction)
+        let (referenceType, source) = try popRefOperand()
+        if let referenceType {
+            try ValueStack.check(.some(.ref(referenceType)), matches: Self.reference(to: from, isNullable: true), in: typeRegistry)
+        }
+        let isNullable = referenceType?.isNullable ?? false
+        repushOperand(source, type: .some(Self.reference(to: to, isNullable: isNullable)))
     }
     mutating func visitAnyConvertExtern() throws(WasmKitError) -> Output {
-        throw WasmKitError("any.convert_extern is not supported yet")
+        try visitConvert(from: .externRef, to: .any, "any.convert_extern")
     }
     mutating func visitExternConvertAny() throws(WasmKitError) -> Output {
-        throw WasmKitError("extern.convert_any is not supported yet")
+        try visitConvert(from: .any, to: .externRef, "extern.convert_any")
     }
     mutating func visitArrayNewData(typeIndex: UInt32, dataIndex: UInt32) throws(WasmKitError) -> Output {
-        throw WasmKitError("array.new_data is not supported yet")
+        try requireGC("array.new_data")
+        let (id, element, info) = try arrayType(typeIndex)
+        try Self.checkNumeric(element, "array.new_data")
+        try validator.validateDataSegment(dataIndex)
+        try pop2PushEmit((.i32, .i32), Self.reference(to: id, isNullable: false)) { popped, result in
+            .arrayNewData(Instruction.ArrayNewDataOperand(result: result, offset: popped.1, length: popped.0, dataIndex: dataIndex, rawType: info.rawValue))
+        }
     }
     mutating func visitArrayNewElem(typeIndex: UInt32, elemIndex: UInt32) throws(WasmKitError) -> Output {
-        throw WasmKitError("array.new_elem is not supported yet")
+        try requireGC("array.new_elem")
+        let (id, element, info) = try arrayType(typeIndex)
+        try checkElementSegment(elemIndex, matches: element)
+        try pop2PushEmit((.i32, .i32), Self.reference(to: id, isNullable: false)) { popped, result in
+            .arrayNewElem(Instruction.ArrayNewElemOperand(result: result, offset: popped.1, length: popped.0, elemIndex: elemIndex, rawType: info.rawValue))
+        }
+    }
+    /// Checks that elements of `field`'s type can be read from a data segment.
+    private static func checkNumeric(_ field: FieldType, _ instruction: String) throws(WasmKitError) {
+        if case .value(.ref) = field.storage {
+            throw WasmKitError("\(instruction) needs an array of numbers or vectors")
+        }
+    }
+    /// Checks that the references of an element segment can be elements of `field`'s type.
+    private func checkElementSegment(_ elemIndex: UInt32, matches field: FieldType) throws(WasmKitError) {
+        let segmentType = try module.elementType(elemIndex)
+        guard case .value(let elementType) = field.storage, typeRegistry.isSubtype(.ref(segmentType), of: elementType) else {
+            throw WasmKitError("element segment \(elemIndex) of type \(segmentType) does not match the array's elements")
+        }
     }
     mutating func visitArrayFill(typeIndex: UInt32) throws(WasmKitError) -> Output {
-        throw WasmKitError("array.fill is not supported yet")
+        let (id, element, _) = try mutableArrayType(typeIndex, "array.fill")
+        let size = try popVRegOperand(.i32)
+        let value = try popVRegOperand(element.storage.unpacked)
+        let offset = try popVRegOperand(.i32)
+        let array = try popVRegOperand(Self.reference(to: id, isNullable: true))
+        guard let size, let value, let offset, let array else { return }
+        emit(.arrayFill(Instruction.ArrayFillOperand(array: array, offset: offset, value: value, size: size, kind: GCStorageKind(element.storage).rawValue)))
     }
     mutating func visitArrayCopy(destType: UInt32, srcType: UInt32) throws(WasmKitError) -> Output {
-        throw WasmKitError("array.copy is not supported yet")
+        let (destinationID, destinationElement, _) = try mutableArrayType(destType, "array.copy")
+        let (sourceID, sourceElement, _) = try arrayType(srcType)
+        guard typeRegistry.isSubtype(sourceElement.storage, of: destinationElement.storage) else {
+            throw WasmKitError("array.copy cannot copy elements of type \(srcType) into type \(destType)")
+        }
+        let size = try popVRegOperand(.i32)
+        let sourceOffset = try popVRegOperand(.i32)
+        let source = try popVRegOperand(Self.reference(to: sourceID, isNullable: true))
+        let destinationOffset = try popVRegOperand(.i32)
+        let destination = try popVRegOperand(Self.reference(to: destinationID, isNullable: true))
+        guard let size, let sourceOffset, let source, let destinationOffset, let destination else { return }
+        emit(
+            .arrayCopy(
+                Instruction.ArrayCopyOperand(
+                    destArray: destination, destOffset: destinationOffset, sourceArray: source, sourceOffset: sourceOffset, size: size)))
     }
     mutating func visitArrayInitData(typeIndex: UInt32, dataIndex: UInt32) throws(WasmKitError) -> Output {
-        throw WasmKitError("array.init_data is not supported yet")
+        let (id, element, _) = try mutableArrayType(typeIndex, "array.init_data")
+        try Self.checkNumeric(element, "array.init_data")
+        try validator.validateDataSegment(dataIndex)
+        let size = try popVRegOperand(.i32)
+        let sourceOffset = try popVRegOperand(.i32)
+        let destinationOffset = try popVRegOperand(.i32)
+        let array = try popVRegOperand(Self.reference(to: id, isNullable: true))
+        guard let size, let sourceOffset, let destinationOffset, let array else { return }
+        emit(
+            .arrayInitData(
+                Instruction.ArrayInitDataOperand(
+                    array: array, destOffset: destinationOffset, sourceOffset: sourceOffset, size: size, dataIndex: dataIndex)))
     }
     mutating func visitArrayInitElem(typeIndex: UInt32, elemIndex: UInt32) throws(WasmKitError) -> Output {
-        throw WasmKitError("array.init_elem is not supported yet")
+        let (id, element, _) = try mutableArrayType(typeIndex, "array.init_elem")
+        try checkElementSegment(elemIndex, matches: element)
+        let size = try popVRegOperand(.i32)
+        let sourceOffset = try popVRegOperand(.i32)
+        let destinationOffset = try popVRegOperand(.i32)
+        let array = try popVRegOperand(Self.reference(to: id, isNullable: true))
+        guard let size, let sourceOffset, let destinationOffset, let array else { return }
+        emit(
+            .arrayInitElem(
+                Instruction.ArrayInitElemOperand(
+                    array: array, destOffset: destinationOffset, sourceOffset: sourceOffset, size: size, elemIndex: elemIndex)))
     }
+
+    /// The canonical form of a reference type an instruction names.
+    private func canonicalCastType(_ type: ReferenceType) throws(WasmKitError) -> ReferenceType {
+        try module.typeCanonicalizer.canonicalize(type)
+    }
+
+    /// Pops the operand of a cast to `target`, which must be in its hierarchy, and returns its
+    /// type (`nil` for an unknown one) and source.
+    private mutating func popCastOperand(to target: ReferenceType) throws(WasmKitError) -> (ReferenceType?, ValueSource?) {
+        let (operandType, source) = try popRefOperand()
+        if let operandType {
+            let top = Self.reference(to: typeRegistry.top(of: target.heapType), isNullable: true)
+            try ValueStack.check(.some(.ref(operandType)), matches: top, in: typeRegistry)
+        }
+        return (operandType, source)
+    }
+
     mutating func visitRefTest(_ refTest: WasmParser.Instruction.RefTest, type: HeapType) throws(WasmKitError) -> Output {
-        throw WasmKitError("ref.test is not supported yet")
+        try requireGC("ref.test")
+        let target = try canonicalCastType(ReferenceType(isNullable: refTest == .refTestNull, heapType: type))
+        let (_, source) = try popCastOperand(to: target)
+        let result = valueStack.push(.i32)
+        guard let source else { return }
+        let rawTarget = CastTarget(target, registry: typeRegistry).rawValue
+        emit(.refTest(Instruction.RefTestOperand(value: ensureOnVReg(source), result: result, rawTarget: rawTarget)))
     }
     mutating func visitRefCast(_ refCast: WasmParser.Instruction.RefCast, type: HeapType) throws(WasmKitError) -> Output {
-        throw WasmKitError("ref.cast is not supported yet")
+        try requireGC("ref.cast")
+        let target = try canonicalCastType(ReferenceType(isNullable: refCast == .refCastNull, heapType: type))
+        let (_, source) = try popCastOperand(to: target)
+        let result = valueStack.push(.ref(target))
+        guard let source else { return }
+        let rawTarget = CastTarget(target, registry: typeRegistry).rawValue
+        emit(.refCast(Instruction.RefCastOperand(value: ensureOnVReg(source), result: result, rawTarget: rawTarget)))
+    }
+    /// `br_on_cast` (`onFailure == false`) and `br_on_cast_fail`.
+    private mutating func visitBrOnCast(
+        relativeDepth: UInt32, castFrom: ReferenceType, castTo: ReferenceType, onFailure: Bool
+    ) throws(WasmKitError) {
+        try requireGC(onFailure ? "br_on_cast_fail" : "br_on_cast")
+        let castFrom = try canonicalCastType(castFrom)
+        let castTo = try canonicalCastType(castTo)
+        guard typeRegistry.isSubtype(castTo, of: castFrom) else {
+            throw WasmKitError("the type cast to, \(castTo), must match the type cast from, \(castFrom)")
+        }
+        let frame = try controlStack.branchTarget(relativeDepth: relativeDepth)
+        // A reference of `castFrom` that is not of `castTo`.
+        let difference = ReferenceType(isNullable: castFrom.isNullable && !castTo.isNullable, heapType: castFrom.heapType)
+        let (taken, notTaken) = onFailure ? (difference, castTo) : (castTo, difference)
+        let (operandType, source) = try popRefOperand()
+        if let operandType {
+            try ValueStack.check(.some(.ref(operandType)), matches: .ref(castFrom), in: typeRegistry)
+        }
+        repushOperand(source, type: .some(.ref(taken)))
+        if source != nil {
+            preserveOnStack(depth: valueStack.valueHeight - frame.valueStackHeight)
+            let condition = ensureOnVReg(valueStack.peek(depth: 0))
+            let rawTarget = CastTarget(castTo, registry: typeRegistry).rawValue
+            try emitConditionalBranch(relativeDepth: relativeDepth, frame: frame) { translator, isTaken, label in
+                // Taken on a match, for `br_on_cast`, or a mismatch, for `br_on_cast_fail`.
+                translator.emitBranchIfCast(onMatch: isTaken != onFailure, condition: condition, rawTarget: rawTarget, to: label)
+            }
+        }
+        try popPushValues(frame.copyTypes)
+        _ = try popAnyOperand()
+        repushOperand(source, type: .some(.ref(notTaken)))
     }
     mutating func visitBrOnCast(relativeDepth: UInt32, castFrom: ReferenceType, castTo: ReferenceType) throws(WasmKitError) -> Output {
-        throw WasmKitError("br_on_cast is not supported yet")
+        try visitBrOnCast(relativeDepth: relativeDepth, castFrom: castFrom, castTo: castTo, onFailure: false)
     }
     mutating func visitBrOnCastFail(relativeDepth: UInt32, castFrom: ReferenceType, castTo: ReferenceType) throws(WasmKitError) -> Output {
-        throw WasmKitError("br_on_cast_fail is not supported yet")
+        try visitBrOnCast(relativeDepth: relativeDepth, castFrom: castFrom, castTo: castTo, onFailure: true)
+    }
+
+    /// Emits a branch to `label` taken when the reference in `condition` matches the cast target
+    /// (`onMatch`) or does not.
+    private mutating func emitBranchIfCast(onMatch: Bool, condition: VReg, rawTarget: UInt64, to label: LabelRef) {
+        let oldPC = iseqBuilder.insertingPC
+        if onMatch {
+            iseqBuilder.emitWithLabel(Instruction.brIfCast, label) { _, selfPC, target in
+                Instruction.BrIfCastOperand(
+                    value: LVReg(condition), offset: Int32(target.offsetFromHead - selfPC.offsetFromHead), rawTarget: rawTarget)
+            }
+        } else {
+            iseqBuilder.emitWithLabel(Instruction.brIfNotCast, label) { _, selfPC, target in
+                Instruction.BrIfNotCastOperand(
+                    value: LVReg(condition), offset: Int32(target.offsetFromHead - selfPC.offsetFromHead), rawTarget: rawTarget)
+            }
+        }
+        self.updateInstructionMapping(from: oldPC)
     }
 
     private mutating func visitUnary(_ operand: ValueType, _ instruction: @escaping (Instruction.UnaryOperand) -> Instruction) throws(WasmKitError) {

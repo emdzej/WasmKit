@@ -56,6 +56,18 @@ class BumpAllocator<T: ~Copyable> {
         currentOffset += 1
         return pointer
     }
+
+    /// Calls `body` with each allocated value, which must all be initialized.
+    func forEach(_ body: (UnsafeMutablePointer<T>) -> Void) {
+        for page in pages {
+            for index in page.indices {
+                body(page.baseAddress!.advanced(by: index))
+            }
+        }
+        for index in 0..<currentOffset {
+            body(currentPage.baseAddress!.advanced(by: index))
+        }
+    }
 }
 
 protocol ValidatableEntity: ~Copyable {
@@ -195,6 +207,9 @@ class StoreAllocator {
         private var componentFunctions: BumpAllocator<ComponentFunctionEntity>
     #endif
 
+    /// The structs and arrays of the store.
+    let gcHeap = GCHeap()
+
     /// The engine's canonical types, shared across its stores.
     let typeRegistry: TypeRegistry
 
@@ -217,6 +232,33 @@ class StoreAllocator {
             componentInstances = BumpAllocator(initialCapacity: 2)
             componentFunctions = BumpAllocator(initialCapacity: 16)
         #endif
+        gcHeap.rootScanner = { [unowned self] marker in
+            self.scanGCRoots(&marker)
+        }
+    }
+}
+
+extension StoreAllocator {
+    /// Reports the references in the store's globals and tables to a garbage collection.
+    ///
+    /// Both are allocated initialized, so every one can be read.
+    fileprivate func scanGCRoots(_ marker: inout GCMarker) {
+        globals.forEach { global in
+            guard case .ref = global.pointee.globalType.valueType else { return }
+            marker.visit(global.pointee.rawStorage.lo)
+        }
+        tables.forEach { table in
+            switch table.pointee.elementTop {
+            case .any, .externRef:
+                table.pointee.elements.withUnsafeBufferPointer { slots in
+                    for slot in slots {
+                        marker.visit(slot)
+                    }
+                }
+            default:
+                break
+            }
+        }
     }
 }
 
@@ -392,6 +434,8 @@ extension StoreAllocator {
         // contexts gain each global as it is allocated.
         var constEvalContext = ConstEvaluationContext(
             typeRegistry: typeRegistry,
+            canonicalizer: canonicalizer,
+            gcHeap: gcHeap,
             functions: functions,
             globals: importedGlobals,
             onFunctionReferenced: { index in
@@ -588,7 +632,7 @@ extension StoreAllocator {
     /// > Note:
     /// <https://webassembly.github.io/spec/core/exec/modules.html#alloc-table>
     func allocate(tableType: TableType, initialValue: Reference? = nil, resourceLimiter: any ResourceLimiter) throws -> InternalTable {
-        let pointer = try tables.allocate(initializing: TableEntity(tableType, initialValue: initialValue, resourceLimiter: resourceLimiter))
+        let pointer = try tables.allocate(initializing: TableEntity(tableType, elementTop: typeRegistry.top(of: tableType.elementType.heapType), initialValue: initialValue, resourceLimiter: resourceLimiter))
         return InternalTable(unsafe: pointer)
     }
 

@@ -96,6 +96,10 @@ extension Reference: CustomStringConvertible {
         case .function(let address): return "funcref(\(addressDescription(address)))"
         case .extern(let address): return "externref(\(addressDescription(address)))"
         case .exception(let address): return "exnref(\(addressDescription(address)))"
+        case .any(nil): return "anyref(null)"
+        case .any(let reference?):
+            if let value = reference.i31 { return "i31ref(\(value))" }
+            return "anyref(0x\(String(reference.bits, radix: 16)))"
         }
     }
 }

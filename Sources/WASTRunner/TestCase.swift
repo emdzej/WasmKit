@@ -512,19 +512,19 @@ extension WASTRunContext {
             case .v128(let value): return .v128(value)
             case .refNull(let heapType):
                 switch heapType {
-                case .abstract(.funcRef): return .ref(.function(nil))
-                case .abstract(.externRef): return .ref(.extern(nil))
-                case .abstract(.exnRef): return .ref(.exception(nil))
+                case .abstract(.funcRef), .abstract(.noFunc): return .ref(.function(nil))
+                case .abstract(.externRef), .abstract(.noExtern): return .ref(.extern(nil))
+                case .abstract(.exnRef), .abstract(.noExn): return .ref(.exception(nil))
+                case .abstract(.any), .abstract(.eq), .abstract(.i31), .abstract(.structRef), .abstract(.arrayRef),
+                    .abstract(.noneRef):
+                    return .ref(.any(nil))
                 case .concrete:
                     throw SpectestError("concrete ref.null is not supported yet")
-                case .abstract(.any), .abstract(.eq), .abstract(.i31), .abstract(.structRef), .abstract(.arrayRef),
-                    .abstract(.noneRef), .abstract(.noExtern), .abstract(.noFunc), .abstract(.noExn):
-                    throw SpectestError("ref.null \(heapType) is not supported yet")
                 }
             case .refExtern(let value): return .ref(.extern(Int(value)))
             case .refFunc(let value): return .ref(.function(Int(value)))
-            case .refHost:
-                throw SpectestError("ref.host is not supported yet")
+            // A host value of the `any` hierarchy is the same value as the external one.
+            case .refHost(let value): return .ref(.extern(Int(value)))
             }
         }
         return try function.invoke(args)
@@ -689,13 +689,22 @@ extension Value {
             return rhs.map { lhs == $0 } ?? true
         case (.ref(.function(let lhs?)), .refFunc(let rhs)):
             return rhs.map { lhs == $0 } ?? true
-        case (.ref(.extern(nil)), .refNull(.abstract(.externRef))),
-            (.ref(.function(nil)), .refNull(.abstract(.funcRef))),
-            (.ref(.function(nil)), .refNull(.concrete)),
-            (.ref(.exception(nil)), .refNull(.abstract(.exnRef))),
-            (.ref(.extern(nil)), .refNull(nil)),
-            (.ref(.function(nil)), .refNull(nil)),
-            (.ref(.exception(nil)), .refNull(nil)):
+        case (.ref(.any(.some)), .refExtern(nil)):
+            // An `i31`, a struct or an array that `extern.convert_any` made external.
+            return true
+        case (.ref(.extern(let lhs?)), .refHost(let rhs)):
+            return lhs == rhs
+        case (.ref(.any(let reference?)), .refI31):
+            return reference.i31 != nil
+        case (.ref(.any(let reference?)), .refStruct):
+            return reference.isStruct
+        case (.ref(.any(let reference?)), .refArray):
+            return reference.isArray
+        case (.ref(.any(.some)), .refEq):
+            return true
+        case (.ref(.function(nil)), .refNull), (.ref(.extern(nil)), .refNull), (.ref(.exception(nil)), .refNull),
+            (.ref(.any(nil)), .refNull):
+            // The function's result type says which null it is.
             return true
         case (_, .either(let candidates)):
             // Relaxed-SIMD non-determinism: match if the actual equals any candidate.

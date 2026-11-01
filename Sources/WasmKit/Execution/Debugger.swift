@@ -52,7 +52,8 @@
             case linearMemoryOOB(address: UInt, length: UInt)
         }
 
-        /// The stack the guest runs on, kept alive for as long as the guest can be resumed.
+        /// The stack the guest runs on, kept alive for as long as the guest can be resumed, and a
+        /// root of the store's garbage collector for as long.
         private let stack: ExecutionStack
         private var execution: Execution
         private let store: Store
@@ -123,6 +124,7 @@
             self.module = module
             self.entrypointFunction = entrypointFunction
             let stack = ExecutionStack(engine: store.engine)
+            store.gcHeap.addStack(stack.slots, count: stack.count)
             self.store = store
             self.execution = Execution(
                 store: StoreRef(store),
@@ -134,6 +136,10 @@
             self.breakpointHeadSlot = Instruction.breakpoint(.init()).headSlot(threadingModel: threadingModel)
 
             self.state = .instantiated
+        }
+
+        deinit {
+            store.gcHeap.removeStack(stack.slots)
         }
 
         /// Sets a breakpoint at the first instruction in the entrypoint function of the module instantiated by
@@ -399,7 +405,7 @@
         private mutating func recordEntrypointReturn() {
             self.refreshMemoryView(instance: self.instance.handle)
             let rootSp = self.stack.slots.advanced(by: StackLayout.numberOfSavingSlots)
-            self.state = .entrypointReturned(Execution.readRootResults(sp: rootSp, type: self.entrypointFunction.type))
+            self.state = .entrypointReturned(Execution.readRootResults(sp: rootSp, type: self.entrypointFunction.type, in: self.store.engine.typeRegistry))
         }
 
         /// Steps by a single Wasm instruction in the module instantiated by the debugger stopped at a breakpoint.

@@ -25,6 +25,8 @@ public final class Store {
     /// An `exnref` can be kept in a global or table, or passed to the host, and used by a later
     /// call, so the exceptions live as long as the store, like its other entities.
     var exceptions: [WasmKitException] = []
+    /// The structs and arrays the store's guests create.
+    var gcHeap: GCHeap { allocator.gcHeap }
     @_spi(Fuzzing)  // Consider making this public
     public var resourceLimiter: ResourceLimiter = DefaultResourceLimiter()
 

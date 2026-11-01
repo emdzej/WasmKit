@@ -146,6 +146,8 @@ public final class ResumableCall {
     /// The code the called function returns to.
     private let rootCode: Execution.RootCode
     private var state: State
+    /// The stack the store's garbage collector scans while the call runs or is suspended.
+    private var stackRoot: UnsafeMutablePointer<StackSlot>?
 
     /// Prepares a call of `function` with `arguments`, on a stack of its own, without running it.
     ///
@@ -231,7 +233,9 @@ public final class ResumableCall {
         if error is WasmKitException {
             throw ResumableCallError.exceptionNotThrowable
         }
-        if let signal = try state.finish(), let trap = error as? Trap {
+        let signal = try state.finish()
+        removeStackRoot()
+        if let signal, let trap = error as? Trap {
             // A trap site is just past the head slot of the instruction that raised it.
             throw trap.withBacktrace(
                 Execution.captureBacktrace(sp: signal.sp, pc: signal.resumePC + 1, store: function.store))
@@ -269,6 +273,10 @@ public final class ResumableCall {
         store.isSuspendable = true
         defer { store.isSuspendable = wasSuspendable }
         let base = stack.slots
+        if stackRoot == nil {
+            store.gcHeap.addStack(base, count: stack.count)
+            stackRoot = base
+        }
         do {
             try body(&execution, base)
         } catch let signal as SuspensionSignal {
@@ -276,10 +284,22 @@ public final class ResumableCall {
             return .suspended(signal.suspension)
         } catch {
             state = .finished(stack)
+            removeStackRoot()
             throw error
         }
-        let results = Execution.readRootResults(sp: base.advanced(by: StackLayout.numberOfSavingSlots), type: type)
+        let results = Execution.readRootResults(sp: base.advanced(by: StackLayout.numberOfSavingSlots), type: type, in: function.store.engine.typeRegistry)
         state = .finished(stack)
+        removeStackRoot()
         return .returned(results)
+    }
+
+    private func removeStackRoot() {
+        guard let stackRoot else { return }
+        function.store.gcHeap.removeStack(stackRoot)
+        self.stackRoot = nil
+    }
+
+    deinit {
+        removeStackRoot()
     }
 }

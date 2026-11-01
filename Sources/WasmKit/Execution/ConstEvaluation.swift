@@ -2,12 +2,17 @@ import WasmParser
 
 protocol ConstEvaluationContextProtocol {
     var typeRegistry: TypeRegistry { get }
+    var canonicalizer: TypeCanonicalizer { get }
+    var gcHeap: GCHeap { get }
     func functionRef(_ index: FunctionIndex) throws -> Reference
     func globalValue(_ index: GlobalIndex) throws -> Value
 }
 
 struct ConstEvaluationContext: ConstEvaluationContextProtocol {
     let typeRegistry: TypeRegistry
+    let canonicalizer: TypeCanonicalizer
+    /// Where `struct.new` and the `array.new` instructions allocate.
+    let gcHeap: GCHeap
     let functions: ImmutableArray<InternalFunction>
     /// The globals a constant expression may read, which depends on where it appears.
     var globals: [InternalGlobal]
@@ -15,19 +20,25 @@ struct ConstEvaluationContext: ConstEvaluationContextProtocol {
 
     init(
         typeRegistry: TypeRegistry,
+        canonicalizer: TypeCanonicalizer,
+        gcHeap: GCHeap,
         functions: ImmutableArray<InternalFunction>,
         globals: [InternalGlobal],
         onFunctionReferenced: ((FunctionIndex) -> Void)? = nil
     ) {
         self.typeRegistry = typeRegistry
+        self.canonicalizer = canonicalizer
+        self.gcHeap = gcHeap
         self.functions = functions
         self.globals = globals
         self.onFunctionReferenced = onFunctionReferenced
     }
 
     /// A context for element and data segment offsets, which may read every global.
-    init(instance: InternalInstance) {
-        self.init(typeRegistry: instance.typeRegistry, functions: instance.functions, globals: Array(instance.globals))
+    init(instance: InternalInstance, gcHeap: GCHeap) {
+        self.init(
+            typeRegistry: instance.typeRegistry, canonicalizer: instance.typeCanonicalizer, gcHeap: gcHeap,
+            functions: instance.functions, globals: Array(instance.globals))
     }
 
     func functionRef(_ index: FunctionIndex) throws -> Reference {
@@ -54,7 +65,7 @@ extension ConstExpression {
         return result
     }
 
-    private func _evaluate<C: ConstEvaluationContextProtocol>(context: C) throws -> Value {
+    fileprivate func _evaluate<C: ConstEvaluationContextProtocol>(context: C) throws -> Value {
         guard self.last == .end else {
             throw WasmKitError(message: .expectedEndAtOffsetExpression)
         }
@@ -72,14 +83,26 @@ extension ConstExpression {
             case .globalGet(let globalIndex):
                 stack.append(try context.globalValue(globalIndex))
             case .refNull(let type):
-                switch type {
-                case .abstract(.externRef): stack.append(.ref(.extern(nil)))
-                case .abstract(.funcRef), .concrete: stack.append(.ref(.function(nil)))
-                case .abstract(.exnRef): stack.append(.ref(.exception(nil)))
-                case .abstract(.any), .abstract(.eq), .abstract(.i31), .abstract(.structRef), .abstract(.arrayRef),
-                    .abstract(.noneRef), .abstract(.noExtern), .abstract(.noFunc), .abstract(.noExn):
+                let top = context.typeRegistry.top(of: try context.canonicalizer.canonicalize(type))
+                stack.append(.ref(UntypedValue.nullReference.asReference(.funcRef, top: top)))
+            case .refI31:
+                guard case .i32(let value) = stack.popLast() else {
                     throw WasmKitError(message: .illegalConstExpressionInstruction(constInst))
                 }
+                stack.append(.ref(.any(.i31(value))))
+            case .anyConvertExtern, .externConvertAny:
+                // The value stays as it is, but for the null, which is of the other hierarchy.
+                guard case .ref(let reference) = stack.popLast() else {
+                    throw WasmKitError(message: .illegalConstExpressionInstruction(constInst))
+                }
+                switch (constInst, reference) {
+                case (.anyConvertExtern, .extern(nil)): stack.append(.ref(.any(nil)))
+                case (.externConvertAny, .any(nil)): stack.append(.ref(.extern(nil)))
+                default: stack.append(.ref(reference))
+                }
+            case .structNew(let typeIndex), .structNewDefault(let typeIndex), .arrayNew(let typeIndex),
+                .arrayNewDefault(let typeIndex), .arrayNewFixed(let typeIndex, _):
+                stack.append(.ref(try Self.allocate(constInst, typeIndex: typeIndex, stack: &stack, context: context)))
             case .refFunc(let functionIndex):
                 stack.append(.ref(try context.functionRef(functionIndex)))
             case .binary(let op):
@@ -110,6 +133,69 @@ extension ConstExpression {
             throw WasmKitError(message: .invalidConstExpressionArity(count: stack.count))
         }
         return stack[0]
+    }
+
+    /// Evaluates `struct.new`, `struct.new_default` or one of the `array.new` instructions that a
+    /// constant expression allows, popping its operands.
+    private static func allocate<C: ConstEvaluationContextProtocol>(
+        _ instruction: WasmParser.Instruction, typeIndex: UInt32, stack: inout [Value], context: C
+    ) throws -> Reference {
+        let id = try context.canonicalizer.canonicalID(of: typeIndex).id
+        guard let type = context.typeRegistry.definition(of: id).gcType else {
+            throw WasmKitError(message: .illegalConstExpressionInstruction(instruction))
+        }
+        func pop(_ count: Int) throws -> ArraySlice<Value> {
+            guard stack.count >= count else {
+                throw WasmKitError(message: .illegalConstExpressionInstruction(instruction))
+            }
+            defer { stack.removeLast(count) }
+            return stack.suffix(count)
+        }
+        func popLength() throws -> Int {
+            guard case .i32(let length) = try pop(1).first else {
+                throw WasmKitError(message: .illegalConstExpressionInstruction(instruction))
+            }
+            return Int(length)
+        }
+        func store(_ value: Value, _ kind: GCStorageKind, at pointer: UnsafeMutableRawPointer) {
+            if case .v128(let vector) = value {
+                let storage = V128Storage(vector)
+                kind.store(storage.lo, storage.hi, to: pointer)
+            } else {
+                kind.store(UntypedValue(value).storage, 0, to: pointer)
+            }
+        }
+        let object: GCObject
+        switch instruction {
+        case .structNew:
+            let values = try pop(type.fields.count)
+            object = try context.gcHeap.allocate(type)
+            for (field, value) in zip(type.fields, values) {
+                store(value, field.kind, at: object.storage + field.offset)
+            }
+        case .structNewDefault:
+            object = try context.gcHeap.allocate(type)
+        case .arrayNew:
+            let length = try popLength()
+            guard let value = try pop(1).first else {
+                throw WasmKitError(message: .illegalConstExpressionInstruction(instruction))
+            }
+            object = try context.gcHeap.allocate(type, length: length)
+            for index in 0..<length {
+                store(value, type.element.kind, at: object.element(at: index))
+            }
+        case .arrayNewDefault:
+            object = try context.gcHeap.allocate(type, length: try popLength())
+        case .arrayNewFixed(_, let size):
+            let values = try pop(Int(size))
+            object = try context.gcHeap.allocate(type, length: Int(size))
+            for (index, value) in values.enumerated() {
+                store(value, type.element.kind, at: object.element(at: index))
+            }
+        default:
+            throw WasmKitError(message: .illegalConstExpressionInstruction(instruction))
+        }
+        return .any(AnyReference(bits: object.bits, object: object))
     }
 
     /// Pops the two `i32` operands of a binary const-arithmetic instruction (right operand first, so the
@@ -144,7 +230,12 @@ extension WasmParser.ElementSegment {
     ) throws -> Reference {
         // Function-index items have no `end`.
         guard expression.count == 1 || (expression.count == 2 && expression[1] == .end) else {
-            throw WasmKitError(message: .unexpectedElementInitializer(expression: "\(expression)"))
+            // A longer constant expression, such as `struct.new` with its operands, which `gc`
+            // allows.
+            guard expression.last == .end, case .ref(let reference) = try expression._evaluate(context: context) else {
+                throw WasmKitError(message: .unexpectedElementInitializer(expression: "\(expression)"))
+            }
+            return reference
         }
         switch expression[0] {
         case .refFunc(let index):
@@ -163,7 +254,11 @@ extension WasmParser.ElementSegment {
             }
             return reference
         default:
-            throw WasmKitError(message: .unexpectedElementInitializer(expression: "\(expression)"))
+            // Any other constant expression, such as `struct.new_default`.
+            guard expression.last == .end, case .ref(let reference) = try expression._evaluate(context: context) else {
+                throw WasmKitError(message: .unexpectedElementInitializer(expression: "\(expression)"))
+            }
+            return reference
         }
     }
 }
@@ -212,6 +307,29 @@ extension ConstExpression {
                 guard Int(index) < context.functions.count else { return nil }
                 let function = context.functions[Int(index)]
                 stack.append(.ref(ReferenceType(isNullable: false, heapType: .concrete(typeIndex: function.type.id))))
+            case .refI31:
+                guard stack.popLast() != nil else { return nil }
+                stack.append(.ref(ReferenceType(isNullable: false, heapType: .abstract(.i31))))
+            case .structNew(let typeIndex), .structNewDefault(let typeIndex), .arrayNew(let typeIndex),
+                .arrayNewDefault(let typeIndex), .arrayNewFixed(let typeIndex, _):
+                // Evaluation checks the operands' types.
+                let id = try context.canonicalizer.canonicalID(of: typeIndex).id
+                let operandCount: Int
+                switch (instruction, context.typeRegistry.definition(of: id).composite) {
+                case (.structNew, .structType(let type)): operandCount = type.fields.count
+                case (.structNewDefault, .structType): operandCount = 0
+                case (.arrayNew, .arrayType): operandCount = 2
+                case (.arrayNewDefault, .arrayType): operandCount = 1
+                case (.arrayNewFixed(_, let size), .arrayType): operandCount = Int(size)
+                default: return nil
+                }
+                guard stack.count >= operandCount else { return nil }
+                stack.removeLast(operandCount)
+                stack.append(.ref(ReferenceType(isNullable: false, heapType: .concrete(typeIndex: id))))
+            case .anyConvertExtern, .externConvertAny:
+                guard case .ref(let operand) = stack.popLast() else { return nil }
+                let heapType: AbstractHeapType = instruction == .anyConvertExtern ? .any : .externRef
+                stack.append(.ref(ReferenceType(isNullable: operand.isNullable, heapType: .abstract(heapType))))
             case .binary(.i32Add), .binary(.i32Sub), .binary(.i32Mul), .binary(.i64Add), .binary(.i64Sub), .binary(.i64Mul):
                 // Evaluation checks the operand types.
                 guard let result = stack.popLast(), stack.popLast() != nil else { return nil }
